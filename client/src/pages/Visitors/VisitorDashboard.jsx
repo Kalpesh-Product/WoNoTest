@@ -19,6 +19,7 @@ import YearlyGraph from "../../components/graphs/YearlyGraph";
 import DateBasedGraph from "../../components/graphs/DateBasedGraph";
 import { PERMISSIONS } from "../../constants/permissions";
 import useAuth from "../../hooks/useAuth";
+import FyBarGraphCount from "../../components/graphs/FyBarGraphCount";
 
 const VisitorDashboard = () => {
   const navigate = useNavigate();
@@ -136,9 +137,6 @@ const VisitorDashboard = () => {
       toolbar: { show: false },
       fontFamily: "Poppins-Regular",
     },
-    xaxis: {
-      categories: months,
-    },
     yaxis: {
       max: 50, // ✅ Add this line
       title: {
@@ -165,6 +163,9 @@ const VisitorDashboard = () => {
         fontSize: "12px",
         colors: ["#000"],
       },
+    },
+    tooltip: {
+      shared: false,
     },
   };
 
@@ -432,14 +433,18 @@ const VisitorDashboard = () => {
 
   // -----------------------Department Pie Data End--------------------
   //--------------------------------------------//
+  const now = new Date();
+const checkedInCount = visitorsData.filter((v) => {
 
-  const checkedInCount = visitorsData.filter(
-    (v) => v.checkIn && !v.checkOut
-  ).length;
+  return (
+    v.checkIn && 
+    (!v.checkOut || new Date(v.checkOut) > now)
+  );
+}).length;
 
-  const checkedOutCount = visitorsData.filter(
-    (v) => v.checkIn && v.checkOut
-  ).length;
+const checkedOutCount = visitorsData.filter((v) => {
+  return v.checkIn && v.checkOut && new Date(v.checkOut) <= now;
+}).length;
 
   const checkInPieData = [
     {
@@ -470,7 +475,7 @@ const VisitorDashboard = () => {
         formatter: (val, { seriesIndex }) => {
           const label = checkInPieData[seriesIndex].label;
           const value = checkInPieData[seriesIndex].value;
-          return `${label}: ${value} visitors`;
+          return `${value} visitors`;
         },
       },
     },
@@ -523,53 +528,14 @@ const VisitorDashboard = () => {
     {
       layout: 1,
       widgets: [
-        // <WidgetSection layout={1} border title={"Monthly Visitor Statistics"}>
-
-        <DateBasedGraph
-          rawData={visitorsData}
+        <FyBarGraphCount
+          data={visitorsData}
+          chartOptions={visitorsChartOptions}
           dateKey="dateOfVisit"
-          chartTitle="MONTHLY TOTAL VISITORS"
-          instanceTitle="TOTAL VISIOTRS"
-          yAxisTitle="No. of Visitors"
-          yAxisMax={50}
+          graphTitle="MONTHLY TOTAL VISITORS"
         />,
       ],
     },
-    // {
-    //   layout: 5,
-    //   widgets: [
-    //     <Card
-    //       route={"/app/visitors/add-visitor"}
-    //       title={"Add Visitor"}
-    //       icon={<RiPagesLine />}
-    //     />,
-    //     <Card
-    //       route={"/app/visitors/add-client"}
-    //       title={"Add Client"}
-    //       icon={<RiPagesLine />}
-    //     />,
-    //     <Card
-    //       route={"/app/visitors/manage-visitors"}
-    //       title={"Manage Visitors"}
-    //       icon={<RiArchiveDrawerLine />}
-    //     />,
-    //     <Card
-    //       route={"/app/visitors/team-members"}
-    //       title={"Team Members"}
-    //       icon={<MdFormatListBulleted />}
-    //     />,
-    //     <Card
-    //       route={"/app/visitors/reports"}
-    //       title={"Reports"}
-    //       icon={<CgProfile />}
-    //     />,
-    //     // <Card
-    //     //   route={"/app/visitors/reviews"}
-    //     //   title={"Reviews"}
-    //     //   icon={<RiPagesLine />}
-    //     // />,
-    //   ],
-    // },
     {
       layout: allowedCards.length, // ✅ dynamic layout
       widgets: allowedCards.map((card) => (
@@ -630,7 +596,8 @@ const VisitorDashboard = () => {
           layout={1}
           title={"Visitor Categories"}
           titleLabel={"This Month"}
-          border>
+          border
+        >
           <DonutChart
             centerLabel="Visitors"
             labels={labels}
@@ -643,7 +610,8 @@ const VisitorDashboard = () => {
           layout={1}
           title={"Checked Out v/s Yet To Check Out"}
           titleLabel={"Today"}
-          border>
+          border
+        >
           <PieChartMui
             data={checkInPieData}
             options={checkInPieOptions}
@@ -659,7 +627,8 @@ const VisitorDashboard = () => {
         <WidgetSection
           title={"Visitor Gender Data"}
           titleLabel={"This Month"}
-          border>
+          border
+        >
           {!isVisitorsData ? (
             <PieChartMui
               percent={true}
@@ -678,7 +647,8 @@ const VisitorDashboard = () => {
           layout={1}
           title={"Department Wise Visits"}
           titleLabel={"This Month"}
-          border>
+          border
+        >
           <PieChartMui
             data={pieChartData}
             options={pieChartOptions}

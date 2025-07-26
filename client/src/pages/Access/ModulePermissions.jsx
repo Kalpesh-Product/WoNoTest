@@ -21,6 +21,7 @@ import PageFrame from "../../components/Pages/PageFrame";
 const ModulePermissions = () => {
   const { state } = useLocation();
   const { user, module, permissions, currentPermissions } = state;
+  console.log("permissions : ", permissions);
   const axios = useAxiosPrivate();
   const [isEditing, setIsEditing] = useState(false);
 
@@ -90,6 +91,12 @@ const ModulePermissions = () => {
                     align="center"
                     sx={{ fontWeight: "bold", textTransform: "uppercase" }}
                   >
+                    Access
+                  </TableCell>
+                  <TableCell
+                    align="center"
+                    sx={{ fontWeight: "bold", textTransform: "uppercase" }}
+                  >
                     Type
                   </TableCell>
                   <TableCell
@@ -102,9 +109,10 @@ const ModulePermissions = () => {
               </TableHead>
 
               <TableBody>
-                {permissions.map(({ key, label, type, action }) => (
+                {permissions.map(({ key, label, type, action,access }) => (
                   <TableRow key={key}>
                     <TableCell>{label}</TableCell>
+                    <TableCell align="center">{access || "N/A"}</TableCell>
                     <TableCell align="center">{type}</TableCell>
                     <TableCell align="center">
                       <Checkbox

@@ -84,7 +84,7 @@ const AccessProfile = () => {
 
   const groupPermissionsByModule = (permissionsObj) => {
     const grouped = {};
-    Object.entries(permissionsObj).forEach(([key, { value, type }]) => {
+    Object.entries(permissionsObj).forEach(([key, { value, type, access }]) => {
       const [module] = key.split("_");
 
       if (!grouped[module]) grouped[module] = [];
@@ -93,6 +93,7 @@ const AccessProfile = () => {
         key,
         action: value,
         type,
+        access : access,
         label: value
           .split("_")
           .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
