@@ -396,6 +396,7 @@ import VirtualOfficeClients from "../pages/Dashboard/SalesDashboard/ViewClients/
 import LogPage from "../pages/LogPage";
 import VirtualOfficeForm from "../pages/Dashboard/SalesDashboard/VirtualOfficeForm";
 import AccessPages from "../pages/Access/AccessPages";
+import ModulePermissions from "../pages/Access/ModulePermissions";
 
 export const routes = createBrowserRouter([
   {
@@ -1869,6 +1870,10 @@ export const routes = createBrowserRouter([
               {
                 path: "access/permissions",
                 element: <AccessProfile />,
+              },
+              {
+                path: "access/permissions/:module",
+                element: <ModulePermissions />,
               },
               {
                 path: "access/permissions/pages",
