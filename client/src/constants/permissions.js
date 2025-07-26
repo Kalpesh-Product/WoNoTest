@@ -95,12 +95,25 @@ export const PERMISSIONS = {
     route: "/app/visitors/reports",
   },
 
+  // Meetings Module
+  MEETINGS_BOOK_MEETING: { value: "book_meeting", type: "read" },
+  MEETINGS_MANAGE_MEETINGS: { value: "manage_meetings", type: "read" },
+  MEETINGS_CALENDAR: { value: "meeting_calendar", type: "read" },
+  MEETINGS_REPORTS: { value: "meeting_reports", type: "read" },
+  MEETINGS_REVIEWS: { value: "meeting_reviews", type: "read" },
+  MEETINGS_SETTINGS: { value: "meeting_settings", type: "read" },
+
   FINANCE_CASHFLOW: { value: "cashflow", type: "read" },
   FINANCE_FINANCE: { value: "finance_finance", type: "read" },
   FINANCE_BILLING: { value: "billing", type: "read" },
   FINANCE_MIX_BAG: { value: "finance_mix_bag", type: "read" },
   FINANCE_DATA: { value: "finance_data", type: "read" },
   FINANCE_SETTINGS: { value: "finance_settings", type: "read" },
+  FINANCE_PAYOUTS: { value: "finance_payouts", type: "read" },
+  FINANCE_CUSTOMER_COLLECTIONS: {
+    value: "finance_customer_collections",
+    type: "read",
+  },
 
   SALES_TURNOVER: { value: "turnover", type: "read" },
   SALES_FINANCE: { value: "sales_finance", type: "read" },
@@ -138,14 +151,15 @@ export const PERMISSIONS = {
 
   IT_ANNUAL_EXPENSES: {
     value: "it_annual_expenses",
-    access: "widget",
+
     type: "read",
+    access: "page",
   },
-  IT_INVENTORY: { value: "it_inventory", type: "read" },
-  IT_FINANCE: { value: "it_finance", type: "read" },
-  IT_MIX_BAG: { value: "it_mix_bag", access: "page", type: "read" },
-  IT_DATA: { value: "it_data", type: "read" },
-  IT_SETTINGS: { value: "it_settings", type: "write" },
+  IT_INVENTORY: { value: "it_inventory", type: "read", access: "page" },
+  IT_FINANCE: { value: "it_finance", type: "read", access: "page" },
+  IT_MIX_BAG: { value: "it_mix_bag", type: "read", access: "page" },
+  IT_DATA: { value: "it_data", type: "read", access: "page" },
+  IT_SETTINGS: { value: "it_settings", type: "write", access: "page" },
 
   ACCESS_PERMISSIONS: {
     value: "access_permissions",

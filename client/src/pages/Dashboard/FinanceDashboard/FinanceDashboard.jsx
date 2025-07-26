@@ -40,7 +40,7 @@ const FinanceDashboard = () => {
   const navigate = useNavigate();
   const [selectedFiscalYear, setSelectedFiscalYear] = useState("FY 2024-25");
 
-  //------------------------PAGE ACCESS START-------------------//
+  //------------------------PAGE ACCESS CARD START-------------------//
   const cardsConfig = [
     {
       route: "cashflow",
@@ -83,7 +83,7 @@ const FinanceDashboard = () => {
   const allowedCards = cardsConfig.filter(
     (card) => !card.permission || userPermissions.includes(card.permission)
   );
-  //------------------------PAGE ACCESS END-------------------//
+  //------------------------PAGE ACCESS CARD END-------------------//
 
   const axios = useAxiosPrivate();
   const { data: revenueExpenseData = [], isLoading: isRevenueExpenseLoading } =
@@ -825,6 +825,36 @@ const FinanceDashboard = () => {
 
   //-----------------------------------------------------Table Rental Payments------------------------------------------------------//
 
+  //------------------------PAGE ACCESS PIE START-------------------//
+  const pieChartConfigs = [
+    {
+      key: "financePayouts",
+      title: "Payouts MAR-25 ",
+      layout: 1,
+      border: true,
+      data: pieMonthlyPayoutData,
+      options: pieMonthlyPayoutOptions,
+      permission: PERMISSIONS.FINANCE_PAYOUTS.value,
+    },
+    {
+      key: "financeCustomerCollections",
+      title: "Customer Collections MAR-25 ",
+      layout: 1,
+      border: true,
+      data: pieChartData,
+      options: pieChartOptions,
+      permission: PERMISSIONS.FINANCE_CUSTOMER_COLLECTIONS.value,
+    },
+  ];
+
+  const allowedPieCharts = pieChartConfigs.filter(
+    (widget) =>
+      !widget.permission || userPermissions.includes(widget.permission)
+  );
+  //------------------------PAGE ACCESS PIE END-------------------//
+
+  // LIST OF WIDGETS
+
   const techWidgets = [
     {
       layout: 1,
@@ -886,25 +916,36 @@ const FinanceDashboard = () => {
       )),
     },
 
+    // {
+    //   layout: 2,
+    //   widgets: [
+    //     <WidgetSection title={`Payouts MAR-25 `} border>
+    //       <PieChartMui
+    //         data={pieMonthlyPayoutData}
+    //         options={pieMonthlyPayoutOptions}
+    //       />
+    //     </WidgetSection>,
+    //     <WidgetSection title={`Customer Collections MAR-25 `} border>
+    //       <PieChartMui data={pieChartData} options={pieChartOptions} />
+    //     </WidgetSection>,
+    //   ],
+    // },
+
     {
-      layout: 2,
-      widgets: [
-        <WidgetSection title={`Payouts MAR-25 `} border>
+      layout: allowedPieCharts.length,
+      widgets: allowedPieCharts.map((item) => (
+        <WidgetSection
+          key={item.key}
+          layout={item.layout}
+          title={item.title}
+          border={item.border}>
           <PieChartMui
-            data={pieMonthlyPayoutData}
-            options={pieMonthlyPayoutOptions}
+            data={item.data}
+            options={item.options}
+            // width={item.width}
           />
-        </WidgetSection>,
-        <WidgetSection title={`Customer Collections MAR-25 `} border>
-          {/* <PieChartMui
-            data={[]}
-            options={pieMonthlyCollectionOptions}
-            width={500}
-            height={350}
-          /> */}
-          <PieChartMui data={pieChartData} options={pieChartOptions} />
-        </WidgetSection>,
-      ],
+        </WidgetSection>
+      )),
     },
     {
       layout: 2,
@@ -969,7 +1010,6 @@ const FinanceDashboard = () => {
           {section?.widgets}
         </WidgetSection>
       ))}
-
     </div>
   );
 };

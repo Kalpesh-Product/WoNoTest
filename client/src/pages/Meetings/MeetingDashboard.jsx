@@ -22,12 +22,65 @@ import useAuth from "../../hooks/useAuth";
 import humanTime from "../../utils/humanTime";
 import StatusChip from "../../components/StatusChip";
 const WidgetSection = lazy(() => import("../../components/WidgetSection"));
+import { PERMISSIONS } from "./../../constants/permissions";
 
 const MeetingDashboard = () => {
   const axios = useAxiosPrivate();
   const navigate = useNavigate();
   const { auth } = useAuth();
   const [selectedFY, setSelectedFY] = useState("FY 2024-25");
+  const userPermissions = auth?.user?.permissions?.permissions || [];
+
+  //------------------------PAGE ACCESS-------------------//
+  const cardsConfig = [
+    {
+      key: "book",
+      title: "Book a Meeting",
+      route: "/app/meetings/book-meeting",
+      icon: <RiPagesLine />,
+      permission: PERMISSIONS.MEETINGS_BOOK_MEETING.value,
+    },
+    {
+      key: "manage",
+      title: "Manage Meetings",
+      route: "/app/meetings/manage-meetings",
+      icon: <RiArchiveDrawerLine />,
+      permission: PERMISSIONS.MEETINGS_MANAGE_MEETINGS.value,
+    },
+    {
+      key: "calendar",
+      title: "Calendar",
+      route: "/app/meetings/calendar",
+      icon: <MdFormatListBulleted />,
+      permission: PERMISSIONS.MEETINGS_CALENDAR.value,
+    },
+    {
+      key: "reports",
+      title: "Reports",
+      route: "/app/meetings/reports",
+      icon: <CgProfile />,
+      permission: PERMISSIONS.MEETINGS_REPORTS.value,
+    },
+    {
+      key: "reviews",
+      title: "Reviews",
+      route: "/app/meetings/reviews",
+      icon: <RiPagesLine />,
+      permission: PERMISSIONS.MEETINGS_REVIEWS.value,
+    },
+    {
+      key: "settings",
+      title: "Settings",
+      route: "/app/meetings/settings",
+      icon: <RiPagesLine />,
+      permission: PERMISSIONS.MEETINGS_SETTINGS.value,
+    },
+  ];
+  const allowedCards = cardsConfig.filter(
+    (card) => !card.permission || userPermissions.includes(card.permission)
+  );
+  //------------------------PAGE ACCESS-------------------//
+
   const { isTop } = useTopDepartment({
     additionalTopUserIds: [
       "67b83885daad0f7bab2f189a",
@@ -39,8 +92,6 @@ const MeetingDashboard = () => {
       "6798ba9de469e809084e2494",
     ],
   });
-
-
 
   const { data: meetingsData = [], isLoading } = useQuery({
     queryKey: ["meetings"],
@@ -420,8 +471,7 @@ const MeetingDashboard = () => {
                 style={{
                   backgroundColor:
                     room.status === "Available" ? "#28a745" : "#dc3545",
-                }}
-              ></span>
+                }}></span>
               <span className="text-content text-gray-400">
                 {room.roomName}
               </span>
@@ -877,8 +927,7 @@ const MeetingDashboard = () => {
               <Skeleton variant="text" width={200} height={30} />
               <Skeleton variant="rectangular" width="100%" height={300} />
             </div>
-          }
-        >
+          }>
           <YearlyGraph
             titleAmount={`TOTAL BOOKED HOURS : ${fyBookedHours.toFixed(0)}`}
             title={"AVERAGE MEETING ROOM UTILIZATION"}
@@ -892,18 +941,30 @@ const MeetingDashboard = () => {
         </Suspense>,
       ],
     },
+    // {
+    //   layout: cardItems.filter((item) => !item.onlyTop || isTop).length,
+    //   widgets: cardItems
+    //     .filter((item) => !item.onlyTop || isTop)
+    //     .map((item) => (
+    //       <Card
+    //         key={item.key}
+    //         route={item.route}
+    //         title={item.title}
+    //         icon={item.icon}
+    //       />
+    //     )),
+    // },
+
     {
-      layout: cardItems.filter((item) => !item.onlyTop || isTop).length,
-      widgets: cardItems
-        .filter((item) => !item.onlyTop || isTop)
-        .map((item) => (
-          <Card
-            key={item.key}
-            route={item.route}
-            title={item.title}
-            icon={item.icon}
-          />
-        )),
+      layout: allowedCards.length, // ✅ dynamic layout
+      widgets: allowedCards.map((card) => (
+        <Card
+          key={card.title}
+          route={card.route}
+          title={card.title}
+          icon={card.icon}
+        />
+      )),
     },
 
     {
@@ -1031,8 +1092,7 @@ const MeetingDashboard = () => {
           titleLabel={`${new Date().toLocaleString("default", {
             month: "short",
           })}-${new Date().getFullYear().toString().slice(-2)}`}
-          padding
-        >
+          padding>
           <BarGraph data={externalGuestsData} options={externalGuestsOptions} />
         </WidgetSection>,
         <WidgetSection
@@ -1042,8 +1102,7 @@ const MeetingDashboard = () => {
           titleLabel={`${new Date().toLocaleString("default", {
             month: "short",
           })}-${new Date().getFullYear().toString().slice(-2)}`}
-          padding
-        >
+          padding>
           <BarGraph
             data={averageOccupancySeries}
             options={averageOccupancyOptions}
@@ -1079,8 +1138,7 @@ const MeetingDashboard = () => {
           layout={1}
           title={"Room Availability Status"}
           border
-          height={400}
-        >
+          height={400}>
           <PieChartMui
             data={RoomPieData}
             options={RoomOptions}
@@ -1091,8 +1149,7 @@ const MeetingDashboard = () => {
           layout={1}
           border
           titleLabel={"Today"}
-          title={"Cleaning & Hygiene Status"}
-        >
+          title={"Cleaning & Hygiene Status"}>
           <DonutChart
             series={housekeepingStatusSeries}
             labels={["Cleaning", "Clean"]}
