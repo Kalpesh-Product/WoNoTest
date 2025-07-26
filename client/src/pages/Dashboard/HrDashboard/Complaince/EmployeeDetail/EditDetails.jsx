@@ -91,8 +91,8 @@ const EditDetails = () => {
     ? []
     : {
         ...employeeData,
-        dob: dayjs(employeeData.dob, "DD/MM/YYYY").format("DD-MM-YYYY"),
-        startDate: dayjs(employeeData.startDate, "DD/MM/YYYY").format(
+        dob: dayjs(employeeData.dob).format("DD-MM-YYYY"),
+        startDate: dayjs(employeeData.startDate).format(
           "DD-MM-YYYY"
         ),
       };
