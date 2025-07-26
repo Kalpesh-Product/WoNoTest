@@ -59,6 +59,8 @@ const ItOfficesNew = () => {
 
   const columns = [
     { headerName: "SR NO", field: "srNo", width: 100 },
+    { headerName: "Building", field: "buildingName", flex: 1 },
+    { headerName: "Unit Name", field: "unitNo", flex: 1 },
     {
       headerName: "Unit No",
       field: "unitNo",
@@ -78,7 +80,6 @@ const ItOfficesNew = () => {
         </span>
       ),
     },
-    { headerName: "Building", field: "buildingName", flex: 1 },
     { headerName: "Clients Count", field: "clientsCount" },
   ];
 
