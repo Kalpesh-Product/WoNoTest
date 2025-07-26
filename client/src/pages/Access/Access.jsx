@@ -11,72 +11,49 @@ import {
 import AgTable from "../../components/AgTable";
 import { useNavigate } from "react-router-dom";
 import StatusChip from "../../components/StatusChip";
+import MuiAccordion from "../../components/MuiAccordion";
 
 const Access = () => {
   const axios = useAxiosPrivate();
   const navigate = useNavigate();
   const dispatch = useDispatch();
-  const { data: employees, isLoading } = useQuery({
-    queryKey: ["employees"],
+
+  const {
+    data: departments,
+    isLoading: isDepartments,
+    error,
+  } = useQuery({
+    queryKey: ["access-departments"],
     queryFn: async () => {
-      try {
-        const response = await axios.get("/api/users/fetch-users");
-        const filteredData = response.data.filter(
-          (employee) => employee.isActive
-        );
-        return filteredData;
-      } catch (error) {
-        throw new Error(
-          error.response?.data?.message || "Failed to fetch employees"
-        );
-      }
+      const response = await axios.get("/api/access/department-wise-employees");
+      return response.data?.data;
     },
   });
 
-  const viewEmployeeColumns = [
-    { field: "srno", headerName: "SR No", width: 100 },
-    { field: "employmentID", headerName: "Employment ID" },
-    {
-      field: "employeeName",
-      headerName: "Employee Name",
-      cellRenderer: (params) => (
-        <span
-          style={{
-            color: "#1E3D73",
-            textDecoration: "underline",
-            cursor: "pointer",
-          }}
-          onClick={() => {
-            localStorage.setItem("employeeName", params.data.employeeName);
 
-            navigate(
-              `/app/dashboard/HR-dashboard/employee/employee-list/${params.data.employeeName}/edit-details`
-            );
-            dispatch(setSelectedEmployee(params.data.employmentID));
-            dispatch(setSelectedEmployeeMongoId(params.data.id));
-          }}>
-          {params.value}
-        </span>
-      ),
-    },
-    { field: "department", headerName: "Department", flex: 1 },
-    { field: "email", headerName: "Email", flex: 1 },
-    { field: "role", headerName: "Role", flex: 1 },
-    {
-      field: "status",
-      headerName: "Status",
-      cellRenderer: (params) => {
-        const status = params.value ? "Active" : "InActive";
-        return <StatusChip status={status} />;
+  const handleEmployeeClick = (emp) => {
+    const userData = {
+      _id : emp?._id,
+      name : `${emp?.firstName || ""} ${emp?.lastName || ""}`,
+      designation : emp?.role?.map((item)=>item.roleTitle),
+      email : emp.email || "",
+      workLocation : emp.workLocation ||"",
+      profilePicture : emp.profilePicture?.url ||"",
+      status : emp.isActive ? "Active" : "Inactive",
+    }
+    navigate("permissions", {
+      state: {
+        user: userData,
       },
-    },
-  ];
+    });
+  };
+
   return (
-    <div className="flex flex-col gap-4">
-      <div>
+    <div className="flex flex-col gap-4 p-4">
+      {/* <div>
         <AccessTree clickState={true} autoExpandFirst />
-      </div>
-      {/* <PageFrame>
+      </div> */}
+      <PageFrame>
         <div className="h-[35rem]  overflow-hidden">
           <img
             src={hierarchy}
@@ -86,34 +63,14 @@ const Access = () => {
         </div>
       </PageFrame>
       <PageFrame>
-        <div className="w-full">
-          <AgTable
-            search={true}
-            tableTitle={"Employees List"}
-            data={
-              isLoading
-                ? []
-                : [
-                    ...employees.map((employee, index) => ({
-                      id: employee._id,
-                      srno: index + 1,
-                      employeeName: `${
-                        employee.firstName ? employee.firstName : ""
-                      } ${employee.lastName ? employee.lastName : ""}`,
-                      employmentID: employee.empId,
-                      email: employee.email,
-                      department: employee.departments?.map(
-                        (item) => item.name
-                      ),
-                      role: employee.role?.map((r) => r.roleTitle),
-                      status: employee.isActive,
-                    })),
-                  ]
-            }
-            columns={viewEmployeeColumns}
-          />
-        </div>
-      </PageFrame> */}
+        <MuiAccordion
+          data={departments}
+          titleKey="name"
+          itemsKey="employees"
+          itemClick={handleEmployeeClick}
+          disabledKey="isActive"
+        />
+      </PageFrame>
     </div>
   );
 };

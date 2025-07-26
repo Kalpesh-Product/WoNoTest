@@ -137,13 +137,13 @@ const userDataSchema = new mongoose.Schema({
   refreshToken: { type: String },
   dateOfExit: { type: Date },
   shift: { type: String, required: true },
-  policies: {
-    // shift: { type: String, required: true },
-    workSchedulePolicy: { type: String, required: true },
-    attendanceSource: { type: String },
-    leavePolicy: { type: String },
-    holidayPolicy: { type: String },
-  },
+  // policies: {
+  //   // shift: { type: String, required: true },
+  //   workSchedulePolicy: { type: String, required: true },
+  //   attendanceSource: { type: String },
+  //   leavePolicy: { type: String },
+  //   holidayPolicy: { type: String },
+  // },
   homeAddress: {
     addressLine1: { type: String },
     addressLine2: { type: String },

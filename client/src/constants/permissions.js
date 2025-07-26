@@ -59,10 +59,14 @@ export const PERMISSIONS = {
   MAINTENANCE_DATA: { value: "maintenance_data", type: "read" },
   MAINTENANCE_SETTINGS: { value: "maintenance_settings", type: "read" },
 
-  IT_ANNUAL_EXPENSES: { value: "it_annual_expenses", type: "read" },
+  IT_ANNUAL_EXPENSES: {
+    value: "it_annual_expenses",
+    access: "widget",
+    type: "read",
+  },
   IT_INVENTORY: { value: "it_inventory", type: "read" },
   IT_FINANCE: { value: "it_finance", type: "read" },
-  IT_MIX_BAG: { value: "it_mix_bag", type: "read" },
+  IT_MIX_BAG: { value: "it_mix_bag", access: "page", type: "read" },
   IT_DATA: { value: "it_data", type: "read" },
-  IT_SETTINGS: { value: "it_settings", type: "read" },
+  IT_SETTINGS: { value: "it_settings", type: "write" },
 };

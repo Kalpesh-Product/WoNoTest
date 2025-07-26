@@ -1,3 +1,4 @@
+
 import { lazy, Suspense, useState } from "react";
 import { RiArchiveDrawerLine, RiPagesLine } from "react-icons/ri";
 import { MdFormatListBulleted } from "react-icons/md";
@@ -1075,7 +1076,7 @@ const MeetingDashboard = () => {
                 <HeatMap
                   data={heatmapData}
                   options={heatmapOptions}
-                  height={400}
+                  height={395}
                   width={550}
                 />
               </WidgetSection>,
