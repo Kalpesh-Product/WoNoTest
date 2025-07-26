@@ -6,26 +6,17 @@ import {
   Typography,
   Box,
   Stack,
-  Button,
 } from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-import { useNavigate } from "react-router-dom";
 import { IoIosArrowForward } from "react-icons/io";
 
-/**
- * Props:
- * - data: array of sections
- * - titleKey: key to show in accordion title (e.g., "name")
- * - itemsKey: key that contains array of items (e.g., "employees")
- * - itemClick : for sending a callback function for the items (e.g : navigation functions)
- */
 const MuiAccordion = ({
   data = [],
   titleKey = "name",
   itemsKey = "items",
   itemClick,
+  disabledKey = "",
 }) => {
-
   const sortItems = (a, b) => {
     const isAdminA = a.role?.some((r) =>
       r.roleTitle.toLowerCase().includes("admin")
@@ -57,30 +48,64 @@ const MuiAccordion = ({
         </Typography>
       </Box>
 
-      <div onClick={() => itemClick?.(emp)} className="p-2 border-default border-black rounded-md text-content flex items-center">
+      <div
+        onClick={() => itemClick?.(emp)}
+        className="p-2 cursor-pointer border-default border-black rounded-md text-content flex items-center bg-white text-black hover:text-white hover:bg-primary hover:border-primary"
+      >
         <IoIosArrowForward />
       </div>
     </Box>
   );
 
+  // Sort sections by titleKey and separate active/inactive
+  const sortedData = [...data].sort((a, b) =>
+    a[titleKey]?.localeCompare(b[titleKey])
+  );
+
+  const activeSections = sortedData.filter(
+    (section) => !disabledKey || section[disabledKey] !== false
+  );
+  const inactiveSections = sortedData.filter(
+    (section) => disabledKey && section[disabledKey] === false
+  );
+
+  const finalSections = [...activeSections, ...inactiveSections];
+
   return (
     <Box>
-      {data.map((section) => {
-        let items = section[itemsKey] || [];
-        items = [...items].sort(sortItems);
+      <div className="mb-4">
+        <span className="text-primary font-pmedium text-title ">
+          DEPARTMENTS
+        </span>
+      </div>
+      {finalSections.map((section) => {
+        const isDisabled = disabledKey && section[disabledKey] === false;
+        const items = [...(section[itemsKey] || [])].sort(sortItems);
 
         return (
-          <Accordion key={section._id}>
-            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-              <Typography fontWeight="bold">{section[titleKey]}</Typography>
+          <Accordion key={section._id} disableGutters>
+            <AccordionSummary expandIcon={isDisabled ? null : <ExpandMoreIcon />}>
+              <Typography fontWeight="bold">
+                {section[titleKey]}
+                {isDisabled && (
+                  <Typography
+                    component="span"
+                    sx={{ fontSize: 12, color: "gray", marginLeft: 1 }}
+                  >
+                    (Inactive)
+                  </Typography>
+                )}
+              </Typography>
             </AccordionSummary>
-            <AccordionDetails>
-              <Stack spacing={2}>
-                {items.map((item) => (
-                  <Box key={item._id}>{renderItem(item)}</Box>
-                ))}
-              </Stack>
-            </AccordionDetails>
+            {!isDisabled && (
+              <AccordionDetails>
+                <Stack spacing={2}>
+                  {items.map((item) => (
+                    <Box key={item._id}>{renderItem(item)}</Box>
+                  ))}
+                </Stack>
+              </AccordionDetails>
+            )}
           </Accordion>
         );
       })}

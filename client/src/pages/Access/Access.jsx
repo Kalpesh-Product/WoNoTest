@@ -30,16 +30,17 @@ const Access = () => {
     },
   });
 
-  console.log("dep : ", departments);
 
   const handleEmployeeClick = (emp) => {
     const userData = {
       _id : emp?._id,
-      email : emp?.email,
-      name : `${emp?.firstName} ${emp?.lastName}`,
-      designation : emp?.roles?.map((item)=>item.roleTitle)
+      name : `${emp?.firstName || ""} ${emp?.lastName || ""}`,
+      designation : emp?.role?.map((item)=>item.roleTitle),
+      email : emp.email || "",
+      workLocation : emp.workLocation ||"",
+      profilePicture : emp.profilePicture?.url ||"",
+      status : emp.isActive ? "Active" : "Inactive",
     }
-    console.log("emp data : ", userData);
     navigate("permissions", {
       state: {
         user: userData,
@@ -67,6 +68,7 @@ const Access = () => {
           titleKey="name"
           itemsKey="employees"
           itemClick={handleEmployeeClick}
+          disabledKey="isActive"
         />
       </PageFrame>
     </div>

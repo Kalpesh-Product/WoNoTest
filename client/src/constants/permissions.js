@@ -64,5 +64,5 @@ export const PERMISSIONS = {
   IT_FINANCE: { value: "it_finance", type: "read" },
   IT_MIX_BAG: { value: "it_mix_bag", type: "read" },
   IT_DATA: { value: "it_data", type: "read" },
-  IT_SETTINGS: { value: "it_settings", type: "read" },
+  IT_SETTINGS: { value: "it_settings", type: "write" },
 };

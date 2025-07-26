@@ -10,8 +10,9 @@ import {
   TableRow,
   Checkbox,
   Paper,
+  Grid,
 } from "@mui/material";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import useAxiosPrivate from "../../hooks/useAxiosPrivate";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
@@ -26,6 +27,7 @@ const AccessProfile = () => {
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
   const { user } = location.state || {};
+  const navigate = useNavigate()
 
   const { register, setValue, handleSubmit, watch } = useForm({
     defaultValues: { permissions: [] },
@@ -133,7 +135,7 @@ const AccessProfile = () => {
   }
 
   return (
-    <div className="bg-white p-4">
+    <div className="bg-white p-4 flex flex-col gap-4">
       {/* User Details */}
       <div className="flex items-center gap-8 w-full border-2 border-gray-200 p-4 rounded-md">
         <div className="flex gap-6 items-center">
@@ -145,7 +147,8 @@ const AccessProfile = () => {
                 height: "100%",
                 fontSize: "5rem",
               }}
-              src={user.email === "abrar@biznest.co.in" ? Abrar : undefined}>
+              src={user.profilePicture}
+            >
               {user.email !== "abrar@biznest.co.in" && user.name.charAt(0)}
             </Avatar>
           </div>
@@ -181,102 +184,32 @@ const AccessProfile = () => {
       </div>
 
       {/* Permissions Table */}
-      <div className="mt-6">
-        <h2 className="text-title font-pmedium mb-4">User Permissions</h2>
-        <div className="flex gap-4 w-full justify-end items-center">
-          <PrimaryButton
-            title={!editing ? "Edit" : "Cancel"}
-            handleSubmit={() => setEditing((prev) => !prev)}
-          />
-          {editing && (
-            <PrimaryButton
-              title="Update"
-              isLoading={mutation.isPending}
-              disabled={mutation.isPending}
-              handleSubmit={handleSubmit((data) =>
-                mutation.mutate({ permissions: data.permissions })
-              )}
-            />
-          )}
-        </div>
-        <div className="grid grid-cols-2 gap-4">
-          {Object.entries(groupedPermissions).map(([module, permissions]) => (
-            <div key={module}>
-              <div className="flex justify-between items-center w-full">
-                <h3 className="text-lg font-semibold mb-2">{module}</h3>
-              </div>
-              <TableContainer component={Paper}>
-                <Table>
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>
-                        <strong>Module Action</strong>
-                      </TableCell>
-                      <TableCell align="center">
-                        <strong>Read</strong>
-                      </TableCell>
-                      <TableCell align="center">
-                        <strong>Write</strong>
-                      </TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {permissions.map(({ key, label, action, type }) => {
-                      const checked = editing
-                        ? formPermissions.has(action)
-                        : userPermissionSet.has(action);
-
-                      return (
-                        <TableRow key={key}>
-                          <TableCell>{label}</TableCell>
-
-                          {/* Read Column */}
-                          <TableCell align="center">
-                            {type === "read" && (
-                              <Checkbox
-                                checked={checked}
-                                disabled={!editing}
-                                onChange={() =>
-                                  editing && togglePermission(action)
-                                }
-                              />
-                            )}
-                          </TableCell>
-
-                          {/* Write Column */}
-                          <TableCell align="center">
-                            {type === "write" && (
-                              <Checkbox
-                                checked={checked}
-                                disabled={!editing}
-                                onChange={() =>
-                                  editing && togglePermission(action)
-                                }
-                              />
-                            )}
-                          </TableCell>
-
-                          {/* Custom Column */}
-                          {/* <TableCell align="center">
-                            {type === "custom" && (
-                              <Checkbox
-                                checked={checked}
-                                disabled={!editing}
-                                onChange={() =>
-                                  editing && togglePermission(action)
-                                }
-                              />
-                            )}
-                          </TableCell> */}
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </TableContainer>
+      <span className="text-title text-primary font-pmedium">Manage Access</span>
+      <div className="grid grid-cols-3 gap-4">
+        {Object.entries(groupedPermissions).map(([module, permissions]) => (
+          <div className="" key={module}>
+            <div
+              className="p-4 rounded-md cursor-pointer flex flex-col gap-2 shadow-md hover:bg-gray-100"
+              onClick={() =>
+                navigate(`${module}`, {
+                  state: {
+                    module,
+                    permissions,
+                    user,
+                    currentPermissions: accessProfile?.permissions || [],
+                  },
+                })
+              }
+            >
+              <span className="text-subtitle font-pmedium">
+                {module.charAt(0).toUpperCase() + module.slice(1)}
+              </span>
+              <span className="text-content">
+                {permissions.length} permissions
+              </span>
             </div>
-          ))}
-        </div>
+          </div>
+        ))}
       </div>
     </div>
   );
