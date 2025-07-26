@@ -69,7 +69,7 @@ const getDepartmentWiseUsers = async (req, res, next) => {
       .lean()
       .exec();
     const users = await UserData.find({ isActive: true })
-      .select("firstName lastName empId departments role")
+      .select("firstName lastName empId departments role email")
       .populate([{ path: "role" }])
       .lean()
       .exec();
