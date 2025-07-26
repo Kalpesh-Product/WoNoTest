@@ -12,6 +12,8 @@ import AgTable from "../../components/AgTable";
 import { useNavigate } from "react-router-dom";
 import StatusChip from "../../components/StatusChip";
 import MuiAccordion from "../../components/MuiAccordion";
+import { PERMISSIONS } from "../../constants/permissions";
+import Permissions from "../../components/Permissions/Permissions";
 
 const Access = () => {
   const axios = useAxiosPrivate();
@@ -30,17 +32,16 @@ const Access = () => {
     },
   });
 
-
   const handleEmployeeClick = (emp) => {
     const userData = {
-      _id : emp?._id,
-      name : `${emp?.firstName || ""} ${emp?.lastName || ""}`,
-      designation : emp?.role?.map((item)=>item.roleTitle),
-      email : emp.email || "",
-      workLocation : emp.workLocation ||"",
-      profilePicture : emp.profilePicture?.url ||"",
-      status : emp.isActive ? "Active" : "Inactive",
-    }
+      _id: emp?._id,
+      name: `${emp?.firstName || ""} ${emp?.lastName || ""}`,
+      designation: emp?.role?.map((item) => item.roleTitle),
+      email: emp.email || "",
+      workLocation: emp.workLocation || "",
+      profilePicture: emp.profilePicture?.url || "",
+      status: emp.isActive ? "Active" : "Inactive",
+    };
     navigate("permissions", {
       state: {
         user: userData,
@@ -62,6 +63,7 @@ const Access = () => {
           />
         </div>
       </PageFrame>
+
       <PageFrame>
         <MuiAccordion
           data={departments}

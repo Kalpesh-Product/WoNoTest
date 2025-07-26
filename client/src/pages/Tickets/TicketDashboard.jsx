@@ -22,7 +22,8 @@ const TicketDashboard = () => {
   const { auth } = useAuth();
   const userPermissions = auth?.user?.permissions?.permissions || [];
   const axios = useAxiosPrivate();
-  //------------------------PAGE ACCESS-------------------//
+
+  //------------------------PAGE ACCESS CARDS START-------------------//
   const cardsConfig = [
     {
       title: "Raise A Ticket",
@@ -58,7 +59,35 @@ const TicketDashboard = () => {
   const allowedCards = cardsConfig.filter(
     (card) => !card.permission || userPermissions.includes(card.permission)
   );
-  //------------------------PAGE ACCESS-------------------//
+  //------------------------PAGE ACCESS CARDS END-------------------//
+
+  //------------------------PAGE ACCESS PIE START-------------------//
+  // const pieChartConfigs = [
+  //   {
+  //     key: "assignedUnassigned",
+  //     title: "Assigned v/s Unassigned Assets",
+  //     layout: 1,
+  //     border: true,
+  //     data: assetAvailabilityData,
+  //     options: assetAvailabilityOptions,
+  //     permission: PERMISSIONS.ASSETS_ASSIGNED_UNASSIGNED.value,
+  //   },
+  //   {
+  //     key: "physicalDigital",
+  //     title: "Physical v/s Digital Assets",
+  //     layout: 1,
+  //     border: true,
+  //     data: physicalDigitalPieData,
+  //     options: physicalDigitalOptions,
+  //     width: 475,
+  //   },
+  // ];
+
+  // const allowedPieCharts = pieChartConfigs.filter(
+  //   (widget) =>
+  //     !widget.permission || userPermissions.includes(widget.permission)
+  // );
+  //------------------------PAGE ACCESS PIE END-------------------//
 
   const roles = auth.user.role.map((role) => role.roleTitle);
   const depts = auth.user.departments.map((dept) => dept.name);

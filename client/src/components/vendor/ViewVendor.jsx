@@ -246,10 +246,11 @@ const ViewVendor = () => {
                           control={control}
                           defaultValue=""
                           render={({ field, fieldState: { error } }) => (
-                            <Select
+                            <TextField
                               {...field}
+                              select
                               fullWidth
-                              displayEmpty
+                              label={"Country"}
                               onChange={(e) => {
                                 field.onChange(e);
                                 handleCountryChange(e.target.value);
@@ -266,7 +267,7 @@ const ViewVendor = () => {
                                   {country.name}
                                 </MenuItem>
                               ))}
-                            </Select>
+                            </TextField>
                           )}
                         />
                         <Controller
@@ -274,10 +275,11 @@ const ViewVendor = () => {
                           control={control}
                           defaultValue=""
                           render={({ field, fieldState: { error } }) => (
-                            <Select
+                            <TextField
                               {...field}
                               fullWidth
-                              displayEmpty
+                              select
+                              label="State"
                               onChange={(e) => {
                                 field.onChange(e);
                                 handleStateChange(e.target.value);
@@ -295,7 +297,7 @@ const ViewVendor = () => {
                                   {state.name}
                                 </MenuItem>
                               ))}
-                            </Select>
+                            </TextField>
                           )}
                         />
                         <Controller
@@ -303,10 +305,11 @@ const ViewVendor = () => {
                           control={control}
                           defaultValue=""
                           render={({ field, fieldState: { error } }) => (
-                            <Select
+                            <TextField
                               {...field}
                               fullWidth
-                              displayEmpty
+                              select
+                              label="City"
                               onChange={(e) => {
                                 field.onChange(e);
 
@@ -322,7 +325,7 @@ const ViewVendor = () => {
                                   {city.name}
                                 </MenuItem>
                               ))}
-                            </Select>
+                            </TextField>
                           )}
                         />
                       </>
@@ -404,10 +407,12 @@ const ViewVendor = () => {
                         defaultValue=""
                         rules={{ required: "Party Type is required" }}
                         render={({ field, fieldState: { error } }) => (
-                          <Select
+                          <TextField
                             {...field}
                             size="small"
-                            displayEmpty
+                            select
+                            
+                            label={"Party Type"}
                             error={!!error}
                           >
                             <MenuItem value="" disabled>
@@ -417,7 +422,7 @@ const ViewVendor = () => {
                             <MenuItem value="International">
                               International
                             </MenuItem>
-                          </Select>
+                          </TextField>
                         )}
                       />
                     ) : (
@@ -438,9 +443,10 @@ const ViewVendor = () => {
                       </div>
                     )}
                   </div>
-                </div>
 
-                <div>
+
+
+                     <div>
                   <div className="pb-4 border-b-default border-borderGray">
                     <span className="text-subtitle font-pmedium">
                       Bank Information
@@ -487,6 +493,9 @@ const ViewVendor = () => {
                     ))}
                   </div>
                 </div>
+                </div>
+
+             
               </div>
               {isEditing && (
                 <div className="flex justify-center items-center">

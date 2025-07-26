@@ -123,6 +123,9 @@ const userDataSchema = new mongoose.Schema({
   startDate: {
     type: Date,
   },
+  endDate: {
+    type: Date,
+  },
   workLocation: {
     type: String,
 

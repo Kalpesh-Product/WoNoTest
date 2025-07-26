@@ -1042,7 +1042,7 @@ const HrDashboard = () => {
       {
         title: "Exit Head Count",
         value: "2",
-        route: "employee/employee-list",
+        route: "employee/past-employees",
       },
       {
         title: "Per Sq. Ft.",
@@ -1173,7 +1173,8 @@ const HrDashboard = () => {
               <Skeleton variant="text" width={200} height={30} />
               <Skeleton variant="rectangular" width="100%" height={300} />
             </Box>
-          }>
+          }
+        >
           <WidgetSection normalCase layout={1} padding>
             <YearlyGraph
               data={expenseRawSeries}
@@ -1240,7 +1241,8 @@ const HrDashboard = () => {
               <Skeleton variant="text" width={200} height={30} />
               <Skeleton variant="rectangular" width="100%" height={300} />
             </Box>
-          }>
+          }
+        >
           <YearlyGraph
             data={tasksData}
             options={tasksOptions}
@@ -1258,7 +1260,8 @@ const HrDashboard = () => {
               <Skeleton variant="text" width={200} height={30} />
               <Skeleton variant="rectangular" width="100%" height={300} />
             </Box>
-          }>
+          }
+        >
           <YearlyGraph
             data={tasksGraphData}
             options={tasksOverallOptions}
@@ -1309,6 +1312,9 @@ const HrDashboard = () => {
             columns={columns}
             rows={birthdays
               .filter((bd) => bd.start) // Only entries with a start date
+              .sort(
+                (a, b) => dayjs(a.start).valueOf() - dayjs(b.start).valueOf()
+              ) // ✅ Sort by date ascending
               .map((bd, index) => {
                 const date = dayjs(bd.start);
                 return {
@@ -1329,15 +1335,18 @@ const HrDashboard = () => {
         <MuiTable
           Title="Current Months Holiday List"
           columns={columns2}
-          rows={holidayEvents.map((holiday, index) => {
-            const date = dayjs(holiday.start);
-            return {
-              id: index + 1,
-              title: holiday.title,
-              start: date.format("DD-MM-YYYY"),
-              day: date.format("dddd"),
-            };
-          })}
+          rows={holidayEvents
+            .filter((h) => h.start) // Optional: safety check for valid dates
+            .sort((a, b) => dayjs(a.start).valueOf() - dayjs(b.start).valueOf()) // ✅ Sort ascending
+            .map((holiday, index) => {
+              const date = dayjs(holiday.start);
+              return {
+                id: index + 1,
+                title: holiday.title,
+                start: date.format("DD-MM-YYYY"),
+                day: date.format("dddd"),
+              };
+            })}
           rowsToDisplay={40}
           scroll={true}
           className="h-full"
