@@ -21,6 +21,7 @@ import { toast } from "sonner";
 import useAuth from "../../hooks/useAuth";
 import { isAlphanumeric, noOnlyWhitespace } from "../../utils/validators";
 import UploadFileInput from "../../components/UploadFileInput";
+import WidgetSection from "../../components/WidgetSection";
 
 const MeetingSettings = () => {
   const axios = useAxiosPrivate();
@@ -209,21 +210,15 @@ const MeetingSettings = () => {
   };
 
   return (
-    <div className="m-4 rounded-md border-default border-borderGray">
-      <div className="p-4 flex flex-col gap-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <span className="text-title text-primary">Meeting Rooms</span>
-          </div>
-          <div>
-            <PrimaryButton
-              handleSubmit={handleOpenModal}
-              title={"Add New Room"}
-            />
-          </div>
-        </div>
-
-        <div className="grid grid-cols-3 gap-4">
+    <div className="p-4 flex flex-col gap-4">
+      <WidgetSection
+        border
+        title={"Meeting Rooms"}
+        button
+        buttonTitle={"Add New Room"}
+        handleClick={handleOpenModal}
+      >
+        <div className="grid grid-cols-4 gap-4">
           {!isMeetingRoomsLoading ? (
             meetingRooms.map((room) => (
               <Card
@@ -239,9 +234,9 @@ const MeetingSettings = () => {
                 />
                 <CardContent>
                   <div className="flex justify-between items-center mb-2">
-                    <span className="text-subtitle">{room.name}</span>
+                    <span className="text-content">{room.name}</span>
                     <span
-                      className={`px-4 py-1 text-content font-pregular rounded-full ${
+                      className={`px-4 py-1 text-small font-pregular rounded-full ${
                         room.isActive
                           ? "bg-green-100 text-green-600"
                           : "bg-red-100 text-red-600"
@@ -274,7 +269,7 @@ const MeetingSettings = () => {
             <CircularProgress color="#1E3D73" />
           )}
         </div>
-      </div>
+      </WidgetSection>
 
       {/* Modal for Adding New Room */}
       <MuiModal

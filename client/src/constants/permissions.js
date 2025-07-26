@@ -30,6 +30,19 @@ export const PERMISSIONS = {
     route: "/app/tickets/team-members",
   },
 
+  MEETINGS_MEETINGS_INTERNAL : {
+    value: "manage_meetings_internal",
+    type : 'read',
+    access : "page",
+    route : "/app/meetings/manage-meetings/internal-meetings"
+  },
+  MEETINGS_MEETINGS_EXTERNAL : {
+    value: "manage_meetings_external",
+    type : 'read',
+    access : "page",
+    route : "/app/meetings/manage-meetings/external-meetings"
+  },
+
   TASKS_MY_TASKS: {
     value: "my_tasks",
     type: "read",
