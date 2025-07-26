@@ -20,6 +20,7 @@ import useAxiosPrivate from "../../hooks/useAxiosPrivate";
 import { toast } from "sonner";
 import useAuth from "../../hooks/useAuth";
 import { isAlphanumeric, noOnlyWhitespace } from "../../utils/validators";
+import UploadFileInput from "../../components/UploadFileInput";
 
 const MeetingSettings = () => {
   const axios = useAxiosPrivate();
@@ -60,6 +61,7 @@ const MeetingSettings = () => {
       description: "",
       location: selectedRoom?.location?.building?._id,
       isActive: true,
+      roomImage: null,
     },
   });
   const [editFile, setEditFile] = useState(null);
@@ -100,13 +102,18 @@ const MeetingSettings = () => {
 
   const editRoomMutation = useMutation({
     mutationFn: async ({ id, formData }) => {
-      return axios.patch(`/api/meetings/update-room/${id}`, formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+      const response = await axios.patch(
+        `/api/meetings/update-room/${id}`,
+        formData,
+        {
+          headers: { "Content-Type": "multipart/form-data" },
+        }
+      );
+      return response.data;
     },
     onSuccess: () => {
       toast.success("Room updated successfully!");
-      queryClient.invalidateQueries(["meetingRooms"]);
+      queryClient.invalidateQueries({ queryKey: ["meetingRooms"] });
       handleCloseEditModal();
     },
     onError: (error) => {
@@ -121,10 +128,7 @@ const MeetingSettings = () => {
     formData.append("description", data.description);
     formData.append("location", data.unit);
     formData.append("isActive", data.isActive === "false" ? false : true);
-
-    if (editFile) {
-      formData.append("room", editFile);
-    }
+    formData.append("room", data.roomImage);
 
     editRoomMutation.mutate({ id: selectedRoom._id, formData });
   };
@@ -238,7 +242,7 @@ const MeetingSettings = () => {
                     <span className="text-subtitle">{room.name}</span>
                     <span
                       className={`px-4 py-1 text-content font-pregular rounded-full ${
-                        room.isActive 
+                        room.isActive
                           ? "bg-green-100 text-green-600"
                           : "bg-red-100 text-red-600"
                       }`}
@@ -493,7 +497,6 @@ const MeetingSettings = () => {
                 rules={{
                   validate: {
                     noOnlyWhitespace,
-                    isAlphanumeric,
                   },
                 }}
                 render={({ field }) => (
@@ -565,38 +568,12 @@ const MeetingSettings = () => {
                 control={editControl}
                 defaultValue={null}
                 render={({ field }) => (
-                  <div className="flex flex-col gap-2">
-                    <span className="text-content">Update Room Image</span>
-                    <div className="flex gap-2 items-center">
-                      <input
-                        type="file"
-                        accept="image/*"
-                        style={{ display: "none" }}
-                        id="edit-upload-file"
-                        onChange={(event) => {
-                          const file = event.target.files[0];
-                          setEditFile(file);
-                          field.onChange(file);
-                        }}
-                      />
-                      <label htmlFor="edit-upload-file">
-                        <Button
-                          sx={{
-                            backgroundColor: "#ebf5ff",
-                            color: "#4b5d87",
-                            fontFamily: "Poppins-Bold",
-                          }}
-                          variant="contained"
-                          component="span"
-                        >
-                          Choose File
-                        </Button>
-                      </label>
-                      <span className="text-content">
-                        {editFile ? editFile.name : "No file chosen"}
-                      </span>
-                    </div>
-                  </div>
+                  <UploadFileInput
+                    value={field.value}
+                    onChange={field.onChange}
+                    allowedExtensions={["jpeg"]}
+                    previewType="jpeg"
+                  />
                 )}
               />
               <Controller
@@ -622,7 +599,12 @@ const MeetingSettings = () => {
               />
 
               <div className="flex justify-center">
-                <PrimaryButton title={"Save Changes"} type={"submit"} />
+                <PrimaryButton
+                  title={"Save Changes"}
+                  type={"submit"}
+                  disabled={editRoomMutation.isPending}
+                  isLoading={editRoomMutation.isPending}
+                />
               </div>
             </div>
           </form>
