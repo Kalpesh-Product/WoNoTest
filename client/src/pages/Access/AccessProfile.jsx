@@ -169,7 +169,6 @@ const AccessProfile = () => {
               { label: "User Name", value: user.name },
               { label: "Email", value: user.email },
               { label: "Designation", value: user.designation },
-              { label: "Work Location", value: user.workLocation },
             ].map((item, index) => (
               <div key={index} className="flex items-start gap-2">
                 <div className="w-40 capitalize">{item.label}</div>

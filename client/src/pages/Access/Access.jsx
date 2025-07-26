@@ -33,12 +33,18 @@ const Access = () => {
   console.log("dep : ", departments);
 
   const handleEmployeeClick = (emp) => {
-    console.log("emp data : ", emp);
-    // navigate("permissions", {
-    //   state: {
-    //     user: emp,
-    //   },
-    // });
+    const userData = {
+      _id : emp?._id,
+      email : emp?.email,
+      name : `${emp?.firstName} ${emp?.lastName}`,
+      designation : emp?.roles?.map((item)=>item.roleTitle)
+    }
+    console.log("emp data : ", userData);
+    navigate("permissions", {
+      state: {
+        user: userData,
+      },
+    });
   };
 
   return (
