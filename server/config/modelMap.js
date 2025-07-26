@@ -9,6 +9,7 @@ const modelKeyGroups = {
     "department",
     "dept",
     "departmentIds",
+    "id",
   ],
   UserData: [
     "user",
@@ -26,11 +27,12 @@ const modelKeyGroups = {
     "internalParticipants",
     "assigned",
     "toMeet",
+    "adminId",
   ],
-  Unit: ["locationId", "unitId"],
+  Unit: ["locationId", "location", "unitId", "unit"],
 
   //Agreement Ids
-  //   agreements: ["agreementId"],
+  agreements: ["agreementId"],
 
   //Asset IDs
   Asset: ["assetId"],
@@ -38,13 +40,57 @@ const modelKeyGroups = {
   AssetCategory: ["categoryId"],
   SubCategory: ["subCategoryId"],
 
+  //Attendance IDs
+  Attendance: ["attendanceId"],
+  AttendanceCorrection: [""],
+
+  //Budget IDs
+  Budget: ["budgetId"],
+
+  //Budget IDs
+  Building: ["buildingId"],
+
+  //Company IDs
+  Company: ["departmentId"],
+
+  //Event IDs
+  Event: ["id"],
+
+  //Housekeepingstaff IDs
+  Housekeepingstaff: ["id", "memberId"],
+
+  //Inventory IDs
+  Inventory: ["id"],
+
+  //Invoice IDs
+  Invoice: ["invoiceId"],
+
+  //Landlord IDs
+  Landlord: ["landLordId"],
+
   //Meeting IDs
   Meeting: ["meetingId"],
   Room: ["bookedRoom", "roomId", "id"],
 
   //Sales IDs
-  CoworkingClient: ["toMeetCompany", "client"],
-  CoworkingMember: ["clientToMeet", "clientParticipants"],
+  CoworkingClient: [
+    "toMeetCompany",
+    "client",
+    "clientId",
+    "id",
+    "coworkingclientid",
+  ],
+  CoworkingMember: ["clientToMeet", "clientParticipants", "memberId"],
+  ClientService: ["serviceId"],
+  MeetingClientRevenue: ["id"],
+  VirtualOfficeClient: ["virtualOfficeClientId", "id"],
+
+  //Administration Ids
+  ClientEvent: ["id"],
+  WeeklySchedule: ["weeklyScheduleId"],
+
+  //Review Ids
+  Review: ["reviewId"],
 
   //Ticket IDs
   Ticket: ["ticketId", "id"],
