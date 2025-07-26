@@ -3,6 +3,7 @@ import React, { useState } from "react";
 import useAxiosPrivate from "../hooks/useAxiosPrivate";
 import YearWiseTable from "../components/Tables/YearWiseTable";
 import humanDate from "../utils/humanDateForamt";
+import humanTime from "../utils/humanTime";
 import DetalisFormatted from "../components/DetalisFormatted";
 import MuiModal from "../components/MuiModal";
 
@@ -67,6 +68,7 @@ const LogPage = () => {
     : data.map((item) => ({
         ...item,
         user: `${item.performedBy?.firstName} ${item.performedBy?.lastName}`,
+        path: item.path.split("/").splice(2).join(" > "),
         createdAt: item.createdAt,
         payload: item.payload,
       }));
@@ -78,27 +80,34 @@ const LogPage = () => {
     key.replace(/([A-Z])/g, " $1").replace(/^./, (str) => str.toUpperCase());
 
   // Format value (arrays, objects, nulls)
-  const formatValue = (value) => {
-    if (Array.isArray(value)) {
-      return (
-        <ul className="list-disc list-inside">
-          {value.map((item, idx) => (
-            <li key={idx}>
-              {typeof item === "object" ? JSON.stringify(item, null, 2) : item}
-            </li>
-          ))}
-        </ul>
-      );
-    } else if (typeof value === "object" && value !== null) {
-      return (
-        <pre className="bg-gray-100 p-2 rounded text-sm overflow-x-auto">
-          {JSON.stringify(value, null, 2)}
-        </pre>
-      );
-    } else {
-      return value ?? "-";
+ const formatValue = (key, value) => {
+  if (Array.isArray(value)) {
+    return (
+      <ul className="list-disc list-inside">
+        {value.map((item, idx) => (
+          <li key={idx}>
+            {typeof item === "object" ? JSON.stringify(item, null, 2) : item}
+          </li>
+        ))}
+      </ul>
+    );
+  } else if (typeof value === "object" && value !== null) {
+    return (
+      <pre className="bg-gray-100 p-2 rounded text-sm overflow-x-auto">
+        {JSON.stringify(value, null, 2)}
+      </pre>
+    );
+  } else {
+    if (key.toLowerCase().includes("date")) {
+      return humanDate(value);
     }
-  };
+    if (key.toLowerCase().includes("time")) {
+      return humanTime(value);
+    }
+    return value ?? "-";
+  }
+};
+
 
   return (
     <div className="p-4">
@@ -122,7 +131,7 @@ const LogPage = () => {
               <DetalisFormatted
                 key={index}
                 title={formatKey(key)}
-                detail={formatValue(value)}
+                detail={formatValue(key,value)}
               />
             ))}
         </div>
