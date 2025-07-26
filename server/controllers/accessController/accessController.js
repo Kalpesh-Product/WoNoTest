@@ -65,7 +65,7 @@ const updatePermissions = async (req, res, next) => {
 const getDepartmentWiseUsers = async (req, res, next) => {
   try {
     const departments = await Department.find()
-      .select("departmentId name")
+      .select("departmentId name isActive")
       .lean()
       .exec();
     const users = await UserData.find({ isActive: true })
