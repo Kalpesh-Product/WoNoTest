@@ -43,31 +43,11 @@ export const PERMISSIONS = {
     route : "/app/meetings/manage-meetings/external-meetings"
   },
 
-  TASKS_MY_TASKS: {
-    value: "my_tasks",
-    type: "read",
-    route: "/app/tasks/my-tasks",
-  },
-  TASKS_DEPARTMENT_TASKS: {
-    value: "department_tasks",
-    type: "read",
-    route: "/app/tasks/department-tasks",
-  },
-  TASKS_TEAM_MEMBERS: {
-    value: "task_team_members",
-    type: "read",
-    route: "/app/tasks/team-members",
-  },
-  TASKS_REPORTS: {
-    value: "task_reports",
-    type: "read",
-    route: "/app/tasks/reports",
-  },
-  TASKS_SETTINGS: {
-    value: "task_settings",
-    type: "read",
-    route: "/app/tasks/settings",
-  },
+  TASKS_MY_TASKS: { value: "my_tasks", type: "read" },
+  TASKS_DEPARTMENT_TASKS: { value: "department_tasks", type: "read" },
+  TASKS_TEAM_MEMBERS: { value: "task_team_members", type: "read" },
+  TASKS_REPORTS: { value: "task_reports", type: "read" },
+  TASKS_SETTINGS: { value: "task_settings", type: "read" },
 
   VISITORS_ADD_VISITOR: {
     value: "add_visitor",
@@ -127,6 +107,11 @@ export const PERMISSIONS = {
   HR_MIX_BAG: { value: "hr_mix_bag", type: "read" },
   HR_DATA: { value: "hr_data", type: "read" },
   HR_SETTINGS: { value: "hr_settings", type: "read" },
+  HR_EMPLOYEE_EDIT: {
+    value: "hr_employee_edit",
+    type: "write",
+    access: "button",
+  },
 
   ADMIN_ANNUAL_EXPENSES: { value: "admin_annual_expenses", type: "read" },
   ADMIN_INVENTORY: { value: "admin_inventory", type: "read" },
@@ -142,11 +127,7 @@ export const PERMISSIONS = {
   MAINTENANCE_INVENTORY: { value: "maintenance_inventory", type: "read" },
   MAINTENANCE_FINANCE: { value: "maintenance_finance", type: "read" },
   MAINTENANCE_MIX_BAG: { value: "maintenance_mix_bag", type: "read" },
-  MAINTENANCE_DATA: {
-    value: "maintenance_data",
-    type: "read",
-    route: "/app/dashboard/maintenance-dashboard/data",
-  },
+  MAINTENANCE_DATA: { value: "maintenance_data", type: "read" },
   MAINTENANCE_SETTINGS: { value: "maintenance_settings", type: "read" },
 
   IT_ANNUAL_EXPENSES: {
