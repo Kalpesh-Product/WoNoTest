@@ -4,23 +4,83 @@ export const PERMISSIONS = {
   ASSETS_ASSIGNED_UNASSIGNED: { value: "assigned_unassigned", type: "read" },
   ASSETS_ASSIGNED_ASSETS: { value: "assigned_assets", type: "read" },
 
-  TICKETS_MANAGE_TICKETS: { value: "manage_tickets", type: "read" },
-  TICKETS_RAISE_TICKET: { value: "raise_ticket", type: "read" },
-  TICKETS_TICKET_SETTINGS: { value: "ticket_settings", type: "read" },
-  TICKETS_REPORTS: { value: "ticket_reports", type: "read" },
-  TICKETS_TEAM_MEMBERS: { value: "tickets_team_members", type: "read" },
+  TICKETS_RAISE_TICKET: {
+    value: "raise_ticket",
+    type: "read",
+    route: "/app/tickets/raise-ticket",
+  },
+  TICKETS_MANAGE_TICKETS: {
+    value: "manage_tickets",
+    type: "read",
+    route: "/app/tickets/manage-tickets",
+  },
+  TICKETS_TICKET_SETTINGS: {
+    value: "ticket_settings",
+    type: "read",
+    route: "/app/tickets/settings",
+  },
+  TICKETS_REPORTS: {
+    value: "ticket_reports",
+    type: "read",
+    route: "/app/tickets/reports",
+  },
+  TICKETS_TEAM_MEMBERS: {
+    value: "tickets_team_members",
+    type: "read",
+    route: "/app/tickets/team-members",
+  },
 
-  TASKS_MY_TASKS: { value: "my_tasks", type: "read" },
-  TASKS_DEPARTMENT_TASKS: { value: "department_tasks", type: "read" },
-  TASKS_TEAM_MEMBERS: { value: "task_team_members", type: "read" },
-  TASKS_REPORTS: { value: "task_reports", type: "read" },
-  TASKS_SETTINGS: { value: "task_settings", type: "read" },
+  TASKS_MY_TASKS: {
+    value: "my_tasks",
+    type: "read",
+    route: "/app/tasks/my-tasks",
+  },
+  TASKS_DEPARTMENT_TASKS: {
+    value: "department_tasks",
+    type: "read",
+    route: "/app/tasks/department-tasks",
+  },
+  TASKS_TEAM_MEMBERS: {
+    value: "task_team_members",
+    type: "read",
+    route: "/app/tasks/team-members",
+  },
+  TASKS_REPORTS: {
+    value: "task_reports",
+    type: "read",
+    route: "/app/tasks/reports",
+  },
+  TASKS_SETTINGS: {
+    value: "task_settings",
+    type: "read",
+    route: "/app/tasks/settings",
+  },
 
-  VISITORS_ADD_VISITOR: { value: "add_visitor", type: "read" },
-  VISITORS_ADD_CLIENT: { value: "add_client", type: "read" },
-  VISITORS_MANAGE_VISITORS: { value: "manage_visitors", type: "read" },
-  VISITORS_TEAM_MEMBERS: { value: "visitor_team_members", type: "read" },
-  VISITORS_REPORTS: { value: "visitor_reports", type: "read" },
+  VISITORS_ADD_VISITOR: {
+    value: "add_visitor",
+    type: "read",
+    route: "/app/visitors/add-visitor",
+  },
+  VISITORS_ADD_CLIENT: {
+    value: "add_client",
+    type: "read",
+    route: "/app/visitors/add-client",
+  },
+  VISITORS_MANAGE_VISITORS: {
+    value: "manage_visitors",
+    type: "read",
+    route: "/app/visitors/manage-visitors",
+  },
+  VISITORS_TEAM_MEMBERS: {
+    value: "visitor_team_members",
+    type: "read",
+    route: "/app/visitors/team-members",
+  },
+  VISITORS_REPORTS: {
+    value: "visitor_reports",
+    type: "read",
+    route: "/app/visitors/reports",
+  },
 
   FINANCE_CASHFLOW: { value: "cashflow", type: "read" },
   FINANCE_FINANCE: { value: "finance_finance", type: "read" },
@@ -56,7 +116,11 @@ export const PERMISSIONS = {
   MAINTENANCE_INVENTORY: { value: "maintenance_inventory", type: "read" },
   MAINTENANCE_FINANCE: { value: "maintenance_finance", type: "read" },
   MAINTENANCE_MIX_BAG: { value: "maintenance_mix_bag", type: "read" },
-  MAINTENANCE_DATA: { value: "maintenance_data", type: "read" },
+  MAINTENANCE_DATA: {
+    value: "maintenance_data",
+    type: "read",
+    route: "/app/dashboard/maintenance-dashboard/data",
+  },
   MAINTENANCE_SETTINGS: { value: "maintenance_settings", type: "read" },
 
   IT_ANNUAL_EXPENSES: {
@@ -69,4 +133,10 @@ export const PERMISSIONS = {
   IT_MIX_BAG: { value: "it_mix_bag", access: "page", type: "read" },
   IT_DATA: { value: "it_data", type: "read" },
   IT_SETTINGS: { value: "it_settings", type: "write" },
+
+  ACCESS_PERMISSIONS: {
+    value: "access_permissions",
+    access: "page",
+    type: "write",
+  },
 };
