@@ -203,11 +203,11 @@ const ManageTickets = () => {
     },
   ];
   const visibleTabs = tabItems.filter((tab) => {
-  // If there's no permission required, show it to all
-  if (!tab.permission) return true;
-  // Otherwise check if user has that permission
-  return userPermissions.includes(tab.permission);
-});
+    // If there's no permission required, show it to all
+    if (!tab.permission) return true;
+    // Otherwise check if user has that permission
+    return userPermissions.includes(tab.permission);
+  });
 
   return (
     <div>
@@ -229,43 +229,53 @@ const ManageTickets = () => {
       )}
 
       {/* Tabs */}
+      {/* Tabs or Fallback */}
       <div className="p-4">
-        <Tabs
-          value={activeTab}
-          onChange={(e, newVal) => setActiveTab(newVal)}
-          variant="fullWidth"
-          TabIndicatorProps={{ style: { display: "none" } }}
-          sx={{
-            backgroundColor: "white",
-            borderRadius: 2,
-            border: "1px solid #d1d5db",
-            "& .MuiTab-root": {
-              textTransform: "none",
-              fontWeight: "medium",
-              padding: "12px 16px",
-              borderRight: "0.1px solid #d1d5db",
-            },
-            "& .Mui-selected": {
-              backgroundColor: "#1E3D73",
-              color: "white",
-            },
-          }}
-        >
-          {visibleTabs.map((tab, index) => (
-            <Tab
-              key={index}
-              label={
-                <div className="flex flex-col gap-2 text-center">
-                  <span className="text-content">{tab.label}</span>
-                  <span className="text-small">{tab.subLabel}</span>
-                </div>
-              }
-            />
-          ))}
-        </Tabs>
+        {visibleTabs.length > 0 ? (
+          <>
+            <Tabs
+              value={activeTab}
+              onChange={(e, newVal) => setActiveTab(newVal)}
+              variant="fullWidth"
+              TabIndicatorProps={{ style: { display: "none" } }}
+              sx={{
+                backgroundColor: "white",
+                borderRadius: 2,
+                border: "1px solid #d1d5db",
+                "& .MuiTab-root": {
+                  textTransform: "none",
+                  fontWeight: "medium",
+                  padding: "12px 16px",
+                  borderRight: "0.1px solid #d1d5db",
+                },
+                "& .Mui-selected": {
+                  backgroundColor: "#1E3D73",
+                  color: "white",
+                },
+              }}
+            >
+              {visibleTabs.map((tab, index) => (
+                <Tab
+                  key={index}
+                  label={
+                    <div className="flex flex-col gap-2 text-center">
+                      <span className="text-content">{tab.label}</span>
+                      <span className="text-small">{tab.subLabel}</span>
+                    </div>
+                  }
+                />
+              ))}
+            </Tabs>
 
-        {/* Tab Content */}
-        <div className="py-4 bg-white">{tabItems[activeTab]?.component}</div>
+            <div className="py-4 bg-white">
+              {visibleTabs[activeTab]?.component}
+            </div>
+          </>
+        ) : (
+          <div className="py-8 text-center text-gray-500 bg-white rounded-md shadow-sm">
+            You do not have permission to view any ticket tabs.
+          </div>
+        )}
       </div>
     </div>
   );
