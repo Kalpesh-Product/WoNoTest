@@ -4,6 +4,7 @@ export const PERMISSIONS = {
   ASSETS_ASSIGNED_UNASSIGNED: { value: "assigned_unassigned", type: "read" },
   ASSETS_ASSIGNED_ASSETS: { value: "assigned_assets", type: "read" },
 
+  // Tickets Module
   TICKETS_RAISE_TICKET: {
     value: "raise_ticket",
     type: "read",
@@ -29,18 +30,29 @@ export const PERMISSIONS = {
     type: "read",
     route: "/app/tickets/team-members",
   },
-
-  MEETINGS_MEETINGS_INTERNAL : {
-    value: "manage_meetings_internal",
-    type : 'read',
-    access : "page",
-    route : "/app/meetings/manage-meetings/internal-meetings"
+  TICKETS_TOTAL_TICKETS_DONUT: {
+    value: "total_tickets_donut",
+    type: "read",
   },
-  MEETINGS_MEETINGS_EXTERNAL : {
-    value: "manage_meetings_external",
-    type : 'read',
-    access : "page",
-    route : "/app/meetings/manage-meetings/external-meetings"
+  TICKETS_DEPARTMENT_TICKETS_DONUT: {
+    value: "department_tickets_donut",
+    type: "read",
+  },
+  TICKETS_PRIORITY_WISE_TICKETS_DATA_CARD: {
+    value: "priority_wise_tickets_data_card",
+    type: "read",
+  },
+  TICKETS_DEPARTMENT_TICKETS_DATA_CARD: {
+    value: "department_tickets_data_card",
+    type: "read",
+  },
+  TICKETS_PERSONAL_TICKETS_DATA_CARD: {
+    value: "personal_tickets_data_card",
+    type: "read",
+  },
+  TICKETS_OVERALL_DEPARTMENT_WISE_TICKETS: {
+    value: "overall_department_wise_tickets",
+    type: "read",
   },
 
   TASKS_MY_TASKS: { value: "my_tasks", type: "read" },
@@ -83,17 +95,182 @@ export const PERMISSIONS = {
   MEETINGS_REVIEWS: { value: "meeting_reviews", type: "read" },
   MEETINGS_SETTINGS: { value: "meeting_settings", type: "read" },
 
+  // Meeting Tabs
+  MEETINGS_MEETINGS_INTERNAL: {
+    value: "manage_meetings_internal",
+    type: "read",
+    access: "page",
+    route: "/app/meetings/manage-meetings/internal-meetings",
+  },
+  MEETINGS_MEETINGS_EXTERNAL: {
+    value: "manage_meetings_external",
+    type: "read",
+    access: "page",
+    route: "/app/meetings/manage-meetings/external-meetings",
+  },
+
+  // Finance Module
   FINANCE_CASHFLOW: { value: "cashflow", type: "read" },
   FINANCE_FINANCE: { value: "finance_finance", type: "read" },
   FINANCE_BILLING: { value: "billing", type: "read" },
   FINANCE_MIX_BAG: { value: "finance_mix_bag", type: "read" },
   FINANCE_DATA: { value: "finance_data", type: "read" },
   FINANCE_SETTINGS: { value: "finance_settings", type: "read" },
-  FINANCE_PAYOUTS: { value: "finance_payouts", type: "read" },
+  FINANCE_PAYOUTS: { value: "finance_payouts_pie_chart", type: "read" },
   FINANCE_CUSTOMER_COLLECTIONS: {
-    value: "finance_customer_collections",
+    value: "finance_customer_collections_pie_chart",
     type: "read",
   },
+  FINANCE_STATUTORY_PAYMENTS_DONUT: {
+    value: "finance_statutory_payments_donut_chart",
+    type: "read",
+  },
+  FINANCE_RENTAL_PAYMENTS_DONUT: {
+    value: "finance_rental_payments_donut_chart",
+    type: "read",
+  },
+  FINANCE_PAYOUTS_MUI_TABLE: {
+    value: "finance_payouts_table",
+    type: "read",
+  },
+  FINANCE_INCOME_EXPENSE_YEARLY_GRAPH: {
+    value: "finance_income_expense_yearly_graph",
+    type: "read",
+  },
+  FINANCE_INCOME_DATA_CARD: {
+    value: "finance_income_data_card",
+    type: "read",
+  },
+  FINANCE_EXPENSE_DATA_CARD: {
+    value: "finance_expense_data_card",
+    type: "read",
+  },
+  FINANCE_PL_DATA_CARD: {
+    value: "finance_pl_data_card",
+    type: "read",
+  },
+
+  // Finance Tabs
+  FINANCE_CASHFLOW_PROJECTIONS: {
+    value: "cashflow_projections",
+    type: "read",
+    access: "page",
+    route: "/app/dashboard/finance-dashboard/cashflow/projections",
+  },
+  FINANCE_CASHFLOW_HISTORICAL: {
+    value: "historical_pnl",
+    type: "read",
+    access: "page",
+    route: "/app/dashboard/finance-dashboard/cashflow/historical-P&L",
+  },
+
+  FINANCE_BUDGET: {
+    value: "finance_budget",
+    type: "read",
+    access: "page",
+    route: "/app/dashboard/finance-dashboard/finance/budget",
+  },
+  FINANCE_PAYMENT_SCHEDULE: {
+    value: "finance_payment_schedule",
+    type: "read",
+    access: "page",
+    route: "/app/dashboard/finance-dashboard/finance/payment-schedule",
+  },
+  FINANCE_VOUCHER: {
+    value: "finance_voucher",
+    type: "read",
+    access: "page",
+    route: "/app/dashboard/finance-dashboard/finance/voucher",
+  },
+  FINANCE_DEPT_WISE_BUDGET: {
+    value: "dept_wise_budget",
+    type: "read",
+    access: "page",
+    route: "/app/dashboard/finance-dashboard/finance/dept-wise-budget",
+  },
+  FINANCE_COLLECTIONS: {
+    value: "collections",
+    type: "read",
+    access: "page",
+    route: "/app/dashboard/finance-dashboard/finance/collections",
+  },
+  FINANCE_STATUTORY_PAYMENTS: {
+    value: "finance_statutory_payments",
+    type: "read",
+    access: "page",
+    route: "/app/dashboard/finance-dashboard/finance/statutory-payments",
+  },
+  FINANCE_LANDLORD_PAYMENTS: {
+    value: "finance_landlord_payments",
+    type: "read",
+    access: "page",
+    route: "/app/dashboard/finance-dashboard/finance/landlord-payments",
+  },
+
+  FINANCE_BILLING_CLIENT_INVOICE: {
+    value: "client_invoice",
+    type: "read",
+    access: "page",
+    route: "/app/dashboard/finance-dashboard/billing/client-invoice",
+  },
+  FINANCE_BILLING_DEPARTMENT_INVOICE: {
+    value: "department_invoice",
+    type: "read",
+    access: "page",
+    route: "/app/dashboard/finance-dashboard/billing/department-invoice",
+  },
+  FINANCE_BILLING_PENDING_APPROVALS: {
+    value: "finance_pending_approvals",
+    type: "read",
+    access: "page",
+    route: "/app/dashboard/finance-dashboard/billing/pending-approvals",
+  },
+  FINANCE_BILLING_VOUCHER_HISTORY: {
+    value: "finance_voucher_history",
+    type: "read",
+    access: "page",
+    route: "/app/dashboard/finance-dashboard/billing/voucher-history",
+  },
+
+  FINANCE_DATA_ASSET_LIST: {
+    value: "finance_asset_list",
+    type: "read",
+    access: "page",
+    route: "/app/dashboard/finance-dashboard/data/asset-list",
+  },
+  FINANCE_DATA_MONTHLY_INVOICE_REPORTS: {
+    value: "finance_monthly_invoice_reports",
+    type: "read",
+    access: "page",
+    route: "/app/dashboard/finance-dashboard/data/monthly-invoice-reports",
+  },
+  FINANCE_DATA_VENDORS: {
+    value: "finance_data_vendors",
+    type: "read",
+    access: "page",
+    route: "/app/dashboard/finance-dashboard/data/vendor",
+  },
+
+  FINANCE_SETTINGS_BULK_UPLOAD: {
+    value: "finance_bulk_upload",
+    type: "read",
+    access: "page",
+    route: "/app/dashboard/finance-dashboard/settings/bulk-upload",
+  },
+  FINANCE_SETTINGS_SOPS: {
+    value: "finance_sops",
+    type: "read",
+    access: "page",
+    route: "/app/dashboard/finance-dashboard/settings/sops",
+  },
+  FINANCE_SETTINGS_POLICIES: {
+    value: "finance_policies",
+    type: "read",
+    access: "page",
+    route: "/app/dashboard/finance-dashboard/settings/policies",
+  },
+
+  // Sales Module
 
   SALES_TURNOVER: { value: "turnover", type: "read" },
   SALES_FINANCE: { value: "sales_finance", type: "read" },
