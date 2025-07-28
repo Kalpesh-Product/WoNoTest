@@ -22,10 +22,10 @@ export default function BulkUpload() {
   const [openModal, setOpenModal] = useState(false);
   const [modalMode, setModalMode] = useState("");
 
-  const departmentFilter = bulkInsertRoutes.find(
+  const departmentFilter = bulkInsertRoutes?.find(
     (item) => item.department === deptDetails?._id
   );
-  const departmentDrop = departmentFilter.bulkInsertRoutes;
+  const departmentDrop = departmentFilter?.bulkInsertRoutes;
   console.log("drops : ", departmentDrop);
 
   const { data: departmentDocuments = [], isPending: isTemplatesPending } =
@@ -51,12 +51,15 @@ export default function BulkUpload() {
     },
   });
   const selectedDoc = watch("documentName");
-  console.log("selectedDoc : ", selectedDoc);
+  const selectedTemplate = departmentDrop?.find(
+    (item) => item.route === selectedDoc
+  );
+
 
   const { mutate: uploadDocument, isPending: isUploading } = useMutation({
     mutationFn: async ({ file, documentName }) => {
       const formData = new FormData();
-      formData.append("housekeeping-schedule", file);
+      formData.append(`${selectedTemplate?.fileKey}`, file);
 
       const response = await axios.post(`${selectedDoc}`, formData, {
         headers: {
@@ -65,13 +68,13 @@ export default function BulkUpload() {
       });
       return response.data;
     },
-    onSuccess: () => {
-      toast.success("Document logged successfully");
+    onSuccess: (data) => {
+      toast.success(data.message || "DATA UPLOADED");
       setOpenModal(false);
       reset();
     },
     onError: (error) => {
-      toast.error("Failed to log document");
+      toast.error(error?.response?.data?.message);
       console.error(error);
     },
   });

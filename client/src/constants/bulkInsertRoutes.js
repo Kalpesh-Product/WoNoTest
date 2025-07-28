@@ -30,7 +30,6 @@ const bulkInsertRoutes = [
       },
       {
         name: "client events",
-        fileKey: "client-events",
         route: "/api/administration/bulk-insert-client-events",
       },
       {
