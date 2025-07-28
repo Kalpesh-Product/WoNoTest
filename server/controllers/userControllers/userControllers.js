@@ -247,7 +247,7 @@ const fetchUser = async (req, res, next) => {
           { path: "reportsTo", select: "name email" },
           { path: "departments", select: "name" },
           { path: "company", select: "name" },
-          { path: "role", select: "roleTitle modulePermissions" },
+          { path: "role", select: "roleTitle" },
         ]);
 
       return res.status(200).json(users);
@@ -259,7 +259,7 @@ const fetchUser = async (req, res, next) => {
         { path: "reportsTo", select: "_id roleTitle" },
         { path: "departments", select: "name" },
         { path: "company", select: "name" },
-        { path: "role", select: "roleTitle modulePermissions" },
+        { path: "role", select: "roleTitle" },
       ])
       .sort({ startDate: 1 })
       .lean()
