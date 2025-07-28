@@ -77,8 +77,7 @@ const ManageTickets = () => {
           TitleAmount={String(ticketsFilteredData.recievedTickets).padStart(
             2,
             "0"
-          )}
-        >
+          )}>
           <TicketCard
             title={"Open"}
             titleColor={"#1E3D73"}
@@ -110,8 +109,7 @@ const ManageTickets = () => {
           TitleAmount={String(ticketsFilteredData.acceptedTickets).padStart(
             2,
             "0"
-          )}
-        >
+          )}>
           <TicketCard
             title={"Accepted Tickets"}
             data={ticketsFilteredData.acceptedTickets}
@@ -143,7 +141,7 @@ const ManageTickets = () => {
     {
       label: "Received Tickets",
       subLabel: "Department",
-      permission: PERMISSIONS.TICKETS_RECIEVE_TICKETS.value,
+      permission: PERMISSIONS.TICKETS_RECIEVED_TICKETS.value,
       component: (
         <RecievedTickets
           departmentId={selectedDepartment}
@@ -154,6 +152,7 @@ const ManageTickets = () => {
     {
       label: "Accepted Tickets",
       subLabel: ticketLabel,
+      permission: PERMISSIONS.TICKETS_ACCEPTED_TICKETS.value,
       component: (
         <AcceptedTickets
           departmentId={selectedDepartment}
@@ -164,6 +163,7 @@ const ManageTickets = () => {
     {
       label: "Assigned Tickets",
       subLabel: ticketLabel,
+      permission: PERMISSIONS.TICKETS_ASSIGNED_TICKETS.value,
       component: (
         <AssignedTickets
           departmentId={selectedDepartment}
@@ -174,6 +174,7 @@ const ManageTickets = () => {
     {
       label: "Support Tickets",
       subLabel: ticketLabel,
+      permission: PERMISSIONS.TICKETS_SUPPORT_TICKETS.value,
       component: (
         <SupportTickets
           departmentId={selectedDepartment}
@@ -184,6 +185,7 @@ const ManageTickets = () => {
     {
       label: "Escalated Tickets",
       subLabel: ticketLabel,
+      permission: PERMISSIONS.TICKETS_ESCALATED_TICKETS.value,
       component: (
         <EscalatedTickets
           departmentId={selectedDepartment}
@@ -194,6 +196,7 @@ const ManageTickets = () => {
     {
       label: "Closed Tickets",
       subLabel: ticketLabel,
+      permission: PERMISSIONS.TICKETS_CLOSED_TICKETS.value,
       component: (
         <ClosedTickets
           departmentId={selectedDepartment}
@@ -208,6 +211,7 @@ const ManageTickets = () => {
     // Otherwise check if user has that permission
     return userPermissions.includes(tab.permission);
   });
+
 
   return (
     <div>

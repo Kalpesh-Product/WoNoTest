@@ -15,11 +15,38 @@ export const PERMISSIONS = {
     type: "read",
     route: "/app/tickets/manage-tickets",
   },
-  TICKETS_RECIEVE_TICKETS: {
-    value: "recieve_tickets",
+
+  TICKETS_RECIEVED_TICKETS: {
+    value: "recieved_tickets",
     type: "read",
     route: "/app/tickets/manage-tickets",
   },
+  TICKETS_ACCEPTED_TICKETS: {
+    value: "accepted_tickets",
+    type: "read",
+    route: "/app/tickets/manage-tickets",
+  },
+  TICKETS_ASSIGNED_TICKETS: {
+    value: "assigned_tickets",
+    type: "read",
+    route: "/app/tickets/manage-tickets",
+  },
+  TICKETS_SUPPORT_TICKETS: {
+    value: "support_tickets",
+    type: "read",
+    route: "/app/tickets/manage-tickets",
+  },
+  TICKETS_ESCALATED_TICKETS: {
+    value: "escalated_tickets",
+    type: "read",
+    route: "/app/tickets/manage-tickets",
+  },
+  TICKETS_CLOSED_TICKETS: {
+    value: "closed_tickets",
+    type: "read",
+    route: "/app/tickets/manage-tickets",
+  },
+
   TICKETS_TICKET_SETTINGS: {
     value: "ticket_settings",
     type: "read",
