@@ -12,11 +12,14 @@ import { useQuery } from "@tanstack/react-query";
 import useAuth from "../../hooks/useAuth";
 import useAxiosPrivate from "../../hooks/useAxiosPrivate";
 import { useSelector } from "react-redux";
+import { PERMISSIONS } from "../../constants/permissions";
 
 const ManageTickets = () => {
   const axios = useAxiosPrivate();
   const { auth } = useAuth();
   const [activeTab, setActiveTab] = useState(0);
+
+  const userPermissions = auth?.user?.permissions?.permissions || [];
   const selectedDepartment = useSelector(
     (state) => state.performance.selectedDepartment
   );
@@ -74,7 +77,8 @@ const ManageTickets = () => {
           TitleAmount={String(ticketsFilteredData.recievedTickets).padStart(
             2,
             "0"
-          )}>
+          )}
+        >
           <TicketCard
             title={"Open"}
             titleColor={"#1E3D73"}
@@ -106,7 +110,8 @@ const ManageTickets = () => {
           TitleAmount={String(ticketsFilteredData.acceptedTickets).padStart(
             2,
             "0"
-          )}>
+          )}
+        >
           <TicketCard
             title={"Accepted Tickets"}
             data={ticketsFilteredData.acceptedTickets}
@@ -138,6 +143,7 @@ const ManageTickets = () => {
     {
       label: "Received Tickets",
       subLabel: "Department",
+      permission: PERMISSIONS.TICKETS_RECIEVE_TICKETS.value,
       component: (
         <RecievedTickets
           departmentId={selectedDepartment}
@@ -155,10 +161,7 @@ const ManageTickets = () => {
         />
       ),
     },
-  ];
-
-  if (isAdmin) {
-    tabItems.push({
+    {
       label: "Assigned Tickets",
       subLabel: ticketLabel,
       component: (
@@ -167,10 +170,7 @@ const ManageTickets = () => {
           title="Assigned Tickets"
         />
       ),
-    });
-  }
-
-  tabItems.push(
+    },
     {
       label: "Support Tickets",
       subLabel: ticketLabel,
@@ -200,8 +200,14 @@ const ManageTickets = () => {
           title="Closed / Resolved Tickets"
         />
       ),
-    }
-  );
+    },
+  ];
+  const visibleTabs = tabItems.filter((tab) => {
+  // If there's no permission required, show it to all
+  if (!tab.permission) return true;
+  // Otherwise check if user has that permission
+  return userPermissions.includes(tab.permission);
+});
 
   return (
     <div>
@@ -243,8 +249,9 @@ const ManageTickets = () => {
               backgroundColor: "#1E3D73",
               color: "white",
             },
-          }}>
-          {tabItems.map((tab, index) => (
+          }}
+        >
+          {visibleTabs.map((tab, index) => (
             <Tab
               key={index}
               label={

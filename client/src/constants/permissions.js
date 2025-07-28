@@ -15,6 +15,11 @@ export const PERMISSIONS = {
     type: "read",
     route: "/app/tickets/manage-tickets",
   },
+  TICKETS_RECIEVE_TICKETS: {
+    value: "recieve_tickets",
+    type: "read",
+    route: "/app/tickets/manage-tickets",
+  },
   TICKETS_TICKET_SETTINGS: {
     value: "ticket_settings",
     type: "read",
