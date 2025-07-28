@@ -9,6 +9,10 @@ const workationRevenueSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+  client:{
+    type: mongoose.Schema.Types.ObjectId,
+    ref:"WorkationClient"
+  },
   particulars: {
     type: String,
     required: true,

@@ -141,7 +141,7 @@ router.post(
   bulkInsertWorkationRevenue
 );
 router.post(
-  "/bulk-insert-workation-revenue",
+  "/bulk-insert-workation-clients",
   upload.single("workation-clients"),
   bulkInsertWorkationClients
 );
