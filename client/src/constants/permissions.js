@@ -87,6 +87,17 @@ export const PERMISSIONS = {
     type: "read",
   },
 
+  PERFORMANCE_DAILY_KRA: {
+    value: "daily_kra",
+    type: "read",
+    route: "/app/performance",
+  },
+  PERFORMANCE_MONTHLY_KPA: {
+    value: "monthly_kpa",
+    type: "read",
+    route: "/app/performance",
+  },
+
   TASKS_MY_TASKS: { value: "my_tasks", type: "read" },
   TASKS_DEPARTMENT_TASKS: { value: "department_tasks", type: "read" },
   TASKS_TEAM_MEMBERS: { value: "task_team_members", type: "read" },

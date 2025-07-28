@@ -8,6 +8,7 @@ import {
 } from "react-router-dom";
 import { Tabs } from "@mui/material";
 import { useQuery } from "@tanstack/react-query";
+import { PERMISSIONS } from "./../../constants/permissions";
 
 const DepartmentPerformanceLayout = () => {
   const location = useLocation();
@@ -15,8 +16,16 @@ const DepartmentPerformanceLayout = () => {
 
   // Map routes to tabs
   const tabs = [
-    { label: "Daily KRA", path: "daily-KRA" },
-    { label: "Monthly KPA", path: "monthly-KPA" },
+    {
+      label: "Daily KRA",
+      path: "daily-KRA",
+      permission: PERMISSIONS.PERFORMANCE_DAILY_KRA.value,
+    },
+    {
+      label: "Monthly KPA",
+      path: "monthly-KPA",
+      permission: PERMISSIONS.PERFORMANCE_MONTHLY_KPA.value,
+    },
     // { label: "Annual KPA", path: "annual-KPA" },
   ];
 
@@ -58,8 +67,7 @@ const DepartmentPerformanceLayout = () => {
             backgroundColor: "#1E3D73",
             color: "white",
           },
-        }}
-      >
+        }}>
         {tabs.map((tab, index) => (
           <NavLink
             key={index}
@@ -73,8 +81,7 @@ const DepartmentPerformanceLayout = () => {
               padding: "12px 16px",
               display: "block",
               backgroundColor: isActive ? "#1E3D73" : "white",
-            })}
-          >
+            })}>
             {tab.label}
           </NavLink>
         ))}
