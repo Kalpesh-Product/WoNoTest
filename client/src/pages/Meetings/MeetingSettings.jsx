@@ -227,7 +227,7 @@ const MeetingSettings = () => {
               >
                 <CardMedia
                   component="img"
-                  sx={{ height: "350px" }}
+                  sx={{ height: "270px" }}
                   image={room.image?.url || "https://via.placeholder.com/350"} // Fallback Image
                   alt={room.name}
                   className="object-cover"

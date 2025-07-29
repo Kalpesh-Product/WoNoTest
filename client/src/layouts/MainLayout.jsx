@@ -60,7 +60,7 @@ const MainLayout = () => {
     );
 
     const currentRoutePermission = guardedRoutes.find((perm) =>
-      pathname.startsWith(perm.route)
+      pathname.includes(perm.route)
     );
     console.log(
       "🚦 Matched Permission Object:",

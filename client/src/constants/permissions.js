@@ -90,12 +90,12 @@ export const PERMISSIONS = {
   PERFORMANCE_DAILY_KRA: {
     value: "daily_kra",
     type: "read",
-    route: "/app/performance",
+    route: "daily-KRA",
   },
   PERFORMANCE_MONTHLY_KPA: {
     value: "monthly_kpa",
     type: "read",
-    route: "/app/performance",
+    route: "monthly-KPA",
   },
 
   TASKS_MY_TASKS: { value: "my_tasks", type: "read" },
@@ -131,7 +131,7 @@ export const PERMISSIONS = {
   },
 
   // Meetings Module
-  MEETINGS_BOOK_MEETING: { value: "book_meeting", type: "read" },
+  MEETINGS_BOOK_MEETING: { value: "book_meeting", type: "read",access : "page", route : "/app/meetings/book-meeting" },
   MEETINGS_MANAGE_MEETINGS: { value: "manage_meetings", type: "read" },
   MEETINGS_CALENDAR: { value: "meeting_calendar", type: "read" },
   MEETINGS_REPORTS: { value: "meeting_reports", type: "read" },
