@@ -434,17 +434,13 @@ const VisitorDashboard = () => {
   // -----------------------Department Pie Data End--------------------
   //--------------------------------------------//
   const now = new Date();
-const checkedInCount = visitorsData.filter((v) => {
+  const checkedInCount = visitorsData.filter((v) => {
+    return v.checkIn && (!v.checkOut || new Date(v.checkOut) > now);
+  }).length;
 
-  return (
-    v.checkIn && 
-    (!v.checkOut || new Date(v.checkOut) > now)
-  );
-}).length;
-
-const checkedOutCount = visitorsData.filter((v) => {
-  return v.checkIn && v.checkOut && new Date(v.checkOut) <= now;
-}).length;
+  const checkedOutCount = visitorsData.filter((v) => {
+    return v.checkIn && v.checkOut && new Date(v.checkOut) <= now;
+  }).length;
 
   const checkInPieData = [
     {
@@ -524,6 +520,84 @@ const checkedOutCount = visitorsData.filter((v) => {
   };
 
   //First pie-chart config data end
+
+  //------------------------PAGE ACCESS DONUT START-------------------//
+  const donutChartConfigs = [
+    {
+      layout: 2,
+      key: "visitorCategories",
+      title: "Visitor Categories ",
+      titleLabel: "This Month",
+      border: true,
+      centerLabel: "Visitors",
+      labels: labels,
+      colors: ["#54C4A7", "#FFB946", "#FF4D4F", "#6A5ACD"],
+      series: series,
+      tooltipValue: tooltipValue,
+      // isMonetary: true,
+      permission: PERMISSIONS.VISITORS_VISITOR_CATEGORIES.value,
+    },
+  ];
+
+  const allowedDonutCharts = donutChartConfigs.filter(
+    (widget) =>
+      !widget.permission || userPermissions.includes(widget.permission)
+  );
+  //------------------------PAGE ACCESS DONUT END-------------------//
+  //------------------------PAGE ACCESS PIE Top START-------------------//
+  const pieChartTopConfigs = [
+    {
+      layout: 2,
+      key: "checkedInVsYetToCheckOut",
+      title: "Checked Out v/s Yet To Check Out ",
+      titleLabel: "Today",
+      border: true,
+      data: checkInPieData,
+      options: checkInPieOptions,
+      width: "100%",
+      permission: PERMISSIONS.VISITORS_CHECKED_IN_VS_YET_TO_CHECK_OUT.value,
+    },
+  ];
+
+  const allowedPieChartsTop = pieChartTopConfigs.filter(
+    (widget) =>
+      !widget.permission || userPermissions.includes(widget.permission)
+  );
+  //------------------------PAGE ACCESS PIE Top END-------------------//
+  //------------------------PAGE ACCESS PIE Bottom START-------------------//
+  const pieChartConfigs = [
+    {
+      key: "visitorGenderData",
+      title: "Visitor Gender Data ",
+      titleLabel: "This Month",
+      layout: 1,
+      border: true,
+      percent: true,
+
+      data: genderData,
+      options: genderPieChart,
+      width: 438,
+      permission: PERMISSIONS.VISITORS_GENDER_DATA_PIE.value,
+    },
+    {
+      key: "departmentWiseVisits",
+      title: "Department Wise Visits ",
+      titleLabel: "This Month",
+      layout: 1,
+      border: true,
+      data: pieChartData,
+      options: pieChartOptions,
+      height: 320,
+      permission: PERMISSIONS.VISITORS_DEPARTMENT_WISE_VISITS_PIE.value,
+    },
+  ];
+
+  const allowedPieCharts = pieChartConfigs.filter(
+    (widget) =>
+      !widget.permission || userPermissions.includes(widget.permission)
+  );
+  //------------------------PAGE ACCESS PIE Bottom END-------------------//
+
   const meetingsWidgets = [
     {
       layout: 1,
@@ -589,73 +663,158 @@ const checkedOutCount = visitorsData.filter((v) => {
         />,
       ],
     },
+    // {
+    //   layout: 2,
+    //   widgets: [
+    //     <WidgetSection
+    //       layout={1}
+    //       title={"Visitor Categories"}
+    //       titleLabel={"This Month"}
+    //       border>
+    //       <DonutChart
+    //         centerLabel="Visitors"
+    //         labels={labels}
+    //         colors={["#54C4A7", "#FFB946", "#FF4D4F", "#6A5ACD"]} // Add more if needed
+    //         series={series}
+    //         tooltipValue={tooltipValue}
+    //       />
+    //     </WidgetSection>,
+    //     <WidgetSection
+    //       layout={1}
+    //       title={"Checked Out v/s Yet To Check Out"}
+    //       titleLabel={"Today"}
+    //       border>
+    //       <PieChartMui
+    //         data={checkInPieData}
+    //         options={checkInPieOptions}
+    //         width={"100%"}
+    //       />
+    //     </WidgetSection>,
+    //   ],
+    // },
+    // {
+    //   layout: 2,
+    //   widgets: allowedDonutCharts.map((item) => (
+    //     <WidgetSection
+    //       key={item.key}
+    //       layout={item.layout}
+    //       title={item.title}
+    //       titleLabel={item.titleLabel}
+    //       border={item.border}>
+    //       <DonutChart
+    //         centerLabel={item.centerLabel}
+    //         labels={item.labels}
+    //         colors={item.colors}
+    //         series={item.series}
+    //         tooltipValue={item.tooltipValue}
+    //       />
+    //     </WidgetSection>
+    //   )),
+    // },
+    // {
+    //   layout: 2,
+    //   widgets: allowedPieChartsTop.map((item) => (
+    //     <WidgetSection
+    //       key={item.key}
+    //       layout={item.layout}
+    //       title={item.title}
+    //       titleLabel={item.titleLabel}
+    //       border={item.border}>
+    //       <PieChartMui
+    //         data={item.data}
+    //         options={item.options}
+    //         width={item.width}
+    //       />
+    //     </WidgetSection>
+    //   )),
+    // },
     {
       layout: 2,
       widgets: [
-        <WidgetSection
-          layout={1}
-          title={"Visitor Categories"}
-          titleLabel={"This Month"}
-          border
-        >
-          <DonutChart
-            centerLabel="Visitors"
-            labels={labels}
-            colors={["#54C4A7", "#FFB946", "#FF4D4F", "#6A5ACD"]} // Add more if needed
-            series={series}
-            tooltipValue={tooltipValue}
-          />
-        </WidgetSection>,
-        <WidgetSection
-          layout={1}
-          title={"Checked Out v/s Yet To Check Out"}
-          titleLabel={"Today"}
-          border
-        >
-          <PieChartMui
-            data={checkInPieData}
-            options={checkInPieOptions}
-            width={"100%"}
-          />
-        </WidgetSection>,
+        ...allowedDonutCharts.map((item) => (
+          <WidgetSection
+            key={item.key}
+            title={item.title}
+            titleLabel={item.titleLabel}
+            border={item.border}>
+            <DonutChart
+              centerLabel={item.centerLabel}
+              labels={item.labels}
+              colors={item.colors}
+              series={item.series}
+              tooltipValue={item.tooltipValue}
+            />
+          </WidgetSection>
+        )),
+        ...allowedPieChartsTop.map((item) => (
+          <WidgetSection
+            key={item.key}
+            title={item.title}
+            titleLabel={item.titleLabel}
+            border={item.border}>
+            <PieChartMui
+              data={item.data}
+              options={item.options}
+              width={item.width}
+            />
+          </WidgetSection>
+        )),
       ],
     },
 
+    // {
+    //   layout: 2,
+    //   widgets: [
+    //     <WidgetSection
+    //       title={"Visitor Gender Data"}
+    //       titleLabel={"This Month"}
+    //       border>
+    //       {!isVisitorsData ? (
+    //         <PieChartMui
+    //           percent={true}
+    //           title={"Visitor Gender Data"}
+    //           data={genderData}
+    //           options={genderPieChart}
+    //           width={438}
+    //         />
+    //       ) : (
+    //         <div className="h-72 flex justify-center items-center">
+    //           <CircularProgress />
+    //         </div>
+    //       )}
+    //     </WidgetSection>,
+    //     <WidgetSection
+    //       layout={1}
+    //       title={"Department Wise Visits"}
+    //       titleLabel={"This Month"}
+    //       border>
+    //       <PieChartMui
+    //         data={pieChartData}
+    //         options={pieChartOptions}
+    //         height={320}
+    //       />
+    //     </WidgetSection>,
+    //   ],
+    // },
     {
-      layout: 2,
-      widgets: [
+      layout: allowedPieCharts.length, // ✅ dynamic layout
+      widgets: allowedPieCharts.map((item) => (
         <WidgetSection
-          title={"Visitor Gender Data"}
-          titleLabel={"This Month"}
-          border
-        >
-          {!isVisitorsData ? (
-            <PieChartMui
-              percent={true}
-              title={"Visitor Gender Data"}
-              data={genderData}
-              options={genderPieChart}
-              width={438}
-            />
-          ) : (
-            <div className="h-72 flex justify-center items-center">
-              <CircularProgress />
-            </div>
-          )}
-        </WidgetSection>,
-        <WidgetSection
-          layout={1}
-          title={"Department Wise Visits"}
-          titleLabel={"This Month"}
-          border
-        >
+          key={item.key}
+          layout={item.layout}
+          title={item.title}
+          titleLabel={item.titleLabel}
+          border={item.border}>
           <PieChartMui
-            data={pieChartData}
-            options={pieChartOptions}
-            height={320}
+            percent={item.percent}
+            title={item.title}
+            data={item.data}
+            options={item.options}
+            width={item.width}
+            height={item.height}
           />
-        </WidgetSection>,
-      ],
+        </WidgetSection>
+      )),
     },
     {
       layout: 1,

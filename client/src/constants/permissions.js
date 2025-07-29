@@ -87,6 +87,8 @@ export const PERMISSIONS = {
     type: "read",
   },
 
+  // Performance Module
+
   PERFORMANCE_DAILY_KRA: {
     value: "daily_kra",
     type: "read",
@@ -104,6 +106,7 @@ export const PERMISSIONS = {
   TASKS_REPORTS: { value: "task_reports", type: "read" },
   TASKS_SETTINGS: { value: "task_settings", type: "read" },
 
+  // Visitors Module
   VISITORS_ADD_VISITOR: {
     value: "add_visitor",
     type: "read",
@@ -130,8 +133,30 @@ export const PERMISSIONS = {
     route: "/app/visitors/reports",
   },
 
+  VISITORS_VISITOR_CATEGORIES: {
+    value: "visitor_categories",
+    type: "read",
+  },
+  VISITORS_CHECKED_IN_VS_YET_TO_CHECK_OUT: {
+    value: "visitor_checked_in_vs_yet_to_check_out",
+    type: "read",
+  },
+  VISITORS_GENDER_DATA_PIE: {
+    value: "visitor_gender_data_pie_chart",
+    type: "read",
+  },
+  VISITORS_DEPARTMENT_WISE_VISITS_PIE: {
+    value: "visitor_department_wise_visits_pie_chart",
+    type: "read",
+  },
+
   // Meetings Module
-  MEETINGS_BOOK_MEETING: { value: "book_meeting", type: "read",access : "page", route : "/app/meetings/book-meeting" },
+  MEETINGS_BOOK_MEETING: {
+    value: "book_meeting",
+    type: "read",
+    access: "page",
+    route: "/app/meetings/book-meeting",
+  },
   MEETINGS_MANAGE_MEETINGS: { value: "manage_meetings", type: "read" },
   MEETINGS_CALENDAR: { value: "meeting_calendar", type: "read" },
   MEETINGS_REPORTS: { value: "meeting_reports", type: "read" },
