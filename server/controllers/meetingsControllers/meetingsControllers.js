@@ -21,6 +21,7 @@ const MeetingRevenue = require("../../models/sales/MeetingRevenue");
 const emitter = require("../../utils/eventEmitter");
 const { isValid } = require("date-fns/isValid");
 const Role = require("../../models/roles/Roles");
+const CoworkingMember = require("../../models/sales/CoworkingMembers");
 
 const addMeetings = async (req, res, next) => {
   const logPath = "meetings/MeetingLog";
@@ -209,15 +210,17 @@ const addMeetings = async (req, res, next) => {
     const totalCreditsUsed = durationInHours * creditPerHour;
 
     // Atomically deduct credits using findOneAndUpdate with credit check
-    const updateQuery = { _id: bookedBy };
-    const BookingModel = isClient ? CoworkingMembers : User;
+
+    const bookingUser = await User.findById(bookedBy);
+    const updateQuery = { _id: client };
+    const BookingModel = isClient ? CoworkingClient : Company;
 
     const updatedUser = await BookingModel.findOneAndUpdate(
       {
         ...updateQuery,
-        credits: { $gte: totalCreditsUsed },
+        meetingCreditBalance: { $gte: totalCreditsUsed },
       },
-      { $inc: { credits: -totalCreditsUsed } },
+      { $inc: { meetingCreditBalance: -totalCreditsUsed } },
       { new: true }
     );
 
@@ -271,7 +274,7 @@ const addMeetings = async (req, res, next) => {
     isClient
       ? null
       : emitter.emit("notification", {
-          initiatorData: updatedUser._id,
+          initiatorData: bookingUser._id,
           users: internalParticipants.map((userId) => ({
             userActions: {
               whichUser: userId,
@@ -280,7 +283,7 @@ const addMeetings = async (req, res, next) => {
           })),
           type: "book meeting",
           module: "Meetings",
-          message: `You have been added to a meeting by ${updatedUser.firstName} ${updatedUser.lastName}`,
+          message: `You have been added to a meeting by ${bookingUser.firstName} ${bookingUser.lastName}`,
         });
 
     await createLog({
@@ -1106,21 +1109,20 @@ const extendMeeting = async (req, res, next) => {
     const addedCredits = addedHours * creditPerHour;
 
     // Step 2: Deduct credits from the user
-    const isClient = !!meeting.externalClient;
-    const bookingUserModel = isClient ? CoworkingClient : User;
-    const bookingUserId = isClient ? meeting.externalClient : meeting.bookedBy;
+    const isClient = meeting.client.toString() !== company;
+    const bookingUserModel = isClient ? CoworkingClient : Company;
 
-    const bookingUser = await bookingUserModel.findById(bookingUserId);
-    if (!bookingUser) {
+    const bookingUserCompany = await bookingUserModel.findById(meeting.client);
+    if (!bookingUserCompany) {
       throw new CustomError(
-        "Booking user not found for credit deduction",
+        "Booking user company not found for credit deduction",
         logPath,
         logAction,
         logSourceKey
       );
     }
 
-    if (bookingUser.credits < addedCredits) {
+    if (bookingUserCompany.meetingCreditBalance < addedCredits) {
       throw new CustomError(
         "Insufficient credits to extend this meeting",
         logPath,
@@ -1131,8 +1133,8 @@ const extendMeeting = async (req, res, next) => {
 
     // Atomic deduction of credits
     await bookingUserModel.findOneAndUpdate(
-      { _id: bookingUserId },
-      { $inc: { credits: -addedCredits } }
+      { _id: bookingUserCompany },
+      { $inc: { meetingCreditBalance: -addedCredits } }
     );
 
     // Step 3: Update meeting details
@@ -1203,7 +1205,7 @@ const getSingleRoomMeetings = async (req, res, next) => {
 //Update payment details
 const updateMeeting = async (req, res, next) => {
   const logPath = "meetings/MeetingLog";
-  const logAction = "Update Meeting Time";
+  const logAction = "Update Payment Status";
   const logSourceKey = "meeting";
 
   try {
@@ -1489,8 +1491,9 @@ const updateMeetingDetails = async (req, res, next) => {
         : [];
 
     const isClient = !!meeting.clientBookedBy;
-    const BookingModel = isClient ? CoworkingMembers : User;
-    const bookedUserId = isClient ? meeting.clientBookedBy : meeting.bookedBy;
+    const BookingCompanyModel = isClient ? CoworkingClient : Company;
+    const BookingUserModel = isClient ? CoworkingMember : User;
+    const bookedUserId = meeting.client;
 
     const currDate = new Date();
     const startTimeObj = new Date(startTime);
@@ -1544,7 +1547,7 @@ const updateMeetingDetails = async (req, res, next) => {
           .json({ message: "Invalid internal participant IDs" });
       }
 
-      const users = await BookingModel.find({
+      const users = await BookingUserModel.find({
         _id: { $in: internalMeetingParticipants },
       });
       const unmatchedIds = internalMeetingParticipants.filter(
@@ -1569,15 +1572,16 @@ const updateMeetingDetails = async (req, res, next) => {
 
     if (creditDifference > 0) {
       // Deduct extra credits
-      const updatedUser = await BookingModel.findOneAndUpdate(
+      const updatedUser = await BookingCompanyModel.findOneAndUpdate(
         {
           _id: bookedUserId,
-          credits: { $gte: newCreditsUsed },
+          meetingCreditBalance: { $gte: creditDifference },
         },
-        { $inc: { credits: -creditDifference } },
+        { $inc: { meetingCreditBalance: -creditDifference } },
         { new: true }
       );
-
+      console.log("newCreditsUsed", newCreditsUsed);
+      console.log("oldCreditsUsed", oldCreditsUsed);
       if (!updatedUser) {
         return res
           .status(400)
@@ -1585,8 +1589,8 @@ const updateMeetingDetails = async (req, res, next) => {
       }
     } else if (creditDifference < 0) {
       // Refund excess credits
-      await BookingModel.findByIdAndUpdate(bookedUserId, {
-        $inc: { credits: Math.abs(creditDifference) },
+      await BookingCompanyModel.findByIdAndUpdate(bookedUserId, {
+        $inc: { meetingCreditBalance: Math.abs(creditDifference) },
       });
     }
 

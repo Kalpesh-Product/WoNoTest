@@ -149,7 +149,7 @@ const ManageMeetings = () => {
       setDetailsModal(false);
     },
     onError: (error) => {
-      toast.error(error.message || "Failed to update meeting");
+      toast.error(error.response.data.message || "Failed to update meeting");
     },
   });
 
@@ -255,7 +255,7 @@ const ManageMeetings = () => {
       toast.success(data.message);
     },
     onError: (error) => {
-      toast.error(error.message);
+      toast.error(error.response.data.message);
     },
   });
 
@@ -271,7 +271,7 @@ const ManageMeetings = () => {
       resetExtendMeeting();
     },
     onError: (error) => {
-      toast.error(error.message);
+      toast.error(error.response.data.message);
     },
   });
   const { mutate: completeMeeting, isPending: isCompletePending } = useMutation(
@@ -288,7 +288,7 @@ const ManageMeetings = () => {
         toast.success(data.message);
       },
       onError: (error) => {
-        toast.error(error.message);
+        toast.error(error.response.data.message);
       },
     }
   );
