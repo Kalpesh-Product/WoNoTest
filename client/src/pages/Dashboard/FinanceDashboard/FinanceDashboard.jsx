@@ -40,7 +40,7 @@ const FinanceDashboard = () => {
   const navigate = useNavigate();
   const [selectedFiscalYear, setSelectedFiscalYear] = useState("FY 2024-25");
 
-  //------------------------PAGE ACCESS START-------------------//
+  //------------------------PAGE ACCESS CARD START-------------------//
   const cardsConfig = [
     {
       route: "cashflow",
@@ -83,7 +83,7 @@ const FinanceDashboard = () => {
   const allowedCards = cardsConfig.filter(
     (card) => !card.permission || userPermissions.includes(card.permission)
   );
-  //------------------------PAGE ACCESS END-------------------//
+  //------------------------PAGE ACCESS CARD END-------------------//
 
   const axios = useAxiosPrivate();
   const { data: revenueExpenseData = [], isLoading: isRevenueExpenseLoading } =
@@ -825,32 +825,251 @@ const FinanceDashboard = () => {
 
   //-----------------------------------------------------Table Rental Payments------------------------------------------------------//
 
-  const techWidgets = [
+  //------------------------PAGE ACCESS PIE START-------------------//
+  const pieChartConfigs = [
+    {
+      key: "financePayouts",
+      title: "Payouts MAR-25 ",
+      layout: 1,
+      border: true,
+      data: pieMonthlyPayoutData,
+      options: pieMonthlyPayoutOptions,
+      permission: PERMISSIONS.FINANCE_PAYOUTS.value,
+    },
+    {
+      key: "financeCustomerCollections",
+      title: "Customer Collections MAR-25 ",
+      layout: 1,
+      border: true,
+      data: pieChartData,
+      options: pieChartOptions,
+      permission: PERMISSIONS.FINANCE_CUSTOMER_COLLECTIONS.value,
+    },
+  ];
+
+  const allowedPieCharts = pieChartConfigs.filter(
+    (widget) =>
+      !widget.permission || userPermissions.includes(widget.permission)
+  );
+  //------------------------PAGE ACCESS PIE END-------------------//
+
+  //------------------------PAGE ACCESS DONUT START-------------------//
+  const donutChartConfigs = [
     {
       layout: 1,
-      widgets: [
-        <YearlyGraph
-          data={incomeExpenseData}
-          options={incomeExpenseOptions}
-          chartId={"bargraph-finance-income"}
-          title={"BIZNest FINANCE INCOME V/S EXPENSE"}
-          TitleAmountGreen={`INR ${inrFormat(totalIncomeAmount)}`}
-          TitleAmountRed={`INR ${inrFormat(totalExpense)}`}
-          onYearChange={setSelectedFiscalYear}
-        />,
-      ],
+      key: "financeStatutory",
+      title: "Statutory Payments Due MAR-25 ",
+      border: true,
+      centerLabel: "Statutory",
+      labels: statutoryDonutLabels,
+      colors: statutoryDonutColors,
+      series: statutoryDonutSeries,
+      tooltipValue: statutoryTooltipValues,
+      isMonetary: true,
+      permission: PERMISSIONS.FINANCE_STATUTORY_PAYMENTS_DONUT.value,
+    },
+    {
+      layout: 1,
+      key: "financeRental",
+      title: "Rental Payments Due MAR-25 ",
+      border: true,
+      centerLabel: "Rental Status",
+      labels: donutRentalLabels,
+      colors: donutRentalColors,
+      series: donutRentalSeries,
+      tooltipValue: donutRentalTooltipValue,
+      isMonetary: true,
+      permission: PERMISSIONS.FINANCE_RENTAL_PAYMENTS_DONUT.value,
+    },
+  ];
+
+  const allowedDonutCharts = donutChartConfigs.filter(
+    (widget) =>
+      !widget.permission || userPermissions.includes(widget.permission)
+  );
+  //------------------------PAGE ACCESS DONUT END-------------------//
+
+  //------------------------PAGE ACCESS MUI START-------------------//
+  const muiTableConfigs = [
+    {
+      layout: 1,
+      key: "financePayouts",
+      title: "Payouts Mar-25 ",
+      columns: marchPaymentColumns,
+      rows: march2025Payments.map((item, index) => ({
+        srNo: index + 1,
+        ...item,
+        dueDate: item.dueDate,
+      })),
+      rowKey: "_id",
+      scroll: true,
+      rowsToDisplay: march2025Payments.length,
+
+      permission: PERMISSIONS.FINANCE_PAYOUTS_MUI_TABLE.value,
+    },
+  ];
+
+  const allowedMuiTables = muiTableConfigs.filter(
+    (widget) =>
+      !widget.permission || userPermissions.includes(widget.permission)
+  );
+  //------------------------PAGE ACCESS MUI END-------------------//
+  //------------------------PAGE ACCESS YEARLY GRAPH START-------------------//
+  const yearlyGraphConfigs = [
+    {
+      layout: 1,
+      key: "financeIncomeExpense",
+      data: incomeExpenseData,
+      options: incomeExpenseOptions,
+      chartId: "bargraph-finance-income",
+      title: "BIZNest FINANCE INCOME V/S EXPENSE",
+      TitleAmountGreen: `INR ${inrFormat(totalIncomeAmount)}`,
+      TitleAmountRed: `INR ${inrFormat(totalExpense)}`,
+      onYearChange: setSelectedFiscalYear,
+
+      permission: PERMISSIONS.FINANCE_INCOME_EXPENSE_YEARLY_GRAPH.value,
+    },
+  ];
+
+  const allowedYearlyGraphs = yearlyGraphConfigs.filter(
+    (widget) =>
+      !widget.permission || userPermissions.includes(widget.permission)
+  );
+  //------------------------PAGE ACCESS YEARLY GRAPH END-------------------//
+  //------------------------PAGE ACCESS FINANCE DATA CARD START-------------------//
+  // const DataCardConfigs = [
+  //   {
+  //     layout: 1,
+  //     key: "financeIncomeDataCard",
+  //     data: {
+  //       ...incomeCardData,
+  //     },
+  //     highlightNegativePositive: false,
+  //     permission: PERMISSIONS.FINANCE_INCOME_DATA_CARD.value,
+  //   },
+  //   {
+  //     layout: 1,
+  //     key: "financeExpenseDataCard",
+  //     data: {
+  //       ...expenseCardData,
+  //     },
+  //     highlightNegativePositive: false,
+  //     permission: PERMISSIONS.FINANCE_EXPENSE_DATA_CARD.value,
+  //   },
+  //   {
+  //     layout: 1,
+  //     key: "financePlDataCard",
+  //     data: {
+  //       ...netSavingsCardData,
+  //     },
+  //     highlightNegativePositive: true,
+  //     permission: PERMISSIONS.FINANCE_PL_DATA_CARD.value,
+  //   },
+  // ];
+
+  // const allowedDataCards = DataCardConfigs.filter(
+  //   (widget) =>
+  //     !widget.permission || userPermissions.includes(widget.permission)
+  // );
+
+  //------------------------PAGE ACCESS FINANCE CARDS START-------------------//
+  const financeCardConfigs = [
+    {
+      layout: 3,
+      key: "financeIncomeCard",
+      component: FinanceCard,
+      props: incomeCardData,
+      permission: PERMISSIONS.FINANCE_INCOME_DATA_CARD.value,
     },
     {
       layout: 3,
-      widgets: [
-        <FinanceCard {...incomeCardData} />,
-        <FinanceCard {...expenseCardData} />,
-        <FinanceCard
-          {...netSavingsCardData}
-          highlightNegativePositive={true}
-        />,
-      ],
+      key: "financeExpenseCard",
+      component: FinanceCard,
+      props: expenseCardData,
+      permission: PERMISSIONS.FINANCE_EXPENSE_DATA_CARD.value,
     },
+    {
+      layout: 3,
+      key: "financeNetSavingsCard",
+      component: FinanceCard,
+      props: {
+        ...netSavingsCardData,
+        highlightNegativePositive: true,
+      },
+      permission: PERMISSIONS.FINANCE_PL_DATA_CARD.value,
+    },
+  ];
+
+  const allowedFinanceCards = financeCardConfigs.filter(
+    (card) => !card.permission || userPermissions.includes(card.permission)
+  );
+  //------------------------PAGE ACCESS FINANCE CARDS END-------------------//
+
+  //------------------------PAGE ACCESS FINANCE DATA CARD END-------------------//
+
+  // LIST OF WIDGETS
+
+  const techWidgets = [
+    // {
+    //   layout: 1,
+    //   widgets: [
+    //     <YearlyGraph
+    //       data={incomeExpenseData}
+    //       options={incomeExpenseOptions}
+    //       chartId={"bargraph-finance-income"}
+    //       title={"BIZNest FINANCE INCOME V/S EXPENSE"}
+    //       TitleAmountGreen={`INR ${inrFormat(totalIncomeAmount)}`}
+    //       TitleAmountRed={`INR ${inrFormat(totalExpense)}`}
+    //       onYearChange={setSelectedFiscalYear}
+    //     />,
+    //   ],
+    // },
+
+    {
+      layout: allowedYearlyGraphs.length,
+      widgets: allowedYearlyGraphs.map((item) => (
+        <YearlyGraph
+          layout={item.layout}
+          key={item.key}
+          data={item.data}
+          options={item.options}
+          chartId={item.chartId}
+          title={item.title}
+          TitleAmountGreen={item.TitleAmountGreen}
+          TitleAmountRed={item.TitleAmountRed}
+          onYearChange={item.onYearChange}
+        />
+      )),
+    },
+    // {
+    //   layout: 3,
+    //   widgets: [
+    //     <FinanceCard {...incomeCardData} />,
+    //     <FinanceCard {...expenseCardData} />,
+    //     <FinanceCard
+    //       {...netSavingsCardData}
+    //       highlightNegativePositive={true}
+    //     />,
+    //   ],
+    // },
+    {
+      layout: 3,
+      widgets: allowedFinanceCards.map((item) => (
+        <item.component key={item.key} {...item.props} />
+      )),
+    },
+
+    // {
+    //   layout: allowedDataCards.length,
+    //   widgets: allowedDataCards.map((item) => (
+    //     <FinanceCard
+    //       layout={item.layout}
+    //       key={item.key}
+    //       data={item.data}
+    //       highlightNegativePositive={item.highlightNegativePositive}
+    //     />
+    //   )),
+    // },
     // {
     //   layout: 6,
     //   widgets: [
@@ -886,79 +1105,115 @@ const FinanceDashboard = () => {
       )),
     },
 
-    {
-      layout: 2,
-      widgets: [
-        <WidgetSection title={`Payouts MAR-25 `} border>
-          <PieChartMui
-            data={pieMonthlyPayoutData}
-            options={pieMonthlyPayoutOptions}
-          />
-        </WidgetSection>,
-        <WidgetSection title={`Customer Collections MAR-25 `} border>
-          {/* <PieChartMui
-            data={[]}
-            options={pieMonthlyCollectionOptions}
-            width={500}
-            height={350}
-          /> */}
-          <PieChartMui data={pieChartData} options={pieChartOptions} />
-        </WidgetSection>,
-      ],
-    },
-    {
-      layout: 2,
-      widgets: [
-        <WidgetSection title={`Statutory Payments Due MAR-25`} border>
-          <DonutChart
-            centerLabel="Statutory"
-            labels={statutoryDonutLabels}
-            colors={statutoryDonutColors}
-            series={statutoryDonutSeries}
-            tooltipValue={statutoryTooltipValues}
-            isMonetary={true}
-          />
-        </WidgetSection>,
-        <WidgetSection title={`Rental Payments Due MAR-25`} border>
-          <DonutChart
-            centerLabel="Rental Status"
-            labels={donutRentalLabels}
-            colors={donutRentalColors}
-            series={donutRentalSeries}
-            tooltipValue={donutRentalTooltipValue}
-            isMonetary={true}
-          />
-        </WidgetSection>,
-      ],
-    },
-    {
-      layout: 1,
-      widgets: [
-        // <MuiTable
-        //   key={priorityTasks.length}
-        //   scroll
-        //   rowsToDisplay={4}
-        //   Title={`KPA - ${monthYear} `}
-        //   rows={[
+    // {
+    //   layout: 2,
+    //   widgets: [
+    //     <WidgetSection title={`Payouts MAR-25 `} border>
+    //       <PieChartMui
+    //         data={pieMonthlyPayoutData}
+    //         options={pieMonthlyPayoutOptions}
+    //       />
+    //     </WidgetSection>,
+    //     <WidgetSection title={`Customer Collections MAR-25 `} border>
+    //       <PieChartMui data={pieChartData} options={pieChartOptions} />
+    //     </WidgetSection>,
+    //   ],
+    // },
 
-        //   ]}
-        //   columns={priorityTasksColumns}
-        // />,
+    {
+      layout: allowedPieCharts.length,
+      widgets: allowedPieCharts.map((item) => (
+        <WidgetSection
+          key={item.key}
+          layout={item.layout}
+          title={item.title}
+          border={item.border}>
+          <PieChartMui
+            data={item.data}
+            options={item.options}
+            // width={item.width}
+          />
+        </WidgetSection>
+      )),
+    },
+    // {
+    //   layout: 2,
+    //   widgets: [
+    //     <WidgetSection title={`Statutory Payments Due MAR-25`} border>
+    //       <DonutChart
+    //         centerLabel="Statutory"
+    //         labels={statutoryDonutLabels}
+    //         colors={statutoryDonutColors}
+    //         series={statutoryDonutSeries}
+    //         tooltipValue={statutoryTooltipValues}
+    //         isMonetary={true}
+    //       />
+    //     </WidgetSection>,
+    //     <WidgetSection title={`Rental Payments Due MAR-25`} border>
+    //       <DonutChart
+    //         centerLabel="Rental Status"
+    //         labels={donutRentalLabels}
+    //         colors={donutRentalColors}
+    //         series={donutRentalSeries}
+    //         tooltipValue={donutRentalTooltipValue}
+    //         isMonetary={true}
+    //       />
+    //     </WidgetSection>,
+    //   ],
+    // },
+    {
+      layout: allowedDonutCharts.length,
+      widgets: allowedDonutCharts.map((item) => (
+        <WidgetSection
+          key={item.key}
+          layout={item.layout}
+          title={item.title}
+          border={item.border}>
+          <DonutChart
+            centerLabel={item.centerLabel}
+            labels={item.labels}
+            colors={item.colors}
+            series={item.series}
+            tooltipValue={item.tooltipValue}
+            isMonetary={item.isMonetary}
+          />
+        </WidgetSection>
+      )),
+    },
+    // {
+    //   layout: 1,
+    //   widgets: [
+    //     <MuiTable
+    //       Title="Payouts Mar-25"
+    //       columns={marchPaymentColumns}
+    //       rows={march2025Payments.map((item, index) => {
+    //         return {
+    //           srNo: index + 1,
+    //           ...item,
+    //           dueDate: item.dueDate,
+    //         };
+    //       })}
+    //       rowKey="_id"
+    //       scroll={true}
+    //       rowsToDisplay={march2025Payments.length}
+    //     />,
+    //   ],
+    // },
+
+    {
+      layout: allowedMuiTables.length,
+      widgets: allowedMuiTables.map((item) => (
         <MuiTable
-          Title="Payouts Mar-25"
-          columns={marchPaymentColumns}
-          rows={march2025Payments.map((item, index) => {
-            return {
-              srNo: index + 1,
-              ...item,
-              dueDate: item.dueDate,
-            };
-          })}
-          rowKey="_id"
-          scroll={true}
-          rowsToDisplay={march2025Payments.length}
-        />,
-      ],
+          layout={item.layout}
+          key={item.key}
+          title={item.title}
+          columns={item.columns}
+          rows={item.rows}
+          rowKey={item.rowKey}
+          scroll={item.scroll}
+          rowsToDisplay={item.rowsToDisplay}
+        />
+      )),
     },
   ];
 
@@ -969,7 +1224,6 @@ const FinanceDashboard = () => {
           {section?.widgets}
         </WidgetSection>
       ))}
-
     </div>
   );
 };

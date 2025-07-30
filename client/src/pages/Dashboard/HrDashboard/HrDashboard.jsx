@@ -100,19 +100,6 @@ const HrDashboard = () => {
   const axios = useAxiosPrivate();
 
   const navigate = useNavigate();
-  // const accessibleModules = new Set();
-
-  // auth.user.permissions?.deptWisePermissions?.forEach((department) => {
-  //   department.modules.forEach((module) => {
-  //     const hasViewPermission = module.submodules.some((submodule) =>
-  //       submodule.actions.includes("View")
-  //     );
-
-  //     if (hasViewPermission) {
-  //       accessibleModules.add(module.moduleName);
-  //     }
-  //   });
-  // });
 
   const usersQuery = useQuery({
     queryKey: ["users"],
@@ -1042,7 +1029,7 @@ const HrDashboard = () => {
       {
         title: "Exit Head Count",
         value: "2",
-        route: "employee/employee-list",
+        route: "employee/past-employees",
       },
       {
         title: "Per Sq. Ft.",
@@ -1051,43 +1038,109 @@ const HrDashboard = () => {
       },
     ],
   };
+  function getFYDateRange(fyString) {
+    const match = fyString.match(/FY\s*(\d{4})-(\d{2})/);
+    if (!match) throw new Error("Invalid FY format");
 
-  const HrAverageExpense = {
-    cardTitle: "Averages",
-    // timePeriod: "FY 2024-25",
-    descriptionData: [
-      {
-        title: "Annual Average Expense",
-        // value: `INR ${inrFormat(totalExpense / 12)}`,
-        value: `INR ${inrFormat(totalUtilised / 12)}`,
-        route: "finance",
-      },
-      {
-        title: "Average Salary",
-        value: `INR ${inrFormat(totalSalary / totalEmployees)}`,
-        route: "employee/employee-list",
-      },
-      {
-        title: "Average Head Count",
-        value: "30",
-        route: "employee/employee-list",
-      },
-      {
-        title: "Average Attendance",
-        route: "employee/attendance",
-        value: averageAttendance
-          ? `${(Number(averageAttendance) - 55).toFixed(0)}%`
-          : "0%",
-      },
-      {
-        title: "Average Hours",
-        route: "employee/attendance",
-        value: averageWorkingHours
-          ? `${(Number(averageWorkingHours) / 30).toFixed(2)}h`
-          : "0h",
-      },
-    ],
-  };
+    const startYear = parseInt(match[1], 10);
+    const endYear = startYear + 1;
+    const fyStart = `${startYear}-04-01`;
+    const fyEnd = `${endYear}-03-31`;
+
+    return { fyStart, fyEnd };
+  }
+  function getAverageHeadcount(employees, selectedFiscalYear) {
+    const { fyStart, fyEnd } = getFYDateRange(selectedFiscalYear);
+
+    const months = [];
+    let current = dayjs(fyStart).startOf("month");
+
+    while (current.isSameOrBefore(fyEnd, "month")) {
+      months.push(current);
+      current = current.add(1, "month");
+    }
+
+    const monthlyCounts = months.map((monthStart) => {
+      const monthEnd = monthStart.endOf("month");
+
+      const activeCount = employees?.filter((emp) => {
+        const start = dayjs(emp.startDate);
+        const end = emp.endDate ? dayjs(emp.endDate) : null;
+
+        return (
+          start.isSameOrBefore(monthEnd, "day") &&
+          (!end || end.isSameOrAfter(monthStart, "day"))
+        );
+      }).length;
+
+      return activeCount;
+    });
+
+    const average =
+      monthlyCounts.reduce((sum, count) => sum + count, 0) /
+      monthlyCounts.length;
+
+    return {
+      monthlyCounts,
+      average: Math.round(average),
+    };
+  }
+
+const averageHeadCount = useMemo(() => {
+  return getAverageHeadcount(
+    usersQuery.isLoading ? [] : usersQuery.data,
+    selectedHrFiscalYear
+  );
+}, [usersQuery.data, usersQuery.isLoading, selectedHrFiscalYear]);
+
+useEffect(()=>{
+  console.log("selectedYear : ",selectedHrFiscalYear)
+},[selectedHrFiscalYear])
+
+
+const HrAverageExpense = useMemo(() => ({
+  cardTitle: "Averages",
+  descriptionData: [
+    {
+      title: "Annual Average Expense",
+      value: `INR ${inrFormat(totalUtilised / 12)}`,
+      route: "finance",
+    },
+    {
+      title: "Average Salary",
+      value: `INR ${inrFormat(totalSalary / totalEmployees)}`,
+      route: "employee/employee-list",
+    },
+    {
+      title: "Average Head Count",
+      value: `${ usersQuery.isLoading ? 0 : averageHeadCount.average}`,
+      route: "employee/employee-list",
+    },
+    {
+      title: "Average Attendance",
+      route: "employee/attendance",
+      value: averageAttendance
+        ? `${(Number(averageAttendance) - 55).toFixed(0)}%`
+        : "0%",
+    },
+    {
+      title: "Average Hours",
+      route: "employee/attendance",
+      value: averageWorkingHours
+        ? `${(Number(averageWorkingHours) / 30).toFixed(2)}h`
+        : "0h",
+    },
+  ],
+}), [
+  totalUtilised,
+  totalSalary,
+  totalEmployees,
+  averageHeadCount,
+  averageAttendance,
+  averageWorkingHours,
+]);
+
+
   //--------------------New Data card data -----------------------//
 
   //First pie-chart config data end
@@ -1173,7 +1226,8 @@ const HrDashboard = () => {
               <Skeleton variant="text" width={200} height={30} />
               <Skeleton variant="rectangular" width="100%" height={300} />
             </Box>
-          }>
+          }
+        >
           <WidgetSection normalCase layout={1} padding>
             <YearlyGraph
               data={expenseRawSeries}
@@ -1240,7 +1294,8 @@ const HrDashboard = () => {
               <Skeleton variant="text" width={200} height={30} />
               <Skeleton variant="rectangular" width="100%" height={300} />
             </Box>
-          }>
+          }
+        >
           <YearlyGraph
             data={tasksData}
             options={tasksOptions}
@@ -1258,7 +1313,8 @@ const HrDashboard = () => {
               <Skeleton variant="text" width={200} height={30} />
               <Skeleton variant="rectangular" width="100%" height={300} />
             </Box>
-          }>
+          }
+        >
           <YearlyGraph
             data={tasksGraphData}
             options={tasksOverallOptions}
@@ -1309,6 +1365,9 @@ const HrDashboard = () => {
             columns={columns}
             rows={birthdays
               .filter((bd) => bd.start) // Only entries with a start date
+              .sort(
+                (a, b) => dayjs(a.start).valueOf() - dayjs(b.start).valueOf()
+              ) // ✅ Sort by date ascending
               .map((bd, index) => {
                 const date = dayjs(bd.start);
                 return {
@@ -1329,15 +1388,18 @@ const HrDashboard = () => {
         <MuiTable
           Title="Current Months Holiday List"
           columns={columns2}
-          rows={holidayEvents.map((holiday, index) => {
-            const date = dayjs(holiday.start);
-            return {
-              id: index + 1,
-              title: holiday.title,
-              start: date.format("DD-MM-YYYY"),
-              day: date.format("dddd"),
-            };
-          })}
+          rows={holidayEvents
+            .filter((h) => h.start) // Optional: safety check for valid dates
+            .sort((a, b) => dayjs(a.start).valueOf() - dayjs(b.start).valueOf()) // ✅ Sort ascending
+            .map((holiday, index) => {
+              const date = dayjs(holiday.start);
+              return {
+                id: index + 1,
+                title: holiday.title,
+                start: date.format("DD-MM-YYYY"),
+                day: date.format("dddd"),
+              };
+            })}
           rowsToDisplay={40}
           scroll={true}
           className="h-full"

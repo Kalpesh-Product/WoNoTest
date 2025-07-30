@@ -31,6 +31,7 @@ import usePageDepartment from "../../../hooks/usePageDepartment";
 import humanDate from "../../../utils/humanDateForamt";
 import humanTime from "../../../utils/humanTime";
 import { PERMISSIONS } from "./../../../constants/permissions";
+import FyBarGraph from "../../../components/graphs/FyBarGraph";
 
 dayjs.extend(customParseFormat);
 const AdminDashboard = () => {
@@ -398,66 +399,6 @@ const AdminDashboard = () => {
 
   const { setIsSidebarOpen } = useSidebar();
 
-  // useEffect(() => {
-  //   setIsSidebarOpen(true);
-  // }, []);
-
-  const options = {
-    chart: {
-      type: "bar",
-      stacked: true,
-      toolbar: false,
-      fontFamily: "Poppins-Regular",
-    },
-    plotOptions: {
-      bar: {
-        horizontal: false,
-        columnWidth: "35%",
-        borderRadius: 3,
-        borderRadiusWhenStacked: "all",
-        borderRadiusApplication: "end",
-      },
-    },
-    colors: ["#36BA98", "#275D3E", "#E83F25"], // Colors for the series
-    dataLabels: {
-      enabled: true,
-      formatter: (value, { seriesIndex }) => {
-        if (seriesIndex === 1) return "";
-        return `${value}%`;
-      },
-    },
-    xaxis: {
-      categories: [
-        "Apr-24",
-        "May-24",
-        "Jun-24",
-        "Jul-24",
-        "Aug-24",
-        "Sep-24",
-        "Oct-24",
-        "Nov-24",
-        "Dec-24",
-        "Jan-25",
-        "Feb-25",
-        "Mar-25",
-      ],
-    },
-    yaxis: {
-      max: 150,
-      labels: {
-        formatter: (value) => `${value}%`,
-      },
-    },
-    tooltip: {
-      y: {
-        formatter: (value) => `${value}%`,
-      },
-    },
-    legend: {
-      show: true,
-      position: "top",
-    },
-  };
   //-----------------------------------------------------------------------------------------------------------------//
   const taskData = [
     { unit: "ST-701A", tasks: 25 },
@@ -713,16 +654,6 @@ const AdminDashboard = () => {
     { id: "endDate", label: "End Date", align: "left" },
   ];
 
-  const utilisedData = [
-    125000, 150000, 99000, 85000, 70000, 50000, 80000, 95000, 100000, 65000,
-    50000, 120000,
-  ];
-
-  const maxBudget = [
-    100000, 120000, 100000, 100000, 80000, 60000, 85000, 95000, 100000, 70000,
-    60000, 110000,
-  ];
-
   const transformedWeeklyShifts = useMemo(() => {
     if (isWeeklyScheduleLoading || !weeklySchedule.length) return [];
 
@@ -829,18 +760,18 @@ const AdminDashboard = () => {
               <Skeleton variant="text" width={200} height={30} />
               <Skeleton variant="rectangular" width="100%" height={300} />
             </Box>
-          }>
+          }
+        >
           <WidgetSection normalCase layout={1} padding>
-            <YearlyGraph
-              data={expenseRawSeries}
+   
+
+            <FyBarGraph
+              data={hrFinance}
+              dateKey="dueDate"
+              valueKey="actualAmount"
               responsiveResize
-              chartId={"bargraph-hr-expense"}
-              options={expenseOptions}
-              onYearChange={setSelectedFiscalYear}
-              title={"BIZ Nest ADMIN DEPARTMENT EXPENSE"}
-              titleAmount={`INR ${Math.round(totalUtilised).toLocaleString(
-                "en-IN"
-              )}`}
+              chartOptions={expenseOptions}
+              graphTitle={`BIZ Nest ${department?.name?.toUpperCase()} DEPARTMENT EXPENSE`}
             />
           </WidgetSection>
         </Suspense>,

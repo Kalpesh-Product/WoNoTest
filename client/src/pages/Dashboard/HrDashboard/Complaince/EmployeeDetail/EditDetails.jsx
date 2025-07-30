@@ -91,8 +91,8 @@ const EditDetails = () => {
     ? []
     : {
         ...employeeData,
-        dob: dayjs(employeeData.dob, "DD/MM/YYYY").format("DD-MM-YYYY"),
-        startDate: dayjs(employeeData.startDate, "DD/MM/YYYY").format(
+        dob: dayjs(employeeData.dob).format("DD-MM-YYYY"),
+        startDate: dayjs(employeeData.startDate).format(
           "DD-MM-YYYY"
         ),
       };
@@ -207,7 +207,6 @@ const EditDetails = () => {
                         "department",
                         "reportsTo",
                         "jobTitle",
-                        "jobDescription",
                       ].map((fieldKey) => (
                         <div key={fieldKey}>
                           {isEditing ? (
@@ -300,7 +299,8 @@ const EditDetails = () => {
                                     href={transformEmployeeData[fieldKey]}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="text-blue-600 underline">
+                                    className="text-blue-600 underline"
+                                  >
                                     {fieldKey
                                       .replace(/([A-Z])/g, " $1")
                                       .replace(/^./, (str) =>

@@ -9,6 +9,8 @@ import {
 } from "@mui/material";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import { IoIosArrowForward } from "react-icons/io";
+import { PERMISSIONS } from "../constants/permissions";
+import Permissions from "./Permissions/Permissions";
 
 const MuiAccordion = ({
   data = [],
@@ -48,12 +50,14 @@ const MuiAccordion = ({
         </Typography>
       </Box>
 
-      <div
-        onClick={() => itemClick?.(emp)}
-        className="p-2 cursor-pointer border-default border-black rounded-md text-content flex items-center bg-white text-black hover:text-white hover:bg-primary hover:border-primary"
-      >
-        <IoIosArrowForward />
-      </div>
+      <Permissions permissions={[PERMISSIONS.ACCESS_PERMISSIONS]}>
+        <div
+          onClick={() => itemClick?.(emp)}
+          className="p-2 cursor-pointer border-default border-black rounded-md text-content flex items-center bg-white text-black hover:text-white hover:bg-primary hover:border-primary"
+        >
+          <IoIosArrowForward />
+        </div>
+      </Permissions>
     </Box>
   );
 
@@ -84,7 +88,9 @@ const MuiAccordion = ({
 
         return (
           <Accordion key={section._id} disableGutters>
-            <AccordionSummary expandIcon={isDisabled ? null : <ExpandMoreIcon />}>
+            <AccordionSummary
+              expandIcon={isDisabled ? null : <ExpandMoreIcon />}
+            >
               <Typography fontWeight="bold">
                 {section[titleKey]}
                 {isDisabled && (
