@@ -599,7 +599,7 @@ const bulkInsertUsers = async (req, res, next) => {
     // );
 
     const departmentMap = new Map(
-      departments.map((dept) => [dept.name, dept._id])
+      departments.map((dept) => [dept.departmentId, dept._id])
     );
 
     // Fetch roles and build a role map (assuming each role document has roleID)
@@ -620,23 +620,12 @@ const bulkInsertUsers = async (req, res, next) => {
           rowPromises.push(
             (async () => {
               try {
-                // const departmentIds = row["Department (ID)"]
-                //   ? row["Department (ID)"].split("/").map((d) => d.trim())
-                //   : [];
-                console.log("row dept", row["Department"]);
-                const departmentIds = row["Department"]
-                  ? row["Department"].includes("/")
-                    ? row["Department"]
-                        .split("/")
-                        .map((d) => d.trim())
-                        .filter(Boolean)
-                    : [row["Department"].trim()]
+                const departmentIds = row["Department (ID)"]
+                  ? row["Department (ID)"].split("/").map((d) => d.trim())
                   : [];
 
                 const departmentObjectIds = departmentIds.map((id) => {
-                  const deptId = new mongoose.Types.ObjectId(id);
-                  console.log("deptId", deptId);
-                  if (!departmentMap.has(deptId)) {
+                  if (!departmentMap.has(id)) {
                     throw new Error(`Invalid department: ${id}`);
                   }
                   return departmentMap.get(id);
@@ -687,12 +676,6 @@ const bulkInsertUsers = async (req, res, next) => {
                   startDate: new Date(row["Date Of Joining"]),
                   workLocation: row["Work Building"],
                   shift: row["Shift Policy"] || "General",
-                  // policies: {
-                  //   shift: row["Shift Policy"] || "General",
-                  //   workSchedulePolicy: row["Work Schedule Policy"] || "",
-                  //   leavePolicy: row["Leave Policy"] || "",
-                  //   holidayPolicy: row["Holiday Policy"] || "",
-                  // },
                   homeAddress: {
                     addressLine1: row["Address"] || "",
                     addressLine2: row["Present Address"] || "",

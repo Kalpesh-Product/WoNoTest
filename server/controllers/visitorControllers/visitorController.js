@@ -145,6 +145,9 @@ const addVisitor = async (req, res, next) => {
       visitorType,
       visitorCompany,
       visitorFlag,
+      registeredClientCompany,
+      brandName,
+      gst,
     } = req.body;
 
     const visitDate = new Date();
@@ -318,6 +321,7 @@ const addVisitor = async (req, res, next) => {
       department === undefined ||
       (typeof department === "string" && department.trim() === "");
 
+    console.log("isDepartment", isDepartmentEmpty);
     const newVisitor = new Visitor({
       firstName,
       middleName,
@@ -350,6 +354,9 @@ const addVisitor = async (req, res, next) => {
       visitorCompany,
       company,
       visitorFlag,
+      registeredClientCompany,
+      brandName,
+      gst,
     });
 
     const savedVisitor = await newVisitor.save();
@@ -357,34 +364,42 @@ const addVisitor = async (req, res, next) => {
     // Notification that visitor was added
 
     // Fetch department employees (or the specific person being visited)
-    const foundDepartment = await Department.findById(department).select(
-      "name"
-    );
 
-    const userDetails = await UserData.findById({
-      _id: toMeet,
-    });
+    if (!isDepartmentEmpty) {
+      const foundDepartment = await Department.findById(department).select(
+        "name"
+      );
 
-    const deptEmployees = await UserData.find({
-      departments: { $in: department },
-    });
+      let userDetails = await UserData.findById({
+        _id: toMeet,
+      });
+
+      const deptEmployees = await UserData.find({
+        departments: { $in: department },
+      });
+
+      emitter.emit("notification", {
+        initiatorData: user,
+        users:
+          deptEmployees.length < 0
+            ? []
+            : deptEmployees.map((emp) => ({
+                userActions: {
+                  whichUser: emp._id || null,
+                  // whichUser: toMeet || clientToMeet || initiator._id, // send to the person being visited or fallback to initiator
+                  hasRead: false,
+                },
+              })),
+        type: "add visitor",
+        module: "Visitors",
+        message: `Visitor ${firstName} ${lastName} has been registered to meet ${userDetails.firstName} ${userDetails.lastName} from ${foundDepartment.name} department.`,
+      });
+    }
+
     console.log(department);
     console.log("To Meet", toMeet);
 
     // Emit the visitor notification
-    emitter.emit("notification", {
-      initiatorData: user,
-      users: deptEmployees.map((emp) => ({
-        userActions: {
-          whichUser: emp._id,
-          // whichUser: toMeet || clientToMeet || initiator._id, // send to the person being visited or fallback to initiator
-          hasRead: false,
-        },
-      })),
-      type: "add visitor",
-      module: "Visitors",
-      message: `Visitor ${firstName} ${lastName} has been registered to meet ${userDetails.firstName} ${userDetails.lastName} from ${foundDepartment.name} department.`,
-    });
 
     await createLog({
       path: logPath,
