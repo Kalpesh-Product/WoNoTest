@@ -564,7 +564,7 @@ const BookMeetings = () => {
                   getOptionLabel={(user) =>
                     isBizNest
                       ? `${user.firstName ?? ""} ${user.lastName ?? ""}`
-                      : `${user.employeeName ?? ""} (${user.clientName ?? ""}`
+                      : `${user.employeeName ?? ""} (${user.clientName ?? ""})`
                   }
                   onFocus={() => setShouldFetchParticipants(true)}
                   onChange={(_, newValue) =>

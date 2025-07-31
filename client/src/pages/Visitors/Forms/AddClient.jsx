@@ -45,13 +45,16 @@ const AddClient = () => {
       department: "",
       clientToMeet: "",
       clientCompany: "",
-      sector:"",
-      hoState : "",
-      hoCity : "",
+      registeredClientCompany: "",
+      brandName: "",
+      sector: "",
+      hoState: "",
+      hoCity: "",
       visitorType: "",
       visitorCompany: "",
       paymentAmount: "",
       paymentStatus: "",
+      gst: "",
     },
   });
 
@@ -325,66 +328,6 @@ const AddClient = () => {
                   )}
                 />
               </div>
-
-              <div>
-                <div className="py-4 border-b-default border-borderGray">
-                  <span className="text-subtitle font-pmedium">Timings</span>
-                </div>
-                <div className="grid grid-cols sm:grid-cols-1 md:grid-cols-2 gap-4 p-4 ">
-                  <LocalizationProvider dateAdapter={AdapterDayjs}>
-                    <Controller
-                      name="checkIn"
-                      control={control}
-                      rules={{ required: "Check-In time is required" }}
-                      render={({ field }) => (
-                        <TimePicker
-                          {...field}
-                          label={"Check-In Time"}
-                          slotProps={{
-                            textField: {
-                              size: "small",
-                              fullWidth: true,
-                              error: !!errors.checkIn,
-                              helperText: errors.checkIn?.message,
-                            },
-                          }}
-                          render={(params) => (
-                            <TextField
-                              {...params}
-                              fullWidth
-                              error={!!errors.checkIn}
-                              helperText={errors.checkIn?.message}
-                            />
-                          )}
-                        />
-                      )}
-                    />
-                  </LocalizationProvider>
-                  <LocalizationProvider dateAdapter={AdapterDayjs}>
-                    <Controller
-                      name="checkOut"
-                      control={control}
-                      render={({ field }) => (
-                        <TimePicker
-                          {...field}
-                          label={"Check-Out Time"}
-                          slotProps={{
-                            textField: { size: "small", fullWidth: true },
-                          }}
-                          render={(params) => (
-                            <TextField
-                              {...params}
-                              fullWidth
-                              error={!!errors.checkOut}
-                              helperText={errors.checkOut?.message}
-                            />
-                          )}
-                        />
-                      )}
-                    />
-                  </LocalizationProvider>
-                </div>
-              </div>
             </div>
 
             <div>
@@ -412,6 +355,49 @@ const AddClient = () => {
                       fullWidth
                       error={!!errors.clientCompany}
                       helperText={errors.clientCompany?.message}
+                    />
+                  )}
+                />
+                <Controller
+                  name="registeredClientCompany"
+                  control={control}
+                  rules={{
+                    required: "Registered Client Company is required",
+                    validate: {
+                      noOnlyWhitespace,
+                      isAlphanumeric,
+                    },
+                  }}
+                  render={({ field }) => (
+                    <TextField
+                      {...field}
+                      size="small"
+                      label="Registered Client Company"
+                      fullWidth
+                      error={!!errors.registeredClientCompany}
+                      helperText={errors.registeredClientCompany?.message}
+                    />
+                  )}
+                />
+
+                <Controller
+                  name="brandName"
+                  control={control}
+                  rules={{
+                    required: "Brand Name is required",
+                    validate: {
+                      noOnlyWhitespace,
+                      isAlphanumeric,
+                    },
+                  }}
+                  render={({ field }) => (
+                    <TextField
+                      {...field}
+                      size="small"
+                      label="Brand Name"
+                      fullWidth
+                      error={!!errors.brandName}
+                      helperText={errors.brandName?.message}
                     />
                   )}
                 />
@@ -486,6 +472,70 @@ const AddClient = () => {
                   )}
                 />
               </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols sm:grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <div className="py-4 border-b-default border-borderGray">
+                <span className="text-subtitle font-pmedium">Timings</span>
+              </div>
+              <div className="grid grid-cols sm:grid-cols-1 md:grid-cols-2 gap-4 p-4 ">
+                <LocalizationProvider dateAdapter={AdapterDayjs}>
+                  <Controller
+                    name="checkIn"
+                    control={control}
+                    rules={{ required: "Check-In time is required" }}
+                    render={({ field }) => (
+                      <TimePicker
+                        {...field}
+                        label={"Check-In Time"}
+                        slotProps={{
+                          textField: {
+                            size: "small",
+                            fullWidth: true,
+                            error: !!errors.checkIn,
+                            helperText: errors.checkIn?.message,
+                          },
+                        }}
+                        render={(params) => (
+                          <TextField
+                            {...params}
+                            fullWidth
+                            error={!!errors.checkIn}
+                            helperText={errors.checkIn?.message}
+                          />
+                        )}
+                      />
+                    )}
+                  />
+                </LocalizationProvider>
+                <LocalizationProvider dateAdapter={AdapterDayjs}>
+                  <Controller
+                    name="checkOut"
+                    control={control}
+                    render={({ field }) => (
+                      <TimePicker
+                        {...field}
+                        label={"Check-Out Time"}
+                        slotProps={{
+                          textField: { size: "small", fullWidth: true },
+                        }}
+                        render={(params) => (
+                          <TextField
+                            {...params}
+                            fullWidth
+                            error={!!errors.checkOut}
+                            helperText={errors.checkOut?.message}
+                          />
+                        )}
+                      />
+                    )}
+                  />
+                </LocalizationProvider>
+              </div>
+            </div>
+            <div>
               <div className="py-4 border-b-default border-borderGray">
                 <span className="text-subtitle font-pmedium">Verification</span>
               </div>
@@ -507,11 +557,11 @@ const AddClient = () => {
                       <MenuItem value="" disabled>
                         Select Id Type
                       </MenuItem>
-                      <MenuItem value="aadhar">Aadhar</MenuItem>
+                      {/* <MenuItem value="aadhar">Aadhar</MenuItem> */}
                       <MenuItem value="pan">PAN</MenuItem>
-                      <MenuItem value="drivingLicense">
+                      {/* <MenuItem value="drivingLicense">
                         Driving License
-                      </MenuItem>
+                      </MenuItem> */}
                     </TextField>
                   )}
                 />
@@ -567,8 +617,44 @@ const AddClient = () => {
                 />
               </div>
             </div>
-          </div>
+            <div>
+              <div className="py-4 border-b-default border-borderGray">
+                <span className="text-subtitle font-pmedium">GST</span>
+              </div>
+              <div className="grid grid-cols sm:grid-cols-1 md:grid-cols-2 gap-4 p-4 ">
+                <Controller
+                  name="gst"
+                  control={control}
+                  rules={{
+                    required: "GST Number is required",
+                    validate: (value) => {
+                      const regex =
+                        /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+                      if (!regex.test(value))
+                        return "Provided GST number is invalid";
+                      else return true;
+                    },
+                  }}
+                  render={({ field }) => (
+                    <TextField
+                      {...field}
+                      size="small"
+                      label="GST Number"
+                      fullWidth
+                      error={!!errors.gst}
+                      helperText={errors.gst?.message}
+                      onChange={(e) => {
+                        let value = e.target.value;
 
+                        field.onChange(value);
+                      }}
+                      value={field.value}
+                    />
+                  )}
+                />
+              </div>
+            </div>
+          </div>
           {/* Submit Button */}
           <div className="flex items-center justify-center gap-4">
             <PrimaryButton
