@@ -232,7 +232,7 @@ const ManageMeetings = () => {
       setSubmittedChecklists((prev) => ({
         ...prev,
         [selectedMeetingId]: true,
-      }));
+      }))
       toast.success("Checklist completed");
       handleCloseChecklistModal();
     },
