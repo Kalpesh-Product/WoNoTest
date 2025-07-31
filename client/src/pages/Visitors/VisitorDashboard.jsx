@@ -519,6 +519,53 @@ const VisitorDashboard = () => {
     colors: ["#FFB946", "#54C4A7", "#6A5ACD", "#FF4D4F", "#00C49F"], // Extend as needed
   };
 
+  //------------PAGE ACCESS DATA CARD----------//
+  
+  const dataCardConfigs = [
+  {
+    key: "checkedInVisitorsToday",
+    title: "Total",
+    data: visitorsData.length,
+    description: "Checked In Visitors Today",
+    permission: PERMISSIONS.VISITORS_CHECKED_IN_VISITORS_TODAY.value,
+  },
+  {
+    key: "checkedOutToday",
+    title: "Total",
+    data: visitorsData.filter((item) => item.checkOut).length,
+    description: "Checked Out Today",
+    permission: PERMISSIONS.VISITORS_CHECKED_OUT_TODAY.value,
+  },
+  {
+    key: "yetToCheckOut",
+    title: "Total",
+    data: visitorsData.filter((item) => item.checkOut === null).length,
+    description: "Yet To Check Out",
+    permission: PERMISSIONS.VISITORS_YET_TO_CHECK_OUT.value,
+  },
+  {
+    key: "walkInVisitsToday",
+    title: "Total",
+    data: visitorsData.filter((item) => item.visitorType === "Walk In").length,
+    description: "Walk In Visits Today",
+    permission: PERMISSIONS.VISITORS_WALK_IN_VISITS_TODAY.value,
+  },
+  {
+    key: "scheduledVisitsToday",
+    title: "Total",
+    data: visitorsData.filter((item) => item.visitorType === "Scheduled").length,
+    description: "Scheduled Visits Today",
+    permission: PERMISSIONS.VISITORS_SCHEDULED_VISITS_TODAY.value,
+  },
+  {
+    key: "meetingBookingsToday",
+    title: "Total",
+    data: visitorsData.filter((item) => item.visitorType === "Meeting").length,
+    description: "Meeting Bookings Today",
+    permission: PERMISSIONS.VISITORS_MEETING_BOOKINGS_TODAY.value,
+  },
+];
+
   //First pie-chart config data end
 
   //------------------------PAGE ACCESS DONUT START-------------------//
@@ -598,16 +645,70 @@ const VisitorDashboard = () => {
   );
   //------------------------PAGE ACCESS PIE Bottom END-------------------//
 
+  //--------------PAGE ACCESS GRAPH-------------//
+ const visitorGraphConfigs = [
+  {
+    key: "monthlyTotalVisitors",
+    layout: 1,
+    data: visitorsData,
+    chartOptions: visitorsChartOptions,
+    dateKey: "dateOfVisit",
+    graphTitle: "MONTHLY TOTAL VISITORS",
+    permission: PERMISSIONS.VISITORS_MONTHLY_TOTAL_VISITORS.value,
+  },
+];
+const allowedVisitorGraphs = visitorGraphConfigs.filter(
+  (widget) => !widget.permission || userPermissions.includes(widget.permission)
+);
+
+
+//----------------PAGE ACCESS VISITOR TABLE----------//
+
+const visitorsTodayTableConfigs = [
+  {
+    key: "visitorsTodayTable",
+    layout: 1,
+    title: "Visitors Today",
+    columns: visitorsColumns,
+    rows: todaysVisitors.map((item, index) => ({
+      id: index + 1,
+      firstName: item.firstName,
+      lastName: item.lastName,
+      address: item.address,
+      phoneNumber: item.phoneNumber,
+      email: item.email,
+      purposeOfVisit: item.purposeOfVisit,
+      toMeet: item.toMeet?.firstName ? item.toMeet?.firstName : "Kalpesh Naik",
+      checkIn: humanTime(item.checkIn),
+      checkOut: humanTime(item.checkOut),
+    })),
+    rowKey: "id",
+    rowsToDisplay: 10,
+    scroll: true,
+    className: "h-full",
+    permission: PERMISSIONS.VISITORS_VISITORS_TODAY.value,
+  },
+];
+
+const allowedVisitorsTodayTables = visitorsTodayTableConfigs.filter(
+  (widget) =>
+    !widget.permission || userPermissions.includes(widget.permission)
+);
+
+
   const meetingsWidgets = [
     {
       layout: 1,
       widgets: [
+         ...allowedVisitorGraphs.map((item) => (
         <FyBarGraphCount
-          data={visitorsData}
-          chartOptions={visitorsChartOptions}
-          dateKey="dateOfVisit"
-          graphTitle="MONTHLY TOTAL VISITORS"
-        />,
+          key={item.key}
+          data={item.data}
+          chartOptions={item.chartOptions}
+          dateKey={item.dateKey}
+          graphTitle={item.graphTitle}
+        />
+      )),
       ],
     },
     {
@@ -623,45 +724,16 @@ const VisitorDashboard = () => {
     },
     {
       layout: 3,
-      widgets: [
-        <DataCard
-          title={"Total"}
-          data={visitorsData.length}
-          description={"Checked In Visitors Today"}
-        />,
-        <DataCard
-          title={"Total"}
-          data={visitorsData.filter((item) => item.checkOut).length}
-          description={"Checked Out Today"}
-        />,
-        <DataCard
-          title={"Total"}
-          data={visitorsData.filter((item) => item.checkOut === null).length}
-          description={"Yet To Check Out"}
-        />,
-        <DataCard
-          title={"Total"}
-          data={
-            visitorsData.filter((item) => item.visitorType === "Walk In").length
-          }
-          description={"Walk In Visits Today"}
-        />,
-        <DataCard
-          title={"Total"}
-          data={
-            visitorsData.filter((item) => item.visitorType === "Scheduled")
-              .length
-          }
-          description={"Scheduled Visits Today"}
-        />,
-        <DataCard
-          title={"Total"}
-          data={
-            visitorsData.filter((item) => item.visitorType === "Meeting").length
-          }
-          description={"Meeting Bookings Today"}
-        />,
-      ],
+      widgets:dataCardConfigs
+    .filter((card) => userPermissions.includes(card.permission))
+    .map((card) => (
+      <DataCard
+        key={card.key}
+        title={card.title}
+        data={card.data}
+        description={card.description}
+      />
+    ))
     },
     // {
     //   layout: 2,
@@ -816,41 +888,28 @@ const VisitorDashboard = () => {
         </WidgetSection>
       )),
     },
-    {
-      layout: 1,
-      widgets: [
-        <WidgetSection layout={1} padding>
+     {
+    layout: 1,
+    widgets: [
+      ...allowedVisitorsTodayTables.map((item) => (
+        <WidgetSection key={item.key} layout={item.layout} padding>
           {!isVisitorsData ? (
             <MuiTable
-              Title="Visitors Today"
-              columns={visitorsColumns}
-              rows={[
-                ...todaysVisitors.map((item, index) => ({
-                  id: index + 1,
-                  firstName: item.firstName,
-                  lastName: item.lastName,
-                  address: item.address,
-                  phoneNumber: item.phoneNumber,
-                  email: item.email,
-                  purposeOfVisit: item.purposeOfVisit,
-                  toMeet: item.toMeet?.firstName
-                    ? item.toMeet?.firstName
-                    : "Kalpesh Naik",
-                  checkIn: humanTime(item.checkIn),
-                  checkOut: humanTime(item.checkOut),
-                })),
-              ]}
-              rowKey="id"
-              rowsToDisplay={10}
-              scroll={true}
-              className="h-full"
+              Title={item.title}
+              columns={item.columns}
+              rows={item.rows}
+              rowKey={item.rowKey}
+              rowsToDisplay={item.rowsToDisplay}
+              scroll={item.scroll}
+              className={item.className}
             />
           ) : (
             <CircularProgress />
           )}
-        </WidgetSection>,
-      ],
-    },
+        </WidgetSection>
+      )),
+    ],
+  },
   ];
   return (
     <div>

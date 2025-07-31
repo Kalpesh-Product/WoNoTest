@@ -32,53 +32,7 @@ const MeetingDashboard = () => {
   const userPermissions = auth?.user?.permissions?.permissions || [];
 
   //------------------------PAGE ACCESS-------------------//
-  const cardsConfig = [
-    {
-      key: "book",
-      title: "Book a Meeting",
-      route: "/app/meetings/book-meeting",
-      icon: <RiPagesLine />,
-      permission: PERMISSIONS.MEETINGS_BOOK_MEETING.value,
-    },
-    {
-      key: "manage",
-      title: "Manage Meetings",
-      route: "/app/meetings/manage-meetings",
-      icon: <RiArchiveDrawerLine />,
-      permission: PERMISSIONS.MEETINGS_MANAGE_MEETINGS.value,
-    },
-    {
-      key: "calendar",
-      title: "Calendar",
-      route: "/app/meetings/calendar",
-      icon: <MdFormatListBulleted />,
-      permission: PERMISSIONS.MEETINGS_CALENDAR.value,
-    },
-    {
-      key: "reports",
-      title: "Reports",
-      route: "/app/meetings/reports",
-      icon: <CgProfile />,
-      permission: PERMISSIONS.MEETINGS_REPORTS.value,
-    },
-    {
-      key: "reviews",
-      title: "Reviews",
-      route: "/app/meetings/reviews",
-      icon: <RiPagesLine />,
-      permission: PERMISSIONS.MEETINGS_REVIEWS.value,
-    },
-    {
-      key: "settings",
-      title: "Settings",
-      route: "/app/meetings/settings",
-      icon: <RiPagesLine />,
-      permission: PERMISSIONS.MEETINGS_SETTINGS.value,
-    },
-  ];
-  const allowedCards = cardsConfig.filter(
-    (card) => !card.permission || userPermissions.includes(card.permission)
-  );
+  
   //------------------------PAGE ACCESS-------------------//
 
   const { isTop } = useTopDepartment({
@@ -111,10 +65,6 @@ const MeetingDashboard = () => {
     },
   });
 
-  console.log(
-    "rooms",
-    roomsData.map((item) => item.name)
-  );
 
   const { data: holidaysData = [], isLoading: isHolidaysLoading } = useQuery({
     queryKey: ["holidays"],
@@ -471,7 +421,8 @@ const MeetingDashboard = () => {
                 style={{
                   backgroundColor:
                     room.status === "Available" ? "#28a745" : "#dc3545",
-                }}></span>
+                }}
+              ></span>
               <span className="text-content text-gray-400">
                 {room.roomName}
               </span>
@@ -916,6 +867,96 @@ const MeetingDashboard = () => {
     housekeepingMap.clean,
   ];
 
+  //ACCESS CONFIG//
+  const cardsConfig = [
+    {
+      key: "book",
+      title: "Book a Meeting",
+      route: "/app/meetings/book-meeting",
+      icon: <RiPagesLine />,
+      permission: PERMISSIONS.MEETINGS_BOOK_MEETING.value,
+    },
+    {
+      key: "manage",
+      title: "Manage Meetings",
+      route: "/app/meetings/manage-meetings",
+      icon: <RiArchiveDrawerLine />,
+      permission: PERMISSIONS.MEETINGS_MANAGE_MEETINGS.value,
+    },
+    {
+      key: "calendar",
+      title: "Calendar",
+      route: "/app/meetings/calendar",
+      icon: <MdFormatListBulleted />,
+      permission: PERMISSIONS.MEETINGS_CALENDAR.value,
+    },
+    {
+      key: "reports",
+      title: "Reports",
+      route: "/app/meetings/reports",
+      icon: <CgProfile />,
+      permission: PERMISSIONS.MEETINGS_REPORTS.value,
+    },
+    {
+      key: "reviews",
+      title: "Reviews",
+      route: "/app/meetings/reviews",
+      icon: <RiPagesLine />,
+      permission: PERMISSIONS.MEETINGS_REVIEWS.value,
+    },
+    {
+      key: "settings",
+      title: "Settings",
+      route: "/app/meetings/settings",
+      icon: <RiPagesLine />,
+      permission: PERMISSIONS.MEETINGS_SETTINGS.value,
+    },
+  ];
+  const allowedCards = cardsConfig.filter(
+    (card) => !card.permission || userPermissions.includes(card.permission)
+  );
+
+  const pieChartsConfig = [
+    {
+      layout:1,
+      key: "roomStatus",
+      title: "Room Availability Status",
+      height: 400,
+      border: true,
+      data: RoomPieData,
+      options: RoomOptions,
+      customLegend: CustomLegend,
+      permission: PERMISSIONS.MEETINGS_ROOM_STATUS.value,
+    },
+  ]
+    const allowedPieCharts = pieChartsConfig.filter(
+    (widget) =>
+      !widget.permission || userPermissions.includes(widget.permission)
+  );
+
+  const donutChartConfig = [
+     {
+      layout:1,
+      key: "housekeepingStatus",
+      title: "Cleaning & Hygiene Status",
+      titleLabel:"Today",
+      border: true,
+
+      series: housekeepingStatusSeries,
+      labels: ["Cleaning", "Clean"],
+      colors: ["#ffc107", "#28a745"],
+      centerLabel: "Meeting Rooms",
+      tooltipValue:housekeepingStatusSeries,
+      width:457,
+      permission: PERMISSIONS.MEETINGS_HOUSEKEEPING_STATUS.value,
+    },
+  ]
+
+      const allowedDonutCharts = donutChartConfig.filter(
+    (widget) =>
+      !widget.permission || userPermissions.includes(widget.permission)
+  );
+
   const meetingsWidgets = [
     {
       layout: 1,
@@ -927,7 +968,8 @@ const MeetingDashboard = () => {
               <Skeleton variant="text" width={200} height={30} />
               <Skeleton variant="rectangular" width="100%" height={300} />
             </div>
-          }>
+          }
+        >
           <YearlyGraph
             titleAmount={`TOTAL BOOKED HOURS : ${fyBookedHours.toFixed(0)}`}
             title={"AVERAGE MEETING ROOM UTILIZATION"}
@@ -1092,7 +1134,8 @@ const MeetingDashboard = () => {
           titleLabel={`${new Date().toLocaleString("default", {
             month: "short",
           })}-${new Date().getFullYear().toString().slice(-2)}`}
-          padding>
+          padding
+        >
           <BarGraph data={externalGuestsData} options={externalGuestsOptions} />
         </WidgetSection>,
         <WidgetSection
@@ -1102,7 +1145,8 @@ const MeetingDashboard = () => {
           titleLabel={`${new Date().toLocaleString("default", {
             month: "short",
           })}-${new Date().getFullYear().toString().slice(-2)}`}
-          padding>
+          padding
+        >
           <BarGraph
             data={averageOccupancySeries}
             options={averageOccupancyOptions}
@@ -1131,37 +1175,74 @@ const MeetingDashboard = () => {
         </WidgetSection>,
       ],
     },
-    {
-      layout: 2,
-      widgets: [
-        <WidgetSection
-          layout={1}
-          title={"Room Availability Status"}
-          border
-          height={400}>
-          <PieChartMui
-            data={RoomPieData}
-            options={RoomOptions}
-            customLegend={CustomLegend}
-          />
-        </WidgetSection>,
-        <WidgetSection
-          layout={1}
-          border
-          titleLabel={"Today"}
-          title={"Cleaning & Hygiene Status"}>
-          <DonutChart
-            series={housekeepingStatusSeries}
-            labels={["Cleaning", "Clean"]}
-            colors={["#ffc107", "#28a745"]}
-            centerLabel={"Meeting Rooms"}
-            tooltipValue={housekeepingStatusSeries}
-            width={457}
-          />
-        </WidgetSection>,
-      ],
-    },
+  {
+  layout: 2,
+  widgets: [
+    ...allowedPieCharts.map((item) => (
+      <WidgetSection
+        key={item.key}
+        layout={item.layout}
+        title={item.title}
+        border={item.border}
+      >
+        <PieChartMui
+          title={item.title}
+          data={item.data}
+          options={item.options}
+        />
+      </WidgetSection>
+    )),
+    ...allowedDonutCharts.map((item) => (
+      <WidgetSection
+        key={item.key} // Add a key if possible!
+        layout={item.layout}
+        border={item.border}
+        titleLabel={item.titleLabel}
+        title={item.title}
+      >
+        <DonutChart
+          series={item.series}
+          labels={item.labels}
+          colors={item.colors}
+          centerLabel={item.centerLabel}
+          tooltipValue={item.tooltipValue}
+          width={item.width}
+        />
+      </WidgetSection>
+    ))
+  ],
+}
+
   ];
+  // [
+  //       <WidgetSection
+  //         layout={1}
+  //         title={"Room Availability Status"}
+  //         border
+  //         height={400}
+  //       >
+  //         <PieChartMui
+  //           data={RoomPieData}
+  //           options={RoomOptions}
+  //           customLegend={CustomLegend}
+  //         />
+  //       </WidgetSection>,
+  //       <WidgetSection
+  //         layout={1}
+  //         border
+  //         titleLabel={"Today"}
+  //         title={"Cleaning & Hygiene Status"}
+  //       >
+  //         <DonutChart
+  //           series={housekeepingStatusSeries}
+  //           labels={["Cleaning", "Clean"]}
+  //           colors={["#ffc107", "#28a745"]}
+  //           centerLabel={"Meeting Rooms"}
+  //           tooltipValue={housekeepingStatusSeries}
+  //           width={457}
+  //         />
+  //       </WidgetSection>,
+  //     ]
   return (
     <div>
       <div>

@@ -90,6 +90,7 @@ const HrDashboard = () => {
       icon: <MdMiscellaneousServices />,
       permission: PERMISSIONS.HR_SETTINGS.value,
     },
+    
   ];
 
   const allowedCards = cardsConfig.filter(

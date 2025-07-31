@@ -107,6 +107,10 @@ export const PERMISSIONS = {
   TASKS_SETTINGS: { value: "task_settings", type: "read" },
 
   // Visitors Module
+  VISITORS_MONTHLY_TOTAL_VISITORS: {
+    value: "visitors_monthly_total_visitors",
+    type: "read",
+  },
   VISITORS_ADD_VISITOR: {
     value: "add_visitor",
     type: "read",
@@ -149,6 +153,55 @@ export const PERMISSIONS = {
     value: "visitor_department_wise_visits_pie_chart",
     type: "read",
   },
+  VISITORS_TODAY: {
+    value: "visitor_today",
+    type: "read",
+  },
+
+  //Visitors Data Cards
+  VISITORS_CHECKED_IN_VISITORS_TODAY: {
+    value: "checked_in_visitors_today",
+    type: "read",
+  },
+  VISITORS_CHECKED_OUT_TODAY: {
+    value: "checked_out_today",
+    type: "read",
+  },
+  VISITORS_YET_TO_CHECK_OUT: {
+    value: "yet_to_check_out",
+    type: "read",
+  },
+  VISITORS_WALK_IN_VISITS_TODAY: {
+    value: "walk_in_visits_today",
+    type: "read",
+  },
+  VISITORS_SCHEDULED_VISITS_TODAY: {
+    value: "scheduled_visits_today",
+    type: "read",
+  },
+  VISITORS_MEETING_BOOKINGS_TODAY: {
+    value: "meeting_bookings_today",
+    type: "read",
+  },
+  //Visitors Tabs
+  VISITORS_MANAGE_INTERNAL_VISITORS: {
+    value: "visitors_manage_internal_visitors",
+    type: "read",
+    access: "page",
+    route: "/app/visitors/manage-visitors/internal-visitors",
+  },
+  VISITORS_MANAGE_EXTERNAL_CLIENTS: {
+    value: "visitors_manage_external_clients",
+    type: "read",
+    access: "page",
+    route: "/app/visitors/manage-visitors/external-clients",
+  },
+
+  //Visitors table
+  VISITORS_VISITORS_TODAY: {
+    value: "visitors_visitors_today",
+    type: "read",
+  },
 
   // Meetings Module
   MEETINGS_BOOK_MEETING: {
@@ -162,6 +215,13 @@ export const PERMISSIONS = {
   MEETINGS_REPORTS: { value: "meeting_reports", type: "read" },
   MEETINGS_REVIEWS: { value: "meeting_reviews", type: "read" },
   MEETINGS_SETTINGS: { value: "meeting_settings", type: "read" },
+
+  //Meetings Pie Charts
+  MEETINGS_ROOM_STATUS: { value: "meeting_room_status", type: "read" },
+  MEETINGS_HOUSEKEEPING_STATUS: {
+    value: "meeting_housekeeping_status",
+    type: "read",
+  },
 
   // Meeting Tabs
   MEETINGS_MEETINGS_INTERNAL: {
