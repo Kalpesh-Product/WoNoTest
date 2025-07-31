@@ -1248,18 +1248,49 @@ const HrDashboard = () => {
       !widget.permission || userPermissions.includes(widget.permission)
   );
   // PIE END
-  const hrWidgets = [
-    {
-      layout: 1,
-      widgets: [
-        <Suspense
-          fallback={
-            <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-              {/* Simulating chart skeleton */}
-              <Skeleton variant="text" width={200} height={30} />
-              <Skeleton variant="rectangular" width="100%" height={300} />
-            </Box>
-          }>
+
+
+  // Graphs
+const expenseGraphConfig = {
+  permission: PERMISSIONS.HR_DEPARTMENT_EXPENSE.value,
+};
+
+const kpaGraphConfig = {
+  permission: PERMISSIONS.HR_ANNUAL_KPA_VS_ACHIEVEMENTS.value,
+};
+
+const tasksGraphConfig = {
+  permission: PERMISSIONS.HR_ANNUAL_TASKS_VS_ACHIEVEMENTS.value,
+};
+
+// Cards
+const financeCardConfig = {
+  permission: PERMISSIONS.HR_EXPENSES.value,
+};
+const averageCardConfig = {
+  permission: PERMISSIONS.HR_AVERAGES.value,
+};
+
+// Tables
+const birthdayTableConfig = {
+  permission: PERMISSIONS.HR_CURRENT_MONTH_BIRTHDAY_LIST.value,
+};
+const holidayTableConfig = {
+  permission: PERMISSIONS.HR_CURRENT_MONTH_HOLIDAY_LIST.value,
+};
+
+
+const hrWidgets = [
+  {
+    layout: 1,
+    widgets: [
+      userPermissions.includes(expenseGraphConfig.permission) && (
+        <Suspense fallback={
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            <Skeleton variant="text" width={200} height={30} />
+            <Skeleton variant="rectangular" width="100%" height={300} />
+          </Box>
+        }>
           <WidgetSection normalCase layout={1} padding>
             <YearlyGraph
               data={expenseRawSeries}
@@ -1271,41 +1302,22 @@ const HrDashboard = () => {
               onYearChange={setSelectedHrFiscalYear}
             />
           </WidgetSection>
-        </Suspense>,
-      ],
-    },
-    {
-      layout: 2,
-      widgets: [
-        <FinanceCard titleCenter {...HrExpenses} />,
-        <FinanceCard titleCenter {...HrAverageExpense} />,
-      ],
-    },
-    // {
-    //   layout: 6,
-    //   widgets: [
-    //     { icon: <CgWebsite />, title: "Employee", route: "employee" },
-    //     { icon: <LuHardDriveUpload />, title: "Company", route: "company" },
-    //     { icon: <SiCashapp />, title: "Finance", route: "finance" },
-    //     { icon: <CgWebsite />, title: "Mix Bag", route: "mix-bag" },
-    //     { icon: <SiGoogleadsense />, title: "Data", route: "data" },
-    //     {
-    //       icon: <MdMiscellaneousServices />,
-    //       title: "Settings",
-    //       route: "settings/bulk-upload",
-    //     },
-    //   ]
-    //     // .filter((widget) => accessibleModules.has(widget.title)) // ✅ Filter widgets
-    //     .map((widget, index) => (
-    //       <Card
-    //         key={index}
-    //         icon={widget.icon}
-    //         title={widget.title}
-    //         route={widget.route}
-    //       />
-    //     )), // ✅ Convert objects into JSX elements
-    // },
-    {
+        </Suspense>
+      ),
+    ].filter(Boolean),
+  },
+  {
+    layout: 2,
+    widgets: [
+      userPermissions.includes(financeCardConfig.permission) && (
+        <FinanceCard titleCenter {...HrExpenses} />
+      ),
+      userPermissions.includes(averageCardConfig.permission) && (
+        <FinanceCard titleCenter {...HrAverageExpense} />
+      ),
+    ].filter(Boolean),
+  },
+  {
       layout: allowedCards.length, // ✅ dynamic layout
       widgets: allowedCards.map((card) => (
         <Card
@@ -1316,17 +1328,16 @@ const HrDashboard = () => {
         />
       )),
     },
-    {
-      layout: 2,
-      widgets: [
-        <Suspense
-          fallback={
-            <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-              {/* Simulating chart skeleton */}
-              <Skeleton variant="text" width={200} height={30} />
-              <Skeleton variant="rectangular" width="100%" height={300} />
-            </Box>
-          }>
+  {
+    layout: 2,
+    widgets: [
+      userPermissions.includes(kpaGraphConfig.permission) && (
+        <Suspense fallback={
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            <Skeleton variant="text" width={200} height={30} />
+            <Skeleton variant="rectangular" width="100%" height={300} />
+          </Box>
+        }>
           <YearlyGraph
             data={tasksData}
             options={tasksOptions}
@@ -1336,15 +1347,15 @@ const HrDashboard = () => {
             currentYear={true}
             onYearChange={setSelectedFiscalYear}
           />
-        </Suspense>,
-        <Suspense
-          fallback={
-            <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-              {/* Simulating chart skeleton */}
-              <Skeleton variant="text" width={200} height={30} />
-              <Skeleton variant="rectangular" width="100%" height={300} />
-            </Box>
-          }>
+        </Suspense>
+      ),
+      userPermissions.includes(tasksGraphConfig.permission) && (
+        <Suspense fallback={
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            <Skeleton variant="text" width={200} height={30} />
+            <Skeleton variant="rectangular" width="100%" height={300} />
+          </Box>
+        }>
           <YearlyGraph
             data={tasksGraphData}
             options={tasksOverallOptions}
@@ -1354,105 +1365,281 @@ const HrDashboard = () => {
             currentYear={true}
             onYearChange={setSelectedFiscalYear}
           />
-        </Suspense>,
-      ],
-    },
-
-    // {
-    //   layout: 2,
-    //   heading: "Site Visitor Analytics",
-    //   widgets: [
-    //     <WidgetSection title={"Employee Gender Distribution"} border>
-    //       <PieChartMui
-    //         percent={true} // Enable percentage display
-    //         title={"Gender Distribution"}
-    //         data={genderData} // Pass processed data
-    //         options={genderPieChart}
-    //       />
-    //     </WidgetSection>,
-    //     <WidgetSection layout={1} border title={"City Wise Employees"}>
-    //       {!usersQuery.isLoading ? (
-    //         <PieChartMui
-    //           percent={true} // Enable percentage display
-    //           data={pieChartData} // Pass processed data
-    //           options={techGoaVisitorsOptions}
-    //         />
-    //       ) : (
-    //         <Skeleton height={"100%"} width={"100%"} />
-    //       )}
-    //     </WidgetSection>,
-    //   ],
-    // },
-    {
-      layout: allowedPieCharts.length, // ✅ dynamic layout
-      widgets: allowedPieCharts.map((item) => (
-        <WidgetSection
-          key={item.key}
-          layout={item.layout}
+        </Suspense>
+      ),
+    ].filter(Boolean),
+  },
+  {
+    layout: allowedPieCharts.length,
+    widgets: allowedPieCharts.map((item) => (
+      <WidgetSection
+        key={item.key}
+        layout={item.layout}
+        title={item.title}
+        border={item.border}>
+        <PieChartMui
+          percent={item.percent}
           title={item.title}
-          border={item.border}>
-          <PieChartMui
-            percent={item.percent}
-            title={item.title}
-            data={item.data}
-            options={item.options}
-          />
-        </WidgetSection>
-      )),
-    },
-
-    {
-      layout: 2,
-      widgets: [
+          data={item.data}
+          options={item.options}
+        />
+      </WidgetSection>
+    )),
+  },
+  {
+    layout: 2,
+    widgets: [
+      userPermissions.includes(birthdayTableConfig.permission) && (
         !usersQuery.isLoading ? (
           <MuiTable
             key={birthdays.length}
             Title="Current Month's Birthday List"
             columns={columns}
             rows={birthdays
-              .filter((bd) => bd.start) // Only entries with a start date
-              .sort(
-                (a, b) => dayjs(a.start).valueOf() - dayjs(b.start).valueOf()
-              ) // ✅ Sort by date ascending
-              .map((bd, index) => {
-                const date = dayjs(bd.start);
-                return {
-                  id: index + 1,
-                  title: bd.title,
-                  start: date.format("DD-MM-YYYY"),
-                  day: date.format("dddd"),
-                };
-              })}
+              .filter((bd) => bd.start)
+              .sort((a, b) => dayjs(a.start).valueOf() - dayjs(b.start).valueOf())
+              .map((bd, index) => ({
+                id: index + 1,
+                title: bd.title,
+                start: dayjs(bd.start).format("DD-MM-YYYY"),
+                day: dayjs(bd.start).format("dddd"),
+              }))}
             rowsToDisplay={40}
             scroll={true}
             className="h-full"
           />
         ) : (
           <CircularProgress key="loading-spinner" />
-        ),
-
+        )
+      ),
+      userPermissions.includes(holidayTableConfig.permission) && (
         <MuiTable
           Title="Current Months Holiday List"
           columns={columns2}
           rows={holidayEvents
-            .filter((h) => h.start) // Optional: safety check for valid dates
-            .sort((a, b) => dayjs(a.start).valueOf() - dayjs(b.start).valueOf()) // ✅ Sort ascending
-            .map((holiday, index) => {
-              const date = dayjs(holiday.start);
-              return {
-                id: index + 1,
-                title: holiday.title,
-                start: date.format("DD-MM-YYYY"),
-                day: date.format("dddd"),
-              };
-            })}
+            .filter((h) => h.start)
+            .sort((a, b) => dayjs(a.start).valueOf() - dayjs(b.start).valueOf())
+            .map((holiday, index) => ({
+              id: index + 1,
+              title: holiday.title,
+              start: dayjs(holiday.start).format("DD-MM-YYYY"),
+              day: dayjs(holiday.start).format("dddd"),
+            }))}
           rowsToDisplay={40}
           scroll={true}
           className="h-full"
-        />,
-      ],
-    },
-  ];
+        />
+      ),
+    ].filter(Boolean),
+  },
+];
+
+
+  // const hrWidgets = [
+  //   {
+  //     layout: 1,
+  //     widgets: [
+  //       <Suspense
+  //         fallback={
+  //           <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+  //             {/* Simulating chart skeleton */}
+  //             <Skeleton variant="text" width={200} height={30} />
+  //             <Skeleton variant="rectangular" width="100%" height={300} />
+  //           </Box>
+  //         }>
+  //         <WidgetSection normalCase layout={1} padding>
+  //           <YearlyGraph
+  //             data={expenseRawSeries}
+  //             responsiveResize
+  //             chartId={"bargraph-hr-expense"}
+  //             options={expenseOptions}
+  //             title={`BIZ Nest HR DEPARTMENT EXPENSE`}
+  //             titleAmount={`INR ${inrFormat(totalUtilised)}`}
+  //             onYearChange={setSelectedHrFiscalYear}
+  //           />
+  //         </WidgetSection>
+  //       </Suspense>,
+  //     ],
+  //   },
+  //   {
+  //     layout: 2,
+  //     widgets: [
+  //       <FinanceCard titleCenter {...HrExpenses} />,
+  //       <FinanceCard titleCenter {...HrAverageExpense} />,
+  //     ],
+  //   },
+  //   // {
+  //   //   layout: 6,
+  //   //   widgets: [
+  //   //     { icon: <CgWebsite />, title: "Employee", route: "employee" },
+  //   //     { icon: <LuHardDriveUpload />, title: "Company", route: "company" },
+  //   //     { icon: <SiCashapp />, title: "Finance", route: "finance" },
+  //   //     { icon: <CgWebsite />, title: "Mix Bag", route: "mix-bag" },
+  //   //     { icon: <SiGoogleadsense />, title: "Data", route: "data" },
+  //   //     {
+  //   //       icon: <MdMiscellaneousServices />,
+  //   //       title: "Settings",
+  //   //       route: "settings/bulk-upload",
+  //   //     },
+  //   //   ]
+  //   //     // .filter((widget) => accessibleModules.has(widget.title)) // ✅ Filter widgets
+  //   //     .map((widget, index) => (
+  //   //       <Card
+  //   //         key={index}
+  //   //         icon={widget.icon}
+  //   //         title={widget.title}
+  //   //         route={widget.route}
+  //   //       />
+  //   //     )), // ✅ Convert objects into JSX elements
+  //   // },
+  //   {
+  //     layout: allowedCards.length, // ✅ dynamic layout
+  //     widgets: allowedCards.map((card) => (
+  //       <Card
+  //         key={card.title}
+  //         route={card.route}
+  //         title={card.title}
+  //         icon={card.icon}
+  //       />
+  //     )),
+  //   },
+  //   {
+  //     layout: 2,
+  //     widgets: [
+  //       <Suspense
+  //         fallback={
+  //           <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+  //             {/* Simulating chart skeleton */}
+  //             <Skeleton variant="text" width={200} height={30} />
+  //             <Skeleton variant="rectangular" width="100%" height={300} />
+  //           </Box>
+  //         }>
+  //         <YearlyGraph
+  //           data={tasksData}
+  //           options={tasksOptions}
+  //           title={"ANNUAL KPA VS ACHIEVEMENTS"}
+  //           titleAmount={`TOTAL KPA : ${tasksForSelectedYear.length || 0}`}
+  //           secondParam
+  //           currentYear={true}
+  //           onYearChange={setSelectedFiscalYear}
+  //         />
+  //       </Suspense>,
+  //       <Suspense
+  //         fallback={
+  //           <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+  //             {/* Simulating chart skeleton */}
+  //             <Skeleton variant="text" width={200} height={30} />
+  //             <Skeleton variant="rectangular" width="100%" height={300} />
+  //           </Box>
+  //         }>
+  //         <YearlyGraph
+  //           data={tasksGraphData}
+  //           options={tasksOverallOptions}
+  //           title={"ANNUAL TASKS VS ACHIEVEMENTS"}
+  //           titleAmount={`TOTAL TASKS : ${overallTasksForYear.length || 0}`}
+  //           secondParam
+  //           currentYear={true}
+  //           onYearChange={setSelectedFiscalYear}
+  //         />
+  //       </Suspense>,
+  //     ],
+  //   },
+
+  //   // {
+  //   //   layout: 2,
+  //   //   heading: "Site Visitor Analytics",
+  //   //   widgets: [
+  //   //     <WidgetSection title={"Employee Gender Distribution"} border>
+  //   //       <PieChartMui
+  //   //         percent={true} // Enable percentage display
+  //   //         title={"Gender Distribution"}
+  //   //         data={genderData} // Pass processed data
+  //   //         options={genderPieChart}
+  //   //       />
+  //   //     </WidgetSection>,
+  //   //     <WidgetSection layout={1} border title={"City Wise Employees"}>
+  //   //       {!usersQuery.isLoading ? (
+  //   //         <PieChartMui
+  //   //           percent={true} // Enable percentage display
+  //   //           data={pieChartData} // Pass processed data
+  //   //           options={techGoaVisitorsOptions}
+  //   //         />
+  //   //       ) : (
+  //   //         <Skeleton height={"100%"} width={"100%"} />
+  //   //       )}
+  //   //     </WidgetSection>,
+  //   //   ],
+  //   // },
+  //   {
+  //     layout: allowedPieCharts.length, // ✅ dynamic layout
+  //     widgets: allowedPieCharts.map((item) => (
+  //       <WidgetSection
+  //         key={item.key}
+  //         layout={item.layout}
+  //         title={item.title}
+  //         border={item.border}>
+  //         <PieChartMui
+  //           percent={item.percent}
+  //           title={item.title}
+  //           data={item.data}
+  //           options={item.options}
+  //         />
+  //       </WidgetSection>
+  //     )),
+  //   },
+
+  //   {
+  //     layout: 2,
+  //     widgets: [
+  //       !usersQuery.isLoading ? (
+  //         <MuiTable
+  //           key={birthdays.length}
+  //           Title="Current Month's Birthday List"
+  //           columns={columns}
+  //           rows={birthdays
+  //             .filter((bd) => bd.start) // Only entries with a start date
+  //             .sort(
+  //               (a, b) => dayjs(a.start).valueOf() - dayjs(b.start).valueOf()
+  //             ) // ✅ Sort by date ascending
+  //             .map((bd, index) => {
+  //               const date = dayjs(bd.start);
+  //               return {
+  //                 id: index + 1,
+  //                 title: bd.title,
+  //                 start: date.format("DD-MM-YYYY"),
+  //                 day: date.format("dddd"),
+  //               };
+  //             })}
+  //           rowsToDisplay={40}
+  //           scroll={true}
+  //           className="h-full"
+  //         />
+  //       ) : (
+  //         <CircularProgress key="loading-spinner" />
+  //       ),
+
+  //       <MuiTable
+  //         Title="Current Months Holiday List"
+  //         columns={columns2}
+  //         rows={holidayEvents
+  //           .filter((h) => h.start) // Optional: safety check for valid dates
+  //           .sort((a, b) => dayjs(a.start).valueOf() - dayjs(b.start).valueOf()) // ✅ Sort ascending
+  //           .map((holiday, index) => {
+  //             const date = dayjs(holiday.start);
+  //             return {
+  //               id: index + 1,
+  //               title: holiday.title,
+  //               start: date.format("DD-MM-YYYY"),
+  //               day: date.format("dddd"),
+  //             };
+  //           })}
+  //         rowsToDisplay={40}
+  //         scroll={true}
+  //         className="h-full"
+  //       />,
+  //     ],
+  //   },
+  // ];
 
   useEffect(() => {
     if (!isHrFinanceLoading && Array.isArray(hrFinance)) {

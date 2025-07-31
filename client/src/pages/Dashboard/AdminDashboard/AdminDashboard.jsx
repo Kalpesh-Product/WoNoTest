@@ -239,8 +239,6 @@ const AdminDashboard = () => {
     },
   });
 
-  console.log("tasks", tasks.length);
-
   const { data: weeklySchedule = [], isLoading: isWeeklyScheduleLoading } =
     useQuery({
       queryKey: ["weeklySchedule"],

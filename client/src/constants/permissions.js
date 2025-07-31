@@ -100,11 +100,65 @@ export const PERMISSIONS = {
     route: "monthly-KPA",
   },
 
+  //Tasks Module
+  TASKS_OVERALL_AVERAGE_COMPLETION: {
+    value: "overall_average_task_completion",
+    type: "read",
+  },
   TASKS_MY_TASKS: { value: "my_tasks", type: "read" },
   TASKS_DEPARTMENT_TASKS: { value: "department_tasks", type: "read" },
   TASKS_TEAM_MEMBERS: { value: "task_team_members", type: "read" },
   TASKS_REPORTS: { value: "task_reports", type: "read" },
   TASKS_SETTINGS: { value: "task_settings", type: "read" },
+  // Data Cards
+  TASKS_TOTAL_DEPARTMENT_TASKS: {
+    value: "total_department_tasks",
+    type: "read",
+  },
+  TASKS_TOTAL_DEPARTMENT_PENDING_TASKS: {
+    value: "total_department_pending_tasks",
+    type: "read",
+  },
+  TASKS_TOTAL_DEPARTMENT_COMPLETED_TASKS: {
+    value: "total_department_completed_tasks",
+    type: "read",
+  },
+
+  // Pie Charts
+  TASKS_OVERALL_PENDING_VS_COMPLETED: {
+    value: "overall_pending_vs_completed",
+    type: "read",
+  },
+  TASKS_DEPARTMENT_WISE_PENDING: {
+    value: "department_wise_pending",
+    type: "read",
+  },
+
+  // Tables
+  TASKS_HIGH_PRIORITY_DUE: {
+    value: "high_priority_due",
+    type: "read",
+  },
+  TASKS_MY_MEETINGS_TODAY: {
+    value: "my_meetings_today",
+    type: "read",
+  },
+  TASKS_RECENTLY_ADDED: {
+    value: "recently_added",
+    type: "read",
+  },
+
+  // Tabs
+  TASKS_MY_TASK_REPORTS: {
+    value: "my_task_reports",
+    type: "read",
+    route: "/app/tasks/reports/my-task-reports",
+  },
+  TASKS_ASSIGNED_TASKS_REPORTS: {
+    value: "assigned_tasks_reports",
+    type: "read",
+    route: "/app/tasks/reports/assigned-task-reports",
+  },
 
   // Visitors Module
   VISITORS_MONTHLY_TOTAL_VISITORS: {
@@ -204,26 +258,68 @@ export const PERMISSIONS = {
   },
 
   // Meetings Module
+
+  //Meeting Graphs
+  MEETINGS_AVERAGE_ROOM_UTILIZATION: {
+    value: "average_room_utilization",
+    type: "read",
+  },
+  MEETINGS_EXTERNAL_GUESTS_VISITED: {
+    value: "external_guests_visited",
+    type: "read",
+  },
+  MEETINGS_AVERAGE_OCCUPANCY: {
+    value: "average_occupancy",
+    type: "read",
+  },
+  MEETINGS_BUSY_TIME_WEEK: {
+    value: "busy_time_week",
+    type: "read",
+  },
+
+  // Cards
   MEETINGS_BOOK_MEETING: {
     value: "book_meeting",
     type: "read",
     access: "page",
     route: "/app/meetings/book-meeting",
   },
-  MEETINGS_MANAGE_MEETINGS: { value: "manage_meetings", type: "read" },
-  MEETINGS_CALENDAR: { value: "meeting_calendar", type: "read" },
-  MEETINGS_REPORTS: { value: "meeting_reports", type: "read" },
-  MEETINGS_REVIEWS: { value: "meeting_reviews", type: "read" },
-  MEETINGS_SETTINGS: { value: "meeting_settings", type: "read" },
-
-  //Meetings Pie Charts
-  MEETINGS_ROOM_STATUS: { value: "meeting_room_status", type: "read" },
-  MEETINGS_HOUSEKEEPING_STATUS: {
-    value: "meeting_housekeeping_status",
+  MEETINGS_MANAGE_MEETINGS: {
+    value: "manage_meetings",
+    type: "read",
+  },
+  MEETINGS_CALENDAR: {
+    value: "calendar",
+    type: "read",
+  },
+  MEETINGS_REPORTS: {
+    value: "reports",
+    type: "read",
+  },
+  MEETINGS_REVIEWS: {
+    value: "reviews",
+    type: "read",
+  },
+  MEETINGS_SETTINGS: {
+    value: "settings",
     type: "read",
   },
 
-  // Meeting Tabs
+  // Pie Charts
+  MEETINGS_ROOM_STATUS: {
+    value: "room_status",
+    type: "read",
+  },
+  MEETINGS_HOUSEKEEPING_STATUS: {
+    value: "housekeeping_status",
+    type: "read",
+  },
+  MEETINGS_DURATION_BREAKDOWN: {
+    value: "duration_breakdown",
+    type: "read",
+  },
+
+  // Tabs
   MEETINGS_MEETINGS_INTERNAL: {
     value: "manage_meetings_internal",
     type: "read",
@@ -235,6 +331,49 @@ export const PERMISSIONS = {
     type: "read",
     access: "page",
     route: "/app/meetings/manage-meetings/external-meetings",
+  },
+
+  // Data Cards
+  MEETINGS_HOURS_BOOKED: {
+    value: "hours_booked",
+    type: "read",
+  },
+  MEETINGS_UNIQUE_BOOKINGS: {
+    value: "unique_bookings",
+    type: "read",
+  },
+  MEETINGS_BIZ_NEST_BOOKINGS: {
+    value: "biz_nest_bookings",
+    type: "read",
+  },
+  MEETINGS_GUEST_BOOKINGS: {
+    value: "guest_bookings",
+    type: "read",
+  },
+  MEETINGS_AVERAGE_HOURS_BOOKED: {
+    value: "average_hours_booked",
+    type: "read",
+  },
+  MEETINGS_HOURS_CANCELLED: {
+    value: "hours_cancelled",
+    type: "read",
+  },
+
+  // Tables
+  MEETINGS_INTERNAL_ONGOING_MEETINGS: {
+    value: "internal_ongoing_meetings",
+    type: "read",
+  },
+  MEETINGS_EXTERNAL_ONGOING_MEETINGS: {
+    value: "external_ongoing_meetings",
+    type: "read",
+  },
+
+  //Meeting buttons
+  MEETINGS_ADD_ROOM: {
+    value: "add_room",
+    type: "write",
+    access: "button",
   },
 
   // Finance Module
@@ -408,6 +547,9 @@ export const PERMISSIONS = {
   SALES_SETTINGS: { value: "sales_settings", type: "read" },
 
   // HR Module
+
+  //Graphs
+  HR_DEPARTMENT_EXPENSE: { value: "hr_department_expense", type: "read" },
   // cards
   HR_EMPLOYEE: { value: "employee", type: "read" },
   HR_COMPANY: { value: "company", type: "read" },
@@ -415,6 +557,28 @@ export const PERMISSIONS = {
   HR_MIX_BAG: { value: "hr_mix_bag", type: "read" },
   HR_DATA: { value: "hr_data", type: "read" },
   HR_SETTINGS: { value: "hr_settings", type: "read" },
+
+  //Data Card
+  HR_EXPENSES: { value: "expenses", type: "read" },
+  HR_AVERAGES: { value: "averages", type: "read" },
+
+  //Tables
+  HR_ANNUAL_KPA_VS_ACHIEVEMENTS: {
+    value: "annual_kpa_vs_achievements",
+    type: "read",
+  },
+  HR_ANNUAL_TASKS_VS_ACHIEVEMENTS: {
+    value: "annual_tasks_vs_achievements",
+    type: "read",
+  },
+  HR_CURRENT_MONTH_BIRTHDAY_LIST: {
+    value: "current_month_birthday_list",
+    type: "read",
+  },
+  HR_CURRENT_MONTH_HOLIDAY_LIST: {
+    value: "current_month_holiday_list",
+    type: "read",
+  },
 
   // edit button
   HR_EMPLOYEE_EDIT: {
@@ -431,6 +595,63 @@ export const PERMISSIONS = {
   HR_CITY_WISE_EMPLOYEES_PIE: {
     value: "city_wise_employees_pie_chart",
     type: "read",
+  },
+
+  //Company
+  HR_COMPANY_LOGO: {
+    value: "company_logo",
+    type: "read",
+    // route: "/app/dashboard/HR-dashboard/company/company-logo",
+  },
+  HR_COMPANY_HANDBOOK: {
+    value: "company_handbook",
+    type: "read",
+    // route: "/app/dashboard/HR-dashboard/company/company-handbook",
+  },
+  HR_DEPARTMENTS: {
+    value: "departments",
+    type: "read",
+    route: "/app/dashboard/HR-dashboard/company/departments",
+  },
+  HR_WORK_LOCATIONS: {
+    value: "work_locations",
+    type: "read",
+    route: "/app/dashboard/HR-dashboard/company/work-locations",
+  },
+  HR_HOLIDAYS: {
+    value: "holidays",
+    type: "read",
+    route: "/app/dashboard/HR-dashboard/company/holidays",
+  },
+  HR_EVENTS: {
+    value: "events",
+    type: "read",
+    route: "/app/dashboard/HR-dashboard/company/events",
+  },
+  HR_COMPANY_POLICIES: {
+    value: "company_policies",
+    type: "read",
+    route: "/app/dashboard/HR-dashboard/company/policies",
+  },
+  HR_COMPANY_SOPS: {
+    value: "company_sops",
+    type: "read",
+    route: "/app/dashboard/HR-dashboard/company/sops",
+  },
+  HR_EMPLOYEE_TYPES: {
+    value: "employee_types",
+    type: "read",
+    route: "/app/dashboard/HR-dashboard/company/employee-type",
+  },
+  HR_SHIFTS: {
+    value: "shifts",
+    type: "read",
+    route: "/app/dashboard/HR-dashboard/company/shifts",
+  },
+  HR_TEMPLATES: {
+    value: "templates",
+    type: "read",
+    route: "/app/dashboard/HR-dashboard/company/templates",
   },
 
   ADMIN_ANNUAL_EXPENSES: { value: "admin_annual_expenses", type: "read" },
