@@ -184,6 +184,7 @@ export const PERMISSIONS = {
   FINANCE_MIX_BAG: { value: "finance_mix_bag", type: "read" },
   FINANCE_DATA: { value: "finance_data", type: "read" },
   FINANCE_SETTINGS: { value: "finance_settings", type: "read" },
+
   FINANCE_PAYOUTS: { value: "finance_payouts_pie_chart", type: "read" },
   FINANCE_CUSTOMER_COLLECTIONS: {
     value: "finance_customer_collections_pie_chart",
@@ -346,16 +347,30 @@ export const PERMISSIONS = {
   SALES_DATA: { value: "sales_data", type: "read" },
   SALES_SETTINGS: { value: "sales_settings", type: "read" },
 
+  // HR Module
+  // cards
   HR_EMPLOYEE: { value: "employee", type: "read" },
   HR_COMPANY: { value: "company", type: "read" },
   HR_FINANCE: { value: "hr_finance", type: "read" },
   HR_MIX_BAG: { value: "hr_mix_bag", type: "read" },
   HR_DATA: { value: "hr_data", type: "read" },
   HR_SETTINGS: { value: "hr_settings", type: "read" },
+
+  // edit button
   HR_EMPLOYEE_EDIT: {
     value: "hr_employee_edit",
     type: "write",
     access: "button",
+  },
+
+  // Pie charts
+  HR_EMPLOYEE_GENDER_DISTRIBUTION_PIE: {
+    value: "gender_distribution_pie_chart",
+    type: "read",
+  },
+  HR_CITY_WISE_EMPLOYEES_PIE: {
+    value: "city_wise_employees_pie_chart",
+    type: "read",
   },
 
   ADMIN_ANNUAL_EXPENSES: { value: "admin_annual_expenses", type: "read" },

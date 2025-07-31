@@ -1086,60 +1086,61 @@ const HrDashboard = () => {
     };
   }
 
-const averageHeadCount = useMemo(() => {
-  return getAverageHeadcount(
-    usersQuery.isLoading ? [] : usersQuery.data,
-    selectedHrFiscalYear
+  const averageHeadCount = useMemo(() => {
+    return getAverageHeadcount(
+      usersQuery.isLoading ? [] : usersQuery.data,
+      selectedHrFiscalYear
+    );
+  }, [usersQuery.data, usersQuery.isLoading, selectedHrFiscalYear]);
+
+  useEffect(() => {
+    console.log("selectedYear : ", selectedHrFiscalYear);
+  }, [selectedHrFiscalYear]);
+
+  const HrAverageExpense = useMemo(
+    () => ({
+      cardTitle: "Averages",
+      descriptionData: [
+        {
+          title: "Annual Average Expense",
+          value: `INR ${inrFormat(totalUtilised / 12)}`,
+          route: "finance",
+        },
+        {
+          title: "Average Salary",
+          value: `INR ${inrFormat(totalSalary / totalEmployees)}`,
+          route: "employee/employee-list",
+        },
+        {
+          title: "Average Head Count",
+          value: `${usersQuery.isLoading ? 0 : averageHeadCount.average}`,
+          route: "employee/employee-list",
+        },
+        {
+          title: "Average Attendance",
+          route: "employee/attendance",
+          value: averageAttendance
+            ? `${(Number(averageAttendance) - 55).toFixed(0)}%`
+            : "0%",
+        },
+        {
+          title: "Average Hours",
+          route: "employee/attendance",
+          value: averageWorkingHours
+            ? `${(Number(averageWorkingHours) / 30).toFixed(2)}h`
+            : "0h",
+        },
+      ],
+    }),
+    [
+      totalUtilised,
+      totalSalary,
+      totalEmployees,
+      averageHeadCount,
+      averageAttendance,
+      averageWorkingHours,
+    ]
   );
-}, [usersQuery.data, usersQuery.isLoading, selectedHrFiscalYear]);
-
-useEffect(()=>{
-  console.log("selectedYear : ",selectedHrFiscalYear)
-},[selectedHrFiscalYear])
-
-
-const HrAverageExpense = useMemo(() => ({
-  cardTitle: "Averages",
-  descriptionData: [
-    {
-      title: "Annual Average Expense",
-      value: `INR ${inrFormat(totalUtilised / 12)}`,
-      route: "finance",
-    },
-    {
-      title: "Average Salary",
-      value: `INR ${inrFormat(totalSalary / totalEmployees)}`,
-      route: "employee/employee-list",
-    },
-    {
-      title: "Average Head Count",
-      value: `${ usersQuery.isLoading ? 0 : averageHeadCount.average}`,
-      route: "employee/employee-list",
-    },
-    {
-      title: "Average Attendance",
-      route: "employee/attendance",
-      value: averageAttendance
-        ? `${(Number(averageAttendance) - 55).toFixed(0)}%`
-        : "0%",
-    },
-    {
-      title: "Average Hours",
-      route: "employee/attendance",
-      value: averageWorkingHours
-        ? `${(Number(averageWorkingHours) / 30).toFixed(2)}h`
-        : "0h",
-    },
-  ],
-}), [
-  totalUtilised,
-  totalSalary,
-  totalEmployees,
-  averageHeadCount,
-  averageAttendance,
-  averageWorkingHours,
-]);
-
 
   //--------------------New Data card data -----------------------//
 
@@ -1215,6 +1216,37 @@ const HrAverageExpense = useMemo(() => ({
     },
   };
 
+  // PIE START
+  const pieChartsConfig = [
+    {
+      layout: 1,
+      key: "employeeGenderDistribution",
+      title: "Employee Gender Distribution ",
+      border: true,
+
+      percent: true,
+      data: genderData,
+      options: genderPieChart,
+      permission: PERMISSIONS.HR_EMPLOYEE_GENDER_DISTRIBUTION_PIE.value,
+    },
+    {
+      layout: 1,
+      key: "cityWiseEmployees",
+      title: "City Wise Employees ",
+      border: true,
+
+      percent: true,
+      data: pieChartData,
+      options: techGoaVisitorsOptions,
+      permission: PERMISSIONS.HR_CITY_WISE_EMPLOYEES_PIE.value,
+    },
+  ];
+
+  const allowedPieCharts = pieChartsConfig.filter(
+    (widget) =>
+      !widget.permission || userPermissions.includes(widget.permission)
+  );
+  // PIE END
   const hrWidgets = [
     {
       layout: 1,
@@ -1226,8 +1258,7 @@ const HrAverageExpense = useMemo(() => ({
               <Skeleton variant="text" width={200} height={30} />
               <Skeleton variant="rectangular" width="100%" height={300} />
             </Box>
-          }
-        >
+          }>
           <WidgetSection normalCase layout={1} padding>
             <YearlyGraph
               data={expenseRawSeries}
@@ -1294,8 +1325,7 @@ const HrAverageExpense = useMemo(() => ({
               <Skeleton variant="text" width={200} height={30} />
               <Skeleton variant="rectangular" width="100%" height={300} />
             </Box>
-          }
-        >
+          }>
           <YearlyGraph
             data={tasksData}
             options={tasksOptions}
@@ -1313,8 +1343,7 @@ const HrAverageExpense = useMemo(() => ({
               <Skeleton variant="text" width={200} height={30} />
               <Skeleton variant="rectangular" width="100%" height={300} />
             </Box>
-          }
-        >
+          }>
           <YearlyGraph
             data={tasksGraphData}
             options={tasksOverallOptions}
@@ -1328,33 +1357,49 @@ const HrAverageExpense = useMemo(() => ({
       ],
     },
 
+    // {
+    //   layout: 2,
+    //   heading: "Site Visitor Analytics",
+    //   widgets: [
+    //     <WidgetSection title={"Employee Gender Distribution"} border>
+    //       <PieChartMui
+    //         percent={true} // Enable percentage display
+    //         title={"Gender Distribution"}
+    //         data={genderData} // Pass processed data
+    //         options={genderPieChart}
+    //       />
+    //     </WidgetSection>,
+    //     <WidgetSection layout={1} border title={"City Wise Employees"}>
+    //       {!usersQuery.isLoading ? (
+    //         <PieChartMui
+    //           percent={true} // Enable percentage display
+    //           data={pieChartData} // Pass processed data
+    //           options={techGoaVisitorsOptions}
+    //         />
+    //       ) : (
+    //         <Skeleton height={"100%"} width={"100%"} />
+    //       )}
+    //     </WidgetSection>,
+    //   ],
+    // },
     {
-      layout: 2,
-      heading: "Site Visitor Analytics",
-      widgets: [
-        <WidgetSection title={"Employee Gender Distribution"} border>
+      layout: allowedPieCharts.length, // ✅ dynamic layout
+      widgets: allowedPieCharts.map((item) => (
+        <WidgetSection
+          key={item.key}
+          layout={item.layout}
+          title={item.title}
+          border={item.border}>
           <PieChartMui
-            percent={true} // Enable percentage display
-            title={"Gender Distribution"}
-            data={genderData} // Pass processed data
-            options={genderPieChart}
-            // height={"100%"}
-            // width={"100%"}
+            percent={item.percent}
+            title={item.title}
+            data={item.data}
+            options={item.options}
           />
-        </WidgetSection>,
-        <WidgetSection layout={1} border title={"City Wise Employees"}>
-          {!usersQuery.isLoading ? (
-            <PieChartMui
-              percent={true} // Enable percentage display
-              data={pieChartData} // Pass processed data
-              options={techGoaVisitorsOptions}
-            />
-          ) : (
-            <Skeleton height={"100%"} width={"100%"} />
-          )}
-        </WidgetSection>,
-      ],
+        </WidgetSection>
+      )),
     },
+
     {
       layout: 2,
       widgets: [
