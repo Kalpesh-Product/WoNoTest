@@ -5,8 +5,8 @@ import { PERMISSIONS } from "../../constants/permissions";
 import TabLayout from "../../components/Tabs/TabLayout";
 
 const ManageVisitorLayout = () => {
-  const location = useLocation();
-  const navigate = useNavigate();
+  // const location = useLocation();
+  // const navigate = useNavigate();
 
   // Map routes to tabs
   const tabs = [
@@ -23,18 +23,18 @@ const ManageVisitorLayout = () => {
   ];
 
   // Redirect to "assets-categories" if the current path is "/assets/categories"
-  useEffect(() => {
-    if (location.pathname === "/app/visitors/manage-visitors") {
-      navigate("/app/visitors/manage-visitors/internal-visitors", {
-        replace: true,
-      });
-    }
-  }, [location, navigate]);
+  // useEffect(() => {
+  //   if (location.pathname === "/app/visitors/manage-visitors") {
+  //     navigate("/app/visitors/manage-visitors/internal-visitors", {
+  //       replace: true,
+  //     });
+  //   }
+  // }, [location, navigate]);
 
   // Determine active tab based on location
-  const activeTab = tabs.findIndex((tab) =>
-    location.pathname.includes(tab.path)
-  );
+  // const activeTab = tabs.findIndex((tab) =>
+  //   location.pathname.includes(tab.path)
+  // );
 
   return (
     // <div className="p-4">
@@ -82,11 +82,11 @@ const ManageVisitorLayout = () => {
     //     <Outlet />
     //   </div>
     // </div>
-      <TabLayout
+    <TabLayout
       basePath="/app/visitors/manage-visitors"
       defaultTabPath="internal-visitors"
       tabs={tabs}
-      hideTabsCondition={(pathname) => pathname.includes("vendor/")}
+      hideTabsCondition={(pathname) => pathname.includes("internal-visitors/")}
     />
   );
 };
