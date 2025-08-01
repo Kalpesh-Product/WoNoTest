@@ -32,6 +32,7 @@ import humanDate from "../../../utils/humanDateForamt";
 import humanTime from "../../../utils/humanTime";
 import { PERMISSIONS } from "./../../../constants/permissions";
 import FyBarGraph from "../../../components/graphs/FyBarGraph";
+import { filterPermissions } from "../../../utils/accessConfig";
 
 dayjs.extend(customParseFormat);
 const AdminDashboard = () => {
@@ -746,6 +747,188 @@ const AdminDashboard = () => {
     },
   };
 
+  //--------------------ACCESS CONFIG-------------------------//
+
+  const departmentExpenseGraphConfig = [
+    {
+      key: PERMISSIONS.ADMIN_DEPARTMENT_EXPENSE.value,
+      data: hrFinance,
+      dateKey: "dueDate",
+      valueKey: "actualAmount",
+      responsiveResize: true,
+      chartOptions: expenseOptions,
+      graphTitle: `BIZ Nest ${department?.name?.toUpperCase()} DEPARTMENT EXPENSE`,
+    },
+  ];
+
+  const allowedDeptExpenseGrpah = filterPermissions(
+    departmentExpenseGraphConfig,
+    userPermissions
+  );
+
+  //data cards
+
+  const dataCardConfigs = [
+    {
+      key: PERMISSIONS.ADMIN_TOTAL_ADMIN_OFFICES.value,
+      title: "Total",
+      data: Array.isArray(unitsData) ? unitsData.length : 0,
+      description: "Admin Offices",
+      route: "admin-offices",
+    },
+    {
+      key: PERMISSIONS.ADMIN_MONTHLY_DUE_TASKS.value,
+      title: "Total",
+      data: tasks.length || 0,
+      description: "Monthly Due Tasks",
+      route: "/app/tasks",
+    },
+    {
+      key: PERMISSIONS.ADMIN_MONTHLY_EXPENSE.value,
+      title: "Average",
+      data: `INR ${inrFormat(averageMonthlyExpense)}`,
+      description: "Monthly Expense",
+      route: "admin-expenses",
+    },
+    {
+      key: PERMISSIONS.ADMIN_EXPENSE_PER_SQFT.value,
+      title: "Total",
+      data: `INR ${inrFormat(totalOverallExpense / totalSqFt)}`,
+      description: "Expense Per Sq. Ft.",
+      route: "per-sq-ft-expense",
+    },
+    {
+      key: PERMISSIONS.ADMIN_ELECTRICITY_EXPENSE_PER_SQFT.value,
+      title: "Total",
+      data: `INR ${inrFormat(electrictyExpense / totalSqFt)}`,
+      description: "Electricity Expense Per Sq. Ft.",
+      route: "per-sq-ft-electricity-expense",
+    },
+    {
+      key: PERMISSIONS.ADMIN_TOP_EXECUTIVE.value,
+      title: "Top Executive",
+      data: "",
+      description: "Mr. Machindranath Parkar",
+      route: "admin-executive-expense",
+    },
+  ];
+
+  const allowedAdminDataCards = filterPermissions(
+    dataCardConfigs,
+    userPermissions
+  );
+
+  //MUI Tables
+
+  const muiTableConfigs = [
+    {
+      key: PERMISSIONS.ADMIN_WEEKLY_EXECUTIVE_SHIFT_TIMING.value,
+      scroll: true,
+      Title: "Weekly Executive Shift Timing",
+      rowsToDisplay: 3,
+      rows: transformedWeeklyShifts,
+      columns: executiveTimingsColumns,
+    },
+    {
+      key: PERMISSIONS.ADMIN_UPCOMING_EVENTS_LIST.value,
+      scroll: true,
+      Title: "Upcoming Events List",
+      rowsToDisplay: 3,
+      rows: [],
+      columns: upcomingEventsColumns,
+    },
+    {
+      key: PERMISSIONS.ADMIN_UPCOMING_CLIENT_MEMBER_BIRTHDAYS.value,
+      scroll: true,
+      Title: "Upcoming Client Member Birthdays",
+      rowsToDisplay: 3,
+      rows: upcomingBirthdays.map((item, index) => ({
+        ...item,
+        srNo: index + 1,
+      })),
+      columns: clientMemberBirthdaysColumns,
+    },
+    {
+      key: PERMISSIONS.ADMIN_UPCOMING_CLIENT_ANNIVERSARIES.value,
+      scroll: true,
+      Title: "Upcoming Client Anniversaries",
+      rowsToDisplay: 3,
+      rows: upComingClientAnniversary.map((item, index) => ({
+        ...item,
+        srNo: index + 1,
+      })),
+      columns: upComingClientAnniversaryColumns,
+    },
+  ];
+
+  const allowedTables = filterPermissions(muiTableConfigs, userPermissions);
+
+    const muiTableConfigs2 = [
+    {
+      key: PERMISSIONS.ADMIN_NEWLY_JOINED_HOUSE_KEEPING_MEMBERS.value,
+      scroll: true,
+      Title: "Newly Joined House Keeping Members",
+      rowsToDisplay: 4,
+      rows:  [],
+      columns: houseKeepingMemberColumns,
+    },
+  ]
+  const allowedTables2 = filterPermissions(muiTableConfigs2, userPermissions);
+
+  //Unit wise 
+  const unitWiseDueTasksWidget = [{
+  key: PERMISSIONS.ADMIN_UNIT_WISE_DUE_TASKS.value,
+  layout: 2,
+  title: "Unit Wise Due Tasks",
+  chartType: "PieChartMui",
+  border: true,
+  data: [],
+  options: [],
+}];
+
+const allowedUnitWise = filterPermissions(unitWiseDueTasksWidget, userPermissions);
+
+//Executivve wise 
+const executiveWiseDueTasksWidget = [{
+  key: PERMISSIONS.ADMIN_EXECUTIVE_WISE_DUE_TASKS.value,
+  layout: 2,
+  title: "Executive Wise Due Tasks",
+  chartType: "DonutChart",
+  border: true,
+  centerLabel: "Tasks",
+  labels: [],
+  colors,
+  series: [],
+  tooltipValue: executiveTasksCount,
+}];
+
+const allowedExecutiveWise = filterPermissions(executiveWiseDueTasksWidget, userPermissions);
+
+const piechartConfig2 = [
+  {
+    key: PERMISSIONS.ADMIN_TOTAL_DESKS_COMPANY_WISE.value,
+    layout: 2,
+    title: "Total Desks Company Wise",
+    chartType: "PieChartMui",
+    border: true,
+    data: totalDeskPercent,
+    options: clientsDesksPieOptions,
+    width: "100%",
+    isLoading: isClientsDataPending,
+    loadingFallback: <CircularProgress color="#1E3D73" />,
+  },
+  {
+    key: PERMISSIONS.ADMIN_BIOMETRICS_GENDER_DATA.value,
+    layout: 2,
+    title: "Biometrics Gender Data",
+    chartType: "PieChartMui",
+    border: true,
+    data: [],
+    options: [],
+  },
+];
+
+const allowedPiechartConfig2 = filterPermissions(piechartConfig2, userPermissions);
   //-----------------------------------------------------------------------------------------------------------------//
   const techWidgets = [
     {
@@ -761,16 +944,9 @@ const AdminDashboard = () => {
           }
         >
           <WidgetSection normalCase layout={1} padding>
-   
-
-            <FyBarGraph
-              data={hrFinance}
-              dateKey="dueDate"
-              valueKey="actualAmount"
-              responsiveResize
-              chartOptions={expenseOptions}
-              graphTitle={`BIZ Nest ${department?.name?.toUpperCase()} DEPARTMENT EXPENSE`}
-            />
+            {allowedDeptExpenseGrpah.map((config, index) => (
+              <FyBarGraph key={index} {...config} />
+            ))}
           </WidgetSection>
         </Suspense>,
       ],
@@ -825,124 +1001,49 @@ const AdminDashboard = () => {
     },
     {
       layout: 3,
-      widgets: [
-        <DataCard
-          route={"admin-offices"}
-          title={"Total"}
-          data={Array.isArray(unitsData) ? unitsData.length : 0}
-          description={"Admin Offices"}
-        />,
-        <DataCard
-          route={"/app/tasks"}
-          title={"Total"}
-          data={tasks.length || 0}
-          description={"Monthly Due Tasks"}
-        />,
-        <DataCard
-          route={"admin-expenses"}
-          title={"Average"}
-          data={`INR ${inrFormat(averageMonthlyExpense)}`}
-          description={"Monthly Expense"}
-        />,
-      ],
+      widgets: allowedAdminDataCards.map((config) => <DataCard {...config} />),
     },
+
     {
-      layout: 3,
-      widgets: [
-        <DataCard
-          route={"per-sq-ft-expense"}
-          title={"Total"}
-          data={`INR ${inrFormat(totalOverallExpense / totalSqFt)}`}
-          description={"Expense Per Sq. Ft."}
-        />,
-        <DataCard
-          route={"per-sq-ft-electricity-expense"}
-          title={"Total"}
-          data={`INR ${inrFormat(electrictyExpense / totalSqFt)}`}
-          description={"Electricity Expense Per Sq. Ft."}
-        />,
-        <DataCard
-          route={"admin-executive-expense"}
-          title={"Top Executive"}
-          data={""}
-          description={"Mr. Machindranath Parkar"}
-        />,
-      ],
+      layout: 2,
+      widgets: allowedTables.map((config) => <MuiTable {...config} />),
     },
     {
       layout: 2,
       widgets: [
-        <MuiTable
-          scroll
-          Title={"Weekly Executive Shift Timing"}
-          rowsToDisplay={3}
-          rows={transformedWeeklyShifts}
-          columns={executiveTimingsColumns}
-        />,
-        <MuiTable
-          scroll
-          Title={"Upcoming Events List"}
-          rowsToDisplay={3}
-          rows={[]}
-          columns={upcomingEventsColumns}
-        />,
-        <MuiTable
-          columns={clientMemberBirthdaysColumns}
-          scroll
-          rowsToDisplay={3}
-          Title={"Upcoming Client Member Birthdays"}
-          rows={upcomingBirthdays.map((item, index) => ({
-            ...item,
-            srNo: index + 1,
-          }))}
-        />,
-        <MuiTable
-          columns={upComingClientAnniversaryColumns}
-          scroll
-          rowsToDisplay={3}
-          Title={"Upcoming Client Anniversaries"}
-          rows={upComingClientAnniversary.map((item, index) => ({
-            ...item,
-            srNo: index + 1,
-          }))}
-        />,
-      ],
-    },
-    {
-      layout: 2,
-      widgets: [
-        <WidgetSection border title={"Unit Wise Due Tasks"}>
-          <PieChartMui data={[]} options={[]} />
-        </WidgetSection>,
-        <WidgetSection border title={"Executive Wise Due Tasks"}>
+        allowedUnitWise.map((config)=>(
+          <WidgetSection border={config.border} title={config.title}>
+          <PieChartMui data={config.data} options={config.options} />
+        </WidgetSection>
+        )),
+       allowedExecutiveWise.map((config)=>(
+         <WidgetSection border={config.border} title={config.title}>
           <DonutChart
-            centerLabel="Tasks"
-            labels={[]}
-            colors={colors}
-            series={[]}
-            tooltipValue={executiveTasksCount}
+            centerLabel={config.centerLabel}
+            labels={config.labels}
+            colors={config.colors}
+            series={config.series}
+            tooltipValue={config.tooltipValue}
           />
-        </WidgetSection>,
+        </WidgetSection>
+       ))
       ],
     },
     {
       layout: 2,
-      widgets: [
-        <WidgetSection border title={"Total Desks Company Wise"}>
+      widgets:  allowedPiechartConfig2.map((config)=>(
+         <WidgetSection border={config.border} title={config.title}>
           {!isClientsDataPending ? (
             <PieChartMui
-              data={totalDeskPercent}
-              options={clientsDesksPieOptions}
-              width={"100%"}
+              data={ config.data}
+              options={ config.options}
+              width={config.width}
             />
           ) : (
             <CircularProgress color="#1E3D73" />
           )}
-        </WidgetSection>,
-        <WidgetSection border title={"Biometrics Gender Data"}>
-          <PieChartMui data={[]} options={[]} />
-        </WidgetSection>,
-      ],
+        </WidgetSection>
+      )),
     },
     // {
     //   layout: 2,
@@ -969,15 +1070,14 @@ const AdminDashboard = () => {
     // },
     {
       layout: 1,
-      widgets: [
-        <MuiTable
-          Title={"Newly Joined House Keeping Members"}
-          rowsToDisplay={4}
-          scroll
-          rows={[]}
-          columns={houseKeepingMemberColumns}
-        />,
-      ],
+      widgets: allowedTables2.map((config)=>(
+
+          <MuiTable
+          {...config}
+        />
+      ))
+      
+      
     },
   ];
 

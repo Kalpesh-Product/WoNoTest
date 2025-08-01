@@ -16,6 +16,7 @@ import { useEffect, useState } from "react";
 import YearlyGraph from "../../components/graphs/YearlyGraph";
 import { PERMISSIONS } from "../../constants/permissions";
 import useAuth from "../../hooks/useAuth";
+import { configYearlyGrpah, filterPermissions } from "../../utils/accessConfig";
 
 const TasksDashboard = () => {
   const axios = useAxiosPrivate();
@@ -636,18 +637,11 @@ const TasksDashboard = () => {
   //---------------------------------------------
   // ✅ 1. Yearly Graph Config
   //---------------------------------------------
-  const yearlyGraphConfigs = [
-    {
-      key: PERMISSIONS.TASKS_OVERALL_AVERAGE_COMPLETION.value,
-      chartId: "bargraph-hr-expense",
-      title: "OVERALL AVERAGE TASKS COMPLETION",
-      titleAmountLabel: "TOTAL TASKS",
-    },
-  ];
 
-    const allowedGraph = yearlyGraphConfigs.filter(
-    (card) => !card.key || userPermissions.includes(card.key)
-  );
+  const yearlyGraph = configYearlyGrpah(PERMISSIONS.TASKS_OVERALL_AVERAGE_COMPLETION.value,"bargraph-hr-expense","OVERALL AVERAGE TASKS COMPLETION","TOTAL TASKS")
+
+  const allowedGraph = filterPermissions(yearlyGraph,userPermissions)
+ 
 
   //---------------------------------------------
   // ✅ 2. Pie Charts Config

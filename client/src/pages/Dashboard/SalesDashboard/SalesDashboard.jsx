@@ -39,6 +39,14 @@ import FyBarGraph from "../../../components/graphs/FyBarGraph";
 import FyBarGraphCount from "../../../components/graphs/FyBarGraphCount";
 import useAuth from "../../../hooks/useAuth";
 import { PERMISSIONS } from "./../../../constants/permissions";
+import {
+  configYearlyGrpah,
+  filterPermissions,
+} from "../../../utils/accessConfig";
+import {
+  salesConfigYearlyGrpah,
+  salesFilterPermissions,
+} from "./salesAccessConfig";
 
 const SalesDashboard = () => {
   const { setIsSidebarOpen } = useSidebar();
@@ -92,6 +100,7 @@ const SalesDashboard = () => {
   const allowedCards = cardsConfig.filter(
     (card) => !card.permission || userPermissions.includes(card.permission)
   );
+
   //------------------------PAGE ACCESS END-------------------//
 
   //-----------------------------------------------------Graph------------------------------------------------------//
@@ -836,20 +845,152 @@ const SalesDashboard = () => {
   };
   //-----------------------------------------------Conversion of India-wise Pie-graph-----------------------------------------------------------//
 
+  //----------------------ACCESS CONFIG------------------//
+
+  //Yearly graph
+  const yearlyGraph = salesConfigYearlyGrpah(
+    PERMISSIONS.SALES_DEPARTMENT_REVENUES.value,
+    "bargraph-sales-dashboard",
+    incomeExpenseData,
+    incomeExpenseOptions,
+    "BIZ Nest SALES DEPARTMENT REVENUES",
+    `INR ${inrFormat(totalValue)}`,
+    setSelectedFiscalYear
+  );
+
+  const allowedGraph = salesFilterPermissions(yearlyGraph, userPermissions);
+
+  //Finance Cards
+  const FinanceCardConfig = [
+    { key: PERMISSIONS.SALES_REVENUE.value, value: RevenueData },
+    { key: PERMISSIONS.SALES_KEY_STATS.value, value: keyStatsData },
+    { key: PERMISSIONS.SALES_AVERAGE.value, value: salesAverageData },
+  ];
+
+  const allowedFinanceCards = salesFilterPermissions(
+    FinanceCardConfig,
+    userPermissions
+  );
+
+  //Unique Leads Graph
+  const graphCountConfig = [
+    {
+      graphTitle: "MONTHLY UNIQUE LEADS",
+      data: graphData,
+      chartOptions: monthlyLeadsOptions,
+      dateKey: "dateOfContact",
+      groupKey: "category",
+    },
+    {
+      key: PERMISSIONS.SALES_SOURCING_CHANNELS.value,
+      graphTitle: "SOURCING CHANNELS",
+      data: graphData,
+      chartOptions: monthlyLeadsOptions,
+      dateKey: "dateOfContact",
+      groupKey: "leadSource",
+    },
+  ];
+
+  const allowedGraphs = salesFilterPermissions(
+    graphCountConfig,
+    userPermissions
+  );
+ 
+
+  const pieChartConfigs = [
+    {
+      key: PERMISSIONS.SALES_SECTOR_WISE_OCCUPANCY.value,
+      title: "Sector-wise Occupancy",
+      border: true,
+      layout: 1,
+      data: sectorPieData,
+      options: sectorPieChartOptions,
+    },
+    {
+      key: PERMISSIONS.SALES_CLIENT_WISE_OCCUPANCY.value,
+      title: "Client-wise Occupancy",
+      border: true,
+      layout: 1,
+      data: totalDeskPercent,
+      options: clientsDesksPieOptions,
+      width: "100%",
+    },
+  ];
+  const allowedPieCharts = salesFilterPermissions(
+    pieChartConfigs,
+    userPermissions
+  );
+
+  const pieChartLocalConfigs = [
+    {
+      key: PERMISSIONS.SALES_SECTOR_WISE_OCCUPANCY.value,
+      title: "Client Gender Wise Data",
+      border: true,
+      layout: 1,
+      data: [],
+      options: [],
+    },
+    {
+      key: PERMISSIONS.SALES_CLIENT_WISE_OCCUPANCY.value,
+      title: "India-wise Members",
+      border: true,
+      layout: 1,
+      data: locationWiseData,
+      options: locationPieChartOptions,
+    },
+  ];
+  const allowedLocalPieCharts = salesFilterPermissions(
+    pieChartLocalConfigs,
+    userPermissions
+  );
+
+  const muiTableConfigs = [
+    {
+      Title: "Current Month Client Anniversary",
+      columns: companyTableColumns,
+      rows: formattedCompanyTableData,
+      rowKey: "id",
+      rowsToDisplay: 40,
+      scroll: true,
+      className: "h-full",
+      layout:1,
+      key:PERMISSIONS.SALES_CURRENT_MONTH_CLIENT_ANNIVERSARY.value
+    },
+    {
+      Title: "Client Member Birthday",
+      columns: upcomingBirthdaysColumns,
+      rows: formattedClientMemberBirthday,
+      rowKey: "id",
+      rowsToDisplay: 40,
+      scroll: true,
+      className: "h-full",
+      layout:1,
+      padding:true,
+      key:PERMISSIONS.SALES_CLIENT_MEMBER_BIRTHDAY.value
+    },
+  ];
+  const allowedMuiTableConfigs = salesFilterPermissions(
+    muiTableConfigs,
+    userPermissions
+  );
+
   const meetingsWidgets = [
     {
       layout: 1,
       widgets: [
         <>
           {!isTotalLoading ? (
-            <YearlyGraph
-              chartId={"bargraph-sales-dashboard"}
-              data={incomeExpenseData}
-              options={incomeExpenseOptions}
-              title={"BIZ Nest SALES DEPARTMENT REVENUES"}
-              titleAmount={`INR ${inrFormat(totalValue)}`}
-              onYearChange={setSelectedFiscalYear}
-            />
+            allowedGraph.map((config) => (
+              <YearlyGraph
+                key={config.key}
+                chartId={config.chartId}
+                data={config.data}
+                options={config.options}
+                title={config.title}
+                titleAmount={config.titleAmount}
+                onYearChange={config.onYearChange}
+              />
+            ))
           ) : (
             <div className="h-72 flex items-center justify-center">
               <CircularProgress />
@@ -860,11 +1001,9 @@ const SalesDashboard = () => {
     },
     {
       layout: 3,
-      widgets: [
-        <FinanceCard titleCenter {...RevenueData} />,
-        <FinanceCard titleCenter {...keyStatsData} />,
-        <FinanceCard titleCenter {...salesAverageData} />,
-      ],
+      widgets: allowedFinanceCards.map((config) => (
+        <FinanceCard titleCenter {...config.value} />
+      )),
     },
     // {
     //   layout: 5,
@@ -905,7 +1044,9 @@ const SalesDashboard = () => {
         />
       )),
     },
-    {
+     
+    ...allowedGraphs.map((config)=>(
+       {
       layout: 1,
       widgets: [
         <>
@@ -915,105 +1056,61 @@ const SalesDashboard = () => {
               <Skeleton variant="rectangular" width="100%" height={300} />
             </div>
           ) : (
-            <FyBarGraphCount
-              graphTitle="MONTHLY UNIQUE LEADS"
-              data={graphData}
-              chartOptions={monthlyLeadsOptions}
-              dateKey="dateOfContact"
-              groupKey="category"
-            />
+          
+              <FyBarGraphCount
+                graphTitle={config.graphTitle}
+                data={config.data}
+                chartOptions={config.chartOptions}
+                dateKey={config.dateKey}
+                groupKey={config.groupKey}
+              />
+            
           )}
         </>,
       ],
-    },
-    {
-      layout: 1,
-      widgets: [
-        <>
-          {isLeadsPending ? (
-            <div className="space-y-4">
-              <Skeleton variant="rectangular" width="100%" height={40} />
-              <Skeleton variant="rectangular" width="100%" height={300} />
-            </div>
-          ) : (
-            <FyBarGraphCount
-              graphTitle="SOURCING CHANNELS"
-              data={graphData}
-              chartOptions={monthlyLeadsOptions}
-              dateKey="dateOfContact"
-              groupKey="leadSource"
-            />
-          )}
-        </>,
-      ],
-    },
+    }
+    )),
     {
       layout: 2,
-      widgets: [
-        <WidgetSection layout={1} title={"Sector-wise Occupancy"} border>
-          {!isClientsDataPending ? (
-            <PieChartMui data={sectorPieData} options={sectorPieChartOptions} />
-          ) : (
-            <CircularProgress color="#1E3D73" />
-          )}
-        </WidgetSection>,
-        <WidgetSection layout={1} title={"Client-wise Occupancy"} border>
+      widgets: allowedPieCharts.map((config) => (
+        <WidgetSection
+          layout={config.layout}
+          title={config.title}
+          border={config.border}
+        >
           {!isClientsDataPending ? (
             <PieChartMui
-              data={totalDeskPercent}
-              options={clientsDesksPieOptions}
-              width={"100%"}
+              data={config.data}
+              options={config.options}
+              width={config?.width}
             />
           ) : (
             <CircularProgress color="#1E3D73" />
           )}
-        </WidgetSection>,
-      ],
+        </WidgetSection>
+      )),
     },
     {
       layout: 2,
-      widgets: [
-        <WidgetSection layout={1} title={"Client Gender Wise Data"} border>
+      widgets: allowedLocalPieCharts.map((config) => (
+        <WidgetSection
+          layout={config.layout}
+          title={config.title}
+          border={config.border}
+        >
           <div className="h-[300px]">
-            <PieChartMui data={[]} options={[]} />
+            <PieChartMui data={config.data} options={config.options} />
           </div>
-        </WidgetSection>,
-        <WidgetSection layout={1} title={"India-wise Members"} border>
-          <div className="h-[300px]">
-            <PieChartMui
-              data={locationWiseData}
-              options={locationPieChartOptions}
-            />
-          </div>
-        </WidgetSection>,
-      ],
+        </WidgetSection>
+      )),
     },
     {
       layout: 2,
-      widgets: [
-        <WidgetSection layout={1} padding>
-          <MuiTable
-            Title="Current Month Client Anniversary"
-            columns={companyTableColumns}
-            rows={formattedCompanyTableData}
-            rowKey="id"
-            rowsToDisplay={40}
-            scroll={true}
-            className="h-full"
-          />
-        </WidgetSection>,
-        <WidgetSection layout={1} padding>
-          <MuiTable
-            Title="Client Member Birthday"
-            columns={upcomingBirthdaysColumns}
-            rows={formattedClientMemberBirthday}
-            rowKey="id"
-            rowsToDisplay={40}
-            scroll={true}
-            className="h-full"
-          />
-        </WidgetSection>,
-      ],
+      widgets: allowedMuiTableConfigs.map((config, index) => (
+        <WidgetSection layout={config.layout} padding key={index}>
+          <MuiTable {...config} />
+        </WidgetSection>
+      )),
     },
   ];
   return (
