@@ -256,6 +256,7 @@ const MeetingFormLayout = () => {
     queryKey: ["visitors"],
     queryFn: async () => {
       const response = await axios.get("/api/visitors/fetch-visitors");
+    
       return response.data;
     },
   });
@@ -670,7 +671,7 @@ const MeetingFormLayout = () => {
                           `${user.firstName} ${user.lastName}`
                         } // Display names
                         onChange={(_, newValue) =>
-                          field.onChange(newValue.map((user) => user.firstName))
+                          field.onChange(newValue.map((user) =>({ name:user.firstName})))
                         } // Sync selected users with form state
                         renderTags={(selected, getTagProps) =>
                           selected.map((user, index) => (

@@ -541,48 +541,113 @@ export const PERMISSIONS = {
   // 🔷 Sales Dashboard
 
   SALES_TURNOVER: { value: "turnover", type: "read" },
-  SALES_FINANCE: { value: "sales_finance", type: "read" },
-  SALES_MIX_BAG: { value: "sales_mix_bag", type: "read" },
-  SALES_DATA: { value: "sales_data", type: "read" },
-  SALES_SETTINGS: { value: "sales_settings", type: "read" },
+  SALES_FINANCE: { value: "finance", type: "read" },
+  SALES_MIX_BAG: { value: "mix_bag", type: "read" },
+  SALES_DATA: { value: "data", type: "read" },
+  SALES_SETTINGS: { value: "settings", type: "read" },
 
   // 🔷 Sales Nav Cards
-  SALES_REVENUE: { value: "sales_revenue", type: "read" },
-  SALES_KEY_STATS: { value: "sales_key_stats", type: "read" },
-  SALES_AVERAGE: { value: "sales_average", type: "read" },
+  SALES_REVENUE: { value: "revenue", type: "read" },
+  SALES_KEY_STATS: { value: "key_stats", type: "read" },
+  SALES_AVERAGE: { value: "average", type: "read" },
 
   // 🔷 Sales graphs
   SALES_DEPARTMENT_REVENUES: {
-    value: "sales_department_revenues",
+    value: "department_revenues",
     type: "read",
   },
   SALES_MONTHLY_UNIQUE_LEADS: {
-    value: "sales_monthly_unique_leads",
+    value: "monthly_unique_leads",
     type: "read",
   },
-  SALES_SOURCING_CHANNELS: { value: "sales_sourcing_channels", type: "read" },
+  SALES_SOURCING_CHANNELS: { value: "sourcing_channels", type: "read" },
 
   // 🔷 Sales Chart Permissions
   SALES_SECTOR_WISE_OCCUPANCY: {
-    value: "sales_sector_wise_occupancy",
+    value: "sector_wise_occupancy",
     type: "read",
   },
   SALES_CLIENT_WISE_OCCUPANCY: {
-    value: "sales_client_wise_occupancy",
+    value: "client_wise_occupancy",
     type: "read",
   },
   SALES_CLIENT_GENDER_WISE_DATA: {
-    value: "sales_client_gender_wise_data",
+    value: "client_gender_wise_data",
     type: "read",
   },
-  SALES_INDIA_WISE_MEMBERS: { value: "sales_india_wise_members", type: "read" },
+  SALES_INDIA_WISE_MEMBERS: { value: "india_wise_members", type: "read" },
   SALES_CURRENT_MONTH_CLIENT_ANNIVERSARY: {
-    value: "sales_current_month_client_anniversary",
+    value: "current_month_client_anniversary",
     type: "read",
   },
   SALES_CLIENT_MEMBER_BIRTHDAY: {
-    value: "sales_client_member_birthday",
+    value: "client_member_birthday",
     type: "read",
+  },
+
+  //Finance
+  SALES_BUDGET: {
+    value: "budget",
+    type: "read",
+    route: "/app/dashboard/sales-dashboard/finance/budget",
+  },
+  SALES_PAYMENT_SCHEDULE: {
+    value: "payment_schedule",
+    type: "read",
+    route: "/app/dashboard/sales-dashboard/finance/payment-schedule",
+  },
+  SALES_VOUCHER: {
+    value: "voucher",
+    type: "read",
+    route: "/app/dashboard/sales-dashboard/finance/voucher",
+  },
+  // Revenue
+  SALES_TOTAL_REVENUE: {
+    value: "total_revenue",
+    type: "read",
+    route: "/app/dashboard/sales-dashboard/revenue/total-revenue",
+  },
+  SALES_COWORKING: {
+    value: "coworking",
+    type: "read",
+    route: "/app/dashboard/sales-dashboard/revenue/co-working",
+  },
+  SALES_MEETINGS: {
+    value: "meetings",
+    type: "read",
+    route: "/app/dashboard/sales-dashboard/revenue/meetings",
+  },
+  SALES_VIRTUAL_OFFICE: {
+    value: "virtual_office",
+    type: "read",
+    route: "/app/dashboard/sales-dashboard/revenue/virtual-office",
+  },
+  SALES_WORKATIONS: {
+    value: "workations",
+    type: "read",
+    route: "/app/dashboard/sales-dashboard/revenue/workation",
+  },
+  SALES_ALT_REVENUE: {
+    value: "alt_revenue",
+    type: "read",
+    route: "/app/dashboard/sales-dashboard/revenue/alt-revenue",
+  },
+
+  //Data
+  SALES_ASSET_LIST: {
+    value: "asset_list",
+    type: "read",
+    route: "/app/dashboard/sales-dashboard/data/asset-list",
+  },
+  SALES_MONTHLY_INVOICE_REPORTS: {
+    value: "monthly_invoice_reports",
+    type: "read",
+    route: "/app/dashboard/sales-dashboard/data/monthly-invoice-reports",
+  },
+  SALES_VENDOR: {
+    value: "vendor",
+    type: "read",
+    route: "/app/dashboard/sales-dashboard/data/vendor",
   },
 
   // HR Module
@@ -839,6 +904,82 @@ export const PERMISSIONS = {
   ADMIN_BIOMETRICS_GENDER_DATA: {
     value: "admin_biometrics_gender_data",
     type: "read",
+  },
+  // Finance
+  ADMIN_BUDGET: {
+    value: "budget",
+    type: "read",
+    route: "/app/dashboard/admin-dashboard/finance/budget",
+  },
+
+  ADMIN_PAYMENT_SCHEDULE: {
+    value: "payment_schedule",
+    type: "read",
+    route: "/app/dashboard/admin-dashboard/finance/payment-schedule",
+  },
+
+  ADMIN_VOUCHER: {
+    value: "voucher",
+    type: "read",
+    route: "/app/dashboard/admin-dashboard/finance/voucher",
+  },
+
+  // Housekeeping Members
+  ADMIN_HOUSEKEEPING_MEMBERS_LIST: {
+    value: "admin_housekeeping_members_list",
+    type: "read",
+    route:
+      "/app/dashboard/admin-dashboard/mix-bag/housekeeping-members/members-list",
+  },
+  ADMIN_HOUSEKEEPING_MEMBER_ONBOARD: {
+    value: "admin_housekeeping_member_onboard",
+    type: "read",
+    route:
+      "/app/dashboard/admin-dashboard/mix-bag/housekeeping-members/member-onboard",
+  },
+  ADMIN_HOUSEKEEPING_ASSIGN_ROTATION: {
+    value: "admin_housekeeping_assign_rotation",
+    type: "read",
+    route:
+      "/app/dashboard/admin-dashboard/mix-bag/housekeeping-members/member-schedule",
+  },
+
+  // Clients Members Data
+  ADMIN_CLIENT_MEMBERS_DATA: {
+    value: "admin_client_members_data",
+    type: "read",
+    route:
+      "/app/dashboard/admin-dashboard/mix-bag/client-members/client-members-data",
+  },
+  ADMIN_CLIENT_MEMBERS_ONBOARD: {
+    value: "admin_client_members_onboard",
+    type: "read",
+    route:
+      "/app/dashboard/admin-dashboard/mix-bag/client-members/client-members-onboard",
+  },
+
+  // Data
+  ADMIN_INFRA_ELECTRICITY_EXPENSES: {
+    value: "admin_infra_electricity_expenses",
+    type: "read",
+    route:
+      "/app/dashboard/admin-dashboard/mix-bag/infra-expenses/electricity-expenses",
+  },
+  ADMIN_INFRA_ASSET_LIST: {
+    value: "admin_infra_asset_list",
+    type: "read",
+    route: "/app/dashboard/admin-dashboard/mix-bag/infra-expenses/asset-list",
+  },
+  ADMIN_INFRA_MONTHLY_INVOICE_REPORTS: {
+    value: "admin_infra_monthly_invoice_reports",
+    type: "read",
+    route:
+      "/app/dashboard/admin-dashboard/mix-bag/infra-expenses/monthly-invoice-reports",
+  },
+  ADMIN_INFRA_VENDOR: {
+    value: "admin_infra_vendor",
+    type: "read",
+    route: "/app/dashboard/admin-dashboard/mix-bag/infra-expenses/vendor",
   },
 
   // 🟢 Maintenance Dashboard
