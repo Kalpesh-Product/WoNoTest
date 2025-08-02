@@ -636,6 +636,37 @@ export const PERMISSIONS = {
     type: "read",
   },
 
+  //Employee
+  HR_EMPLOYEE_LIST: {
+    value: "employee_list",
+    type: "read",
+    route: "/app/dashboard/HR-dashboard/employee/employee-list",
+  },
+
+  HR_PAST_EMPLOYEES: {
+    value: "past_employees",
+    type: "read",
+    route: "/app/dashboard/HR-dashboard/employees/past-employees",
+  },
+
+  HR_ATTENDANCE: {
+    value: "attendance",
+    type: "read",
+    route: "/app/dashboard/HR-dashboard/attendance",
+  },
+
+  HR_LEAVES: {
+    value: "leaves",
+    type: "read",
+    route: "/app/dashboard/HR-dashboard/leaves",
+  },
+
+  HR_EMPLOYEE_ONBOARDING: {
+    value: "employee_onboarding",
+    type: "read",
+    route: "/app/dashboard/HR-dashboard/employees/employee-onboarding",
+  },
+
   //Company
   HR_COMPANY_LOGO: {
     value: "company_logo",
@@ -691,6 +722,62 @@ export const PERMISSIONS = {
     value: "templates",
     type: "read",
     route: "/app/dashboard/HR-dashboard/company/templates",
+  },
+
+  //Finance
+  HR_BUDGET: {
+    value: "budget",
+    type: "read",
+    route: "/app/dashboard/HR-dashboard/finance/budget",
+  },
+
+  HR_PAYMENT_SCHEDULE: {
+    value: "payment_schedule",
+    type: "read",
+    route: "/app/dashboard/HR-dashboard/finance/payment-schedule",
+  },
+
+  HR_VOUCHER: {
+    value: "voucher",
+    type: "read",
+    route: "/app/dashboard/HR-dashboard/finance/voucher",
+  },
+
+  HR_PAYROLL: {
+    value: "payroll",
+    type: "read",
+    route: "/app/dashboard/HR-dashboard/finance/payroll",
+  },
+
+  //Data
+  HR_JOB_APPLICATION_LIST: {
+    value: "job_application_list",
+    type: "read",
+    route: "/app/dashboard/HR-dashboard/data/job-application-list",
+  },
+
+  HR_PAYROLL_REPORTS: {
+    value: "payroll_reports",
+    type: "read",
+    route: "/app/dashboard/HR-dashboard/data/payroll-reports",
+  },
+
+  HR_ASSET_LIST: {
+    value: "asset_list",
+    type: "read",
+    route: "/app/dashboard/HR-dashboard/data/asset-list",
+  },
+
+  HR_MONTHLY_INVOICE_REPORTS: {
+    value: "monthly_invoice_reports",
+    type: "read",
+    route: "/app/dashboard/HR-dashboard/data/monthly-invoice-reports",
+  },
+
+  HR_VENDOR: {
+    value: "vendor",
+    type: "read",
+    route: "/app/dashboard/HR-dashboard/data/vendor",
   },
 
   // 🟡 Admin Dashboard
@@ -797,6 +884,8 @@ export const PERMISSIONS = {
     value: "maintenance_monthly_kpa",
     type: "read",
   },
+
+  //Tables
   MAINTENANCE_TOP_HIGH_PRIORITY_TASKS: {
     value: "maintenance_top_high_priority_tasks",
     type: "read",
@@ -805,6 +894,8 @@ export const PERMISSIONS = {
     value: "maintenance_weekly_executive_shift_timing",
     type: "read",
   },
+
+  //Pie Charts
   MAINTENANCE_CATEGORY_WISE_MAINTENANCE: {
     value: "maintenance_category_wise_maintenance",
     type: "read",
