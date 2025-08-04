@@ -18,6 +18,7 @@ import {
   noOnlyWhitespace,
 } from "../../../utils/validators";
 import dayjs from "dayjs";
+import UploadFileInput from "../../../components/UploadFileInput";
 
 const AddClient = () => {
   const {
@@ -54,7 +55,11 @@ const AddClient = () => {
       visitorCompany: "",
       paymentAmount: "",
       paymentStatus: "",
-      gst: "",
+      gstNumber: "",
+      panNumber: "",
+      gstFile: "",
+      panFile: "",
+      othersFile: "",
     },
   });
 
@@ -106,11 +111,19 @@ const AddClient = () => {
   const { mutate: addVisitor, isPending: isMutateVisitor } = useMutation({
     mutationKey: ["addVisitor"],
     mutationFn: async (data) => {
-      const response = await axios.post("/api/visitors/add-visitor", {
-        ...data,
-        department: selectedDepartment === "na" ? null : selectedDepartment,
-        toMeet: selectedDepartment === "na" ? null : data.toMeet,
-      });
+      const response = await axios.post(
+        "/api/visitors/add-visitor",
+        {
+          ...data,
+          department: selectedDepartment === "na" ? null : selectedDepartment,
+          toMeet: selectedDepartment === "na" ? null : data.toMeet,
+        },
+        {
+          headers: {
+            "Content-Type": "multipart/form-data",
+          },
+        }
+      );
       return response.data;
     },
     onSuccess: (data) => {
@@ -150,6 +163,16 @@ const AddClient = () => {
       checkOut: data.checkOut?.toISOString() || null,
       dateOfVisit: data.dateOfVisit?.toISOString() || null,
     };
+
+    const formData = new FormData();
+    formData.append("panFile", data.panFile);
+    formData.append("gstFile", data.gstFile);
+    formData.append("otherFile", data.othersFile);
+    for (const key in payload) {
+      if (payload[key] !== undefined && payload[key] !== null) {
+        formData.append(key, payload[key]);
+      }
+    }
 
     addVisitor(payload);
   };
@@ -337,7 +360,7 @@ const AddClient = () => {
                 </span>
               </div>
               <div className="grid grid-cols sm:grid-cols-1 md:grid-cols-1 gap-4 p-4 ">
-                <Controller
+                {/* <Controller
                   name="clientCompany"
                   control={control}
                   rules={{
@@ -357,51 +380,101 @@ const AddClient = () => {
                       helperText={errors.clientCompany?.message}
                     />
                   )}
-                />
-                <Controller
-                  name="registeredClientCompany"
-                  control={control}
-                  rules={{
-                    required: "Registered Client Company is required",
-                    validate: {
-                      noOnlyWhitespace,
-                      isAlphanumeric,
-                    },
-                  }}
-                  render={({ field }) => (
-                    <TextField
-                      {...field}
-                      size="small"
-                      label="Registered Client Company"
-                      fullWidth
-                      error={!!errors.registeredClientCompany}
-                      helperText={errors.registeredClientCompany?.message}
-                    />
-                  )}
-                />
+                /> */}
+                <div className="flex gap-4 items-center">
+                  <Controller
+                    name="brandName"
+                    control={control}
+                    rules={{
+                      required: "Brand Name is required",
+                      validate: {
+                        noOnlyWhitespace,
+                        isAlphanumeric,
+                      },
+                    }}
+                    render={({ field }) => (
+                      <TextField
+                        {...field}
+                        size="small"
+                        label="Brand Name"
+                        fullWidth
+                        error={!!errors.brandName}
+                        helperText={errors.brandName?.message}
+                      />
+                    )}
+                  />
+                  <Controller
+                    name="registeredClientCompany"
+                    control={control}
+                    rules={{
+                      required: "Registered Client Company is required",
+                      validate: {
+                        noOnlyWhitespace,
+                        isAlphanumeric,
+                      },
+                    }}
+                    render={({ field }) => (
+                      <TextField
+                        {...field}
+                        size="small"
+                        label="Registered Client Company"
+                        fullWidth
+                        error={!!errors.registeredClientCompany}
+                        helperText={errors.registeredClientCompany?.message}
+                      />
+                    )}
+                  />
+                </div>
 
-                <Controller
-                  name="brandName"
-                  control={control}
-                  rules={{
-                    required: "Brand Name is required",
-                    validate: {
-                      noOnlyWhitespace,
-                      isAlphanumeric,
-                    },
-                  }}
-                  render={({ field }) => (
-                    <TextField
-                      {...field}
-                      size="small"
-                      label="Brand Name"
-                      fullWidth
-                      error={!!errors.brandName}
-                      helperText={errors.brandName?.message}
-                    />
-                  )}
-                />
-
+                <div className="flex gap-4 items-center">
+                  <Controller
+                    name="hoState"
+                    control={control}
+                    render={({ field }) => (
+                      <TextField
+                        {...field}
+                        size="small"
+                        select
+                        label="State"
+                        onChange={(e) => {
+                          field.onChange(e);
+                          handleStateSelect(e.target.value);
+                        }}
+                        fullWidth
+                      >
+                        <MenuItem value="">Select a State</MenuItem>
+                        {states.map((item) => (
+                          <MenuItem value={item.isoCode} key={item.isoCode}>
+                            {item.name}
+                          </MenuItem>
+                        ))}
+                      </TextField>
+                    )}
+                  />
+                  <Controller
+                    name="hoCity"
+                    control={control}
+                    render={({ field }) => (
+                      <TextField
+                        {...field}
+                        size="small"
+                        select
+                        label="City"
+                        fullWidth
+                      >
+                        <MenuItem value="">Select a City</MenuItem>
+                        {cities.map((item) => (
+                          <MenuItem
+                            value={item.name}
+                            key={`${item.name}-${item.stateCode}-${item.latitude}`}
+                          >
+                            {item.name}
+                          </MenuItem>
+                        ))}
+                      </TextField>
+                    )}
+                  />
+                </div>
                 <Controller
                   name="sector"
                   control={control}
@@ -423,59 +496,260 @@ const AddClient = () => {
                     />
                   )}
                 />
-
-                <Controller
-                  name="hoState"
-                  control={control}
-                  render={({ field }) => (
-                    <TextField
-                      {...field}
-                      size="small"
-                      select
-                      label="State"
-                      onChange={(e) => {
-                        field.onChange(e);
-                        handleStateSelect(e.target.value);
-                      }}
-                      fullWidth
-                    >
-                      <MenuItem value="">Select a State</MenuItem>
-                      {states.map((item) => (
-                        <MenuItem value={item.isoCode} key={item.isoCode}>
-                          {item.name}
-                        </MenuItem>
-                      ))}
-                    </TextField>
-                  )}
-                />
-                <Controller
-                  name="hoCity"
-                  control={control}
-                  render={({ field }) => (
-                    <TextField
-                      {...field}
-                      size="small"
-                      select
-                      label="City"
-                      fullWidth
-                    >
-                      <MenuItem value="">Select a City</MenuItem>
-                      {cities.map((item) => (
-                        <MenuItem
-                          value={item.name}
-                          key={`${item.name}-${item.stateCode}-${item.latitude}`}
-                        >
-                          {item.name}
-                        </MenuItem>
-                      ))}
-                    </TextField>
-                  )}
-                />
               </div>
             </div>
           </div>
 
-          <div className="grid grid-cols sm:grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols sm:grid-cols-1 md:grid-cols-2 gap-4">
+            {/*GST*/}
+            <div>
+              <div className="py-4 border-b-default border-borderGray">
+                <span className="text-subtitle font-pmedium">GST</span>
+              </div>
+              <div className="grid grid-cols sm:grid-cols-1 md:grid-cols-2 gap-4 p-4 ">
+                <Controller
+                  name="gstNumber"
+                  control={control}
+                  rules={{
+                    required: "GST Number is required",
+                    validate: (value) => {
+                      const regex =
+                        /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+                      if (!regex.test(value))
+                        return "Provided GST number is invalid";
+                      else return true;
+                    },
+                  }}
+                  render={({ field }) => (
+                    <TextField
+                      {...field}
+                      size="small"
+                      label="GST Number"
+                      fullWidth
+                      error={!!errors.gstNumber}
+                      helperText={errors.gstNumber?.message}
+                      onChange={(e) => {
+                        let value = e.target.value;
+
+                        field.onChange(value);
+                      }}
+                      value={field.value}
+                    />
+                  )}
+                />
+                <Controller
+                  name="gstFile"
+                  control={control}
+                  rules={{
+                    validate: (value) =>
+                      watch("gstFile") && !value
+                        ? "Please upload GST file"
+                        : true,
+                  }}
+                  render={({ field, fieldState }) => (
+                    <UploadFileInput
+                      allowedExtensions={["pdf"]}
+                      value={field.value}
+                      onChange={field.onChange}
+                      previewType="pdf"
+                      // disabled={!watch("gstFile")}
+                      error={!!fieldState.error}
+                      helperText={fieldState.error?.message}
+                      id="gst"
+                    />
+                  )}
+                />
+              </div>
+            </div>
+
+            {/*Verification*/}
+            <div>
+              <div className="py-4 border-b-default border-borderGray">
+                <span className="text-subtitle font-pmedium">Verification</span>
+              </div>
+              <div className="grid grid-cols sm:grid-cols-1 md:grid-cols-2 gap-4 p-4 ">
+                {/* <Controller
+                  name="idProof.idType"
+                  control={control}
+                  rules={{ required: "Id Type is required" }}
+                  render={({ field }) => (
+                    <TextField
+                      {...field}
+                      size="small"
+                      label="ID Type"
+                      select
+                      error={!!errors.idProof?.idType}
+                      helperText={errors.idProof?.idType?.message}
+                      fullWidth
+                    >
+                      <MenuItem value="" disabled>
+                        Select Id Type
+                      </MenuItem>
+                      {/* <MenuItem value="aadhar">Aadhar</MenuItem> */}
+                {/* <MenuItem value="pan">PAN</MenuItem> */}
+                {/* <MenuItem value="drivingLicense">
+                        Driving License
+                      </MenuItem> 
+                    </TextField>
+                  )}
+                /> */}
+                <Controller
+                  name="panNumber"
+                  control={control}
+                  rules={{
+                    required: "PAN Number is required",
+                  }}
+                  render={({ field }) => (
+                    <TextField
+                      {...field}
+                      size="small"
+                      label="PAN Number"
+                      fullWidth
+                      error={!!errors.panNumber}
+                      helperText={errors.panNumber?.message}
+                      onChange={(e) => {
+                        let value = e.target.value;
+
+                        field.onChange(value);
+                      }}
+                      value={field.value}
+                    />
+                  )}
+                />
+                <Controller
+                  name="panFile"
+                  control={control}
+                  rules={{
+                    validate: (value) =>
+                      watch("panFile") && !value
+                        ? "Please upload PAN file"
+                        : true,
+                  }}
+                  render={({ field, fieldState }) => (
+                    <UploadFileInput
+                      allowedExtensions={["pdf"]}
+                      value={field.value}
+                      onChange={field.onChange}
+                      previewType="pdf"
+                      // disabled={!watch("panFile")}
+                      error={!!fieldState.error}
+                      helperText={fieldState.error?.message}
+                      id="pan"
+                    />
+                  )}
+                />
+              </div>
+            </div>
+
+            <div></div>
+          </div>
+          <div className="grid grid-cols sm:grid-cols-1 md:grid-cols-2 gap-4">
+            {/*Others*/}
+            <div>
+              <div className="py-4 border-b-default border-borderGray">
+                <span className="text-subtitle font-pmedium">Others</span>
+              </div>
+              <div className="grid grid-cols sm:grid-cols-1 md:grid-cols-2 gap-4 p-4 ">
+                <Controller
+                  name="idProof.idType"
+                  control={control}
+                  rules={{ required: "Id Type is required" }}
+                  render={({ field }) => (
+                    <TextField
+                      {...field}
+                      size="small"
+                      label="ID Type"
+                      select
+                      error={!!errors.idProof?.idType}
+                      helperText={errors.idProof?.idType?.message}
+                      fullWidth
+                    >
+                      <MenuItem value="" disabled>
+                        Select Id Type
+                      </MenuItem>
+                      <MenuItem value="aadhar">Aadhar</MenuItem>
+                      <MenuItem value="drivingLicense">
+                        Driving License
+                      </MenuItem>
+                    </TextField>
+                  )}
+                />
+                <Controller
+                  name="idProof.idNumber"
+                  control={control}
+                  rules={{
+                    required: "ID Number is required",
+                    validate: (value) => {
+                      if (selectedIdType === "aadhar") {
+                        const regex = /^\d{4}-\d{4}-\d{4}$/;
+                        if (!regex.test(value))
+                          return "Aadhar must be in 1234-5678-9012 format";
+                      }
+                      if (selectedIdType === "pan") {
+                        const regex = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
+                        if (!regex.test(value))
+                          return "PAN must be in format: ABCDE1234F";
+                      }
+                      if (selectedIdType === "drivingLicense") {
+                        const regex = /^[A-Z]{2}[0-9]{2}\s?[0-9]{11}$/;
+                        if (!regex.test(value))
+                          return "DL must be like MH12 12345678901";
+                      }
+                      return true;
+                    },
+                  }}
+                  render={({ field }) => (
+                    <TextField
+                      {...field}
+                      size="small"
+                      label="ID Number"
+                      fullWidth
+                      error={!!errors.idProof?.idNumber}
+                      helperText={errors.idProof?.idNumber?.message}
+                      onChange={(e) => {
+                        let value = e.target.value;
+
+                        if (selectedIdType === "aadhar") {
+                          // Remove non-digit characters first
+                          value = value.replace(/\D/g, "").slice(0, 12);
+
+                          // Auto-insert hyphens after every 4 digits
+                          const parts = value.match(/.{1,4}/g);
+                          if (parts) value = parts.join("-");
+                        }
+
+                        field.onChange(value);
+                      }}
+                      value={field.value}
+                    />
+                  )}
+                />
+                <Controller
+                  name="othersFile"
+                  control={control}
+                  rules={{
+                    validate: (value) =>
+                      watch("othersFile") && !value
+                        ? "Please upload file"
+                        : true,
+                  }}
+                  render={({ field, fieldState }) => (
+                    <UploadFileInput
+                      allowedExtensions={["pdf"]}
+                      value={field.value}
+                      onChange={field.onChange}
+                      previewType="pdf"
+                      // disabled={!watch("othersFile")}
+                      error={!!fieldState.error}
+                      helperText={fieldState.error?.message}
+                      id="others"
+                    />
+                  )}
+                />
+              </div>
+            </div>
+
+            {/*TIMINGS*/}
             <div>
               <div className="py-4 border-b-default border-borderGray">
                 <span className="text-subtitle font-pmedium">Timings</span>
@@ -533,125 +807,6 @@ const AddClient = () => {
                     )}
                   />
                 </LocalizationProvider>
-              </div>
-            </div>
-            <div>
-              <div className="py-4 border-b-default border-borderGray">
-                <span className="text-subtitle font-pmedium">Verification</span>
-              </div>
-              <div className="grid grid-cols sm:grid-cols-1 md:grid-cols-2 gap-4 p-4 ">
-                <Controller
-                  name="idProof.idType"
-                  control={control}
-                  rules={{ required: "Id Type is required" }}
-                  render={({ field }) => (
-                    <TextField
-                      {...field}
-                      size="small"
-                      label="ID Type"
-                      select
-                      error={!!errors.idProof?.idType}
-                      helperText={errors.idProof?.idType?.message}
-                      fullWidth
-                    >
-                      <MenuItem value="" disabled>
-                        Select Id Type
-                      </MenuItem>
-                      {/* <MenuItem value="aadhar">Aadhar</MenuItem> */}
-                      <MenuItem value="pan">PAN</MenuItem>
-                      {/* <MenuItem value="drivingLicense">
-                        Driving License
-                      </MenuItem> */}
-                    </TextField>
-                  )}
-                />
-                <Controller
-                  name="idProof.idNumber"
-                  control={control}
-                  rules={{
-                    required: "ID Number is required",
-                    validate: (value) => {
-                      if (selectedIdType === "aadhar") {
-                        const regex = /^\d{4}-\d{4}-\d{4}$/;
-                        if (!regex.test(value))
-                          return "Aadhar must be in 1234-5678-9012 format";
-                      }
-                      if (selectedIdType === "pan") {
-                        const regex = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
-                        if (!regex.test(value))
-                          return "PAN must be in format: ABCDE1234F";
-                      }
-                      if (selectedIdType === "drivingLicense") {
-                        const regex = /^[A-Z]{2}[0-9]{2}\s?[0-9]{11}$/;
-                        if (!regex.test(value))
-                          return "DL must be like MH12 12345678901";
-                      }
-                      return true;
-                    },
-                  }}
-                  render={({ field }) => (
-                    <TextField
-                      {...field}
-                      size="small"
-                      label="ID Number"
-                      fullWidth
-                      error={!!errors.idProof?.idNumber}
-                      helperText={errors.idProof?.idNumber?.message}
-                      onChange={(e) => {
-                        let value = e.target.value;
-
-                        if (selectedIdType === "aadhar") {
-                          // Remove non-digit characters first
-                          value = value.replace(/\D/g, "").slice(0, 12);
-
-                          // Auto-insert hyphens after every 4 digits
-                          const parts = value.match(/.{1,4}/g);
-                          if (parts) value = parts.join("-");
-                        }
-
-                        field.onChange(value);
-                      }}
-                      value={field.value}
-                    />
-                  )}
-                />
-              </div>
-            </div>
-            <div>
-              <div className="py-4 border-b-default border-borderGray">
-                <span className="text-subtitle font-pmedium">GST</span>
-              </div>
-              <div className="grid grid-cols sm:grid-cols-1 md:grid-cols-2 gap-4 p-4 ">
-                <Controller
-                  name="gst"
-                  control={control}
-                  rules={{
-                    required: "GST Number is required",
-                    validate: (value) => {
-                      const regex =
-                        /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
-                      if (!regex.test(value))
-                        return "Provided GST number is invalid";
-                      else return true;
-                    },
-                  }}
-                  render={({ field }) => (
-                    <TextField
-                      {...field}
-                      size="small"
-                      label="GST Number"
-                      fullWidth
-                      error={!!errors.gst}
-                      helperText={errors.gst?.message}
-                      onChange={(e) => {
-                        let value = e.target.value;
-
-                        field.onChange(value);
-                      }}
-                      value={field.value}
-                    />
-                  )}
-                />
               </div>
             </div>
           </div>
