@@ -36,8 +36,6 @@ const AdminOfficesNew = () => {
       };
     });
 
-    console.log("table data : ", tableData)
-
   const chartData = tableData.map((unit) => ({
     unitNo: unit.unitNo,
     occupied: unit.clientsCount,

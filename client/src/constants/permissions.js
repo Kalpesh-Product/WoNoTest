@@ -649,6 +649,22 @@ export const PERMISSIONS = {
     type: "read",
     route: "/app/dashboard/sales-dashboard/data/vendor",
   },
+  //Settings
+  SALES_BULK_UPLOAD: {
+    value: "bulk_upload",
+    type: "read",
+    route: "/app/dashboard/sales-dashboard/settings/bulk-upload",
+  },
+  SALES_SOPS: {
+    value: "sops",
+    type: "read",
+    route: "/app/dashboard/sales-dashboard/settings/sops",
+  },
+  SALES_POLICIES: {
+    value: "policies",
+    type: "read",
+    route: "/app/dashboard/sales-dashboard/settings/policies",
+  },
 
   // HR Module
 
@@ -844,65 +860,81 @@ export const PERMISSIONS = {
     type: "read",
     route: "/app/dashboard/HR-dashboard/data/vendor",
   },
+  //Settings
+  HR_BULK_UPLOAD: {
+    value: "bulk_upload",
+    type: "read",
+    route: "/app/dashboard/hr-dashboard/settings/bulk-upload",
+  },
+  HR_SOPS: {
+    value: "sops",
+    type: "read",
+    route: "/app/dashboard/hr-dashboard/settings/sops",
+  },
+  HR_POLICIES: {
+    value: "policies",
+    type: "read",
+    route: "/app/dashboard/hr-dashboard/settings/policies",
+  },
 
   // 🟡 Admin Dashboard
-  ADMIN_ANNUAL_EXPENSES: { value: "admin_annual_expenses", type: "read" },
-  ADMIN_INVENTORY: { value: "admin_inventory", type: "read" },
-  ADMIN_FINANCE: { value: "admin_finance", type: "read" },
-  ADMIN_MIX_BAG: { value: "admin_mix_bag", type: "read" },
-  ADMIN_DATA: { value: "admin_data", type: "read" },
-  ADMIN_SETTINGS: { value: "admin_settings", type: "read" },
+  ADMIN_ANNUAL_EXPENSES: { value: "annual_expenses", type: "read" },
+  ADMIN_INVENTORY: { value: "inventory", type: "read" },
+  ADMIN_FINANCE: { value: "finance", type: "read" },
+  ADMIN_MIX_BAG: { value: "mix_bag", type: "read" },
+  ADMIN_DATA: { value: "data", type: "read" },
+  ADMIN_SETTINGS: { value: "settings", type: "read" },
   // 🟡 Admin Graphs
-  ADMIN_DEPARTMENT_EXPENSE: { value: "admin_department_expense", type: "read" },
+  ADMIN_DEPARTMENT_EXPENSE: { value: "department_expense", type: "read" },
   // 🟡 Admin Data Cards
   ADMIN_TOTAL_ADMIN_OFFICES: {
-    value: "admin_total_admin_offices",
+    value: "total_admin_offices",
     type: "read",
   },
-  ADMIN_MONTHLY_DUE_TASKS: { value: "admin_monthly_due_tasks", type: "read" },
-  ADMIN_MONTHLY_EXPENSE: { value: "admin_monthly_expense", type: "read" },
-  ADMIN_TOP_EXECUTIVE: { value: "admin_top_executive", type: "read" },
-  ADMIN_EXPENSE_PER_SQFT: { value: "admin_expense_per_sqft", type: "read" },
+  ADMIN_MONTHLY_DUE_TASKS: { value: "monthly_due_tasks", type: "read" },
+  ADMIN_MONTHLY_EXPENSE: { value: "monthly_expense", type: "read" },
+  ADMIN_TOP_EXECUTIVE: { value: "top_executive", type: "read" },
+  ADMIN_EXPENSE_PER_SQFT: { value: "expense_per_sqft", type: "read" },
   ADMIN_ELECTRICITY_EXPENSE_PER_SQFT: {
-    value: "admin_electricity_expense_per_sqft",
+    value: "electricity_expense_per_sqft",
     type: "read",
   },
   // 🟡 Admin Tables
   ADMIN_WEEKLY_EXECUTIVE_SHIFT_TIMING: {
-    value: "admin_weekly_executive_shift_timing",
+    value: "weekly_executive_shift_timing",
     type: "read",
   },
   ADMIN_UPCOMING_EVENTS_LIST: {
-    value: "admin_upcoming_events_list",
+    value: "upcoming_events_list",
     type: "read",
   },
   ADMIN_UPCOMING_CLIENT_MEMBER_BIRTHDAYS: {
-    value: "admin_upcoming_client_member_birthdays",
+    value: "upcoming_client_member_birthdays",
     type: "read",
   },
   ADMIN_UPCOMING_CLIENT_ANNIVERSARIES: {
-    value: "admin_upcoming_client_anniversaries",
+    value: "upcoming_client_anniversaries",
     type: "read",
   },
   ADMIN_NEWLY_JOINED_HOUSE_KEEPING_MEMBERS: {
-    value: "admin_newly_joined_house_keeping_members",
+    value: "newly_joined_house_keeping_members",
     type: "read",
   },
   // 🟡 Admin Pie Charts
   ADMIN_UNIT_WISE_DUE_TASKS: {
-    value: "admin_unit_wise_due_tasks",
+    value: "unit_wise_due_tasks",
     type: "read",
   },
   ADMIN_EXECUTIVE_WISE_DUE_TASKS: {
-    value: "admin_executive_wise_due_tasks",
+    value: "executive_wise_due_tasks",
     type: "read",
   },
   ADMIN_TOTAL_DESKS_COMPANY_WISE: {
-    value: "admin_total_desks_company_wise",
+    value: "total_desks_company_wise",
     type: "read",
   },
   ADMIN_BIOMETRICS_GENDER_DATA: {
-    value: "admin_biometrics_gender_data",
+    value: "biometrics_gender_data",
     type: "read",
   },
   // Finance
@@ -926,19 +958,19 @@ export const PERMISSIONS = {
 
   // Housekeeping Members
   ADMIN_HOUSEKEEPING_MEMBERS_LIST: {
-    value: "admin_housekeeping_members_list",
+    value: "housekeeping_members_list",
     type: "read",
     route:
       "/app/dashboard/admin-dashboard/mix-bag/housekeeping-members/members-list",
   },
   ADMIN_HOUSEKEEPING_MEMBER_ONBOARD: {
-    value: "admin_housekeeping_member_onboard",
+    value: "housekeeping_member_onboard",
     type: "read",
     route:
       "/app/dashboard/admin-dashboard/mix-bag/housekeeping-members/member-onboard",
   },
   ADMIN_HOUSEKEEPING_ASSIGN_ROTATION: {
-    value: "admin_housekeeping_assign_rotation",
+    value: "housekeeping_assign_rotation",
     type: "read",
     route:
       "/app/dashboard/admin-dashboard/mix-bag/housekeeping-members/member-schedule",
@@ -946,120 +978,199 @@ export const PERMISSIONS = {
 
   // Clients Members Data
   ADMIN_CLIENT_MEMBERS_DATA: {
-    value: "admin_client_members_data",
+    value: "client_members_data",
     type: "read",
     route:
       "/app/dashboard/admin-dashboard/mix-bag/client-members/client-members-data",
   },
   ADMIN_CLIENT_MEMBERS_ONBOARD: {
-    value: "admin_client_members_onboard",
+    value: "client_members_onboard",
     type: "read",
     route:
       "/app/dashboard/admin-dashboard/mix-bag/client-members/client-members-onboard",
   },
 
   // Data
-  ADMIN_INFRA_ELECTRICITY_EXPENSES: {
-    value: "admin_infra_electricity_expenses",
+  ADMIN_ELECTRICITY_EXPENSES: {
+    value: "electricity_expenses",
     type: "read",
     route:
       "/app/dashboard/admin-dashboard/mix-bag/infra-expenses/electricity-expenses",
   },
-  ADMIN_INFRA_ASSET_LIST: {
-    value: "admin_infra_asset_list",
+  ADMIN_ASSET_LIST: {
+    value: "asset_list",
     type: "read",
     route: "/app/dashboard/admin-dashboard/mix-bag/infra-expenses/asset-list",
   },
-  ADMIN_INFRA_MONTHLY_INVOICE_REPORTS: {
-    value: "admin_infra_monthly_invoice_reports",
+  ADMIN_MONTHLY_INVOICE_REPORTS: {
+    value: "monthly_invoice_reports",
     type: "read",
     route:
       "/app/dashboard/admin-dashboard/mix-bag/infra-expenses/monthly-invoice-reports",
   },
-  ADMIN_INFRA_VENDOR: {
-    value: "admin_infra_vendor",
+  ADMIN_VENDOR: {
+    value: "vendor",
     type: "read",
     route: "/app/dashboard/admin-dashboard/mix-bag/infra-expenses/vendor",
+  },
+  //Settings
+  ADMIN_MODULE_BULK_UPLOAD: {
+    value: "bulk_upload",
+    type: "read",
+    route: "/app/dashboard/admin-dashboard/settings/bulk-upload",
+  },
+  ADMIN_MODULE_SOPS: {
+    value: "sops",
+    type: "read",
+    route: "/app/dashboard/admin-dashboard/settings/sops",
+  },
+  ADMIN_MODULE_POLICIES: {
+    value: "policies",
+    type: "read",
+    route: "/app/dashboard/admin-dashboard/settings/policies",
   },
 
   // 🟢 Maintenance Dashboard
 
   // 🟢 Maintenance Graphs
   MAINTENANCE_DEPARTMENT_EXPENSES: {
-    value: "maintenance_department_expenses",
+    value: "department_expenses",
     type: "read",
   },
 
   // 🟢 Maintenance Nav Cards
   MAINTENANCE_ANNUAL_EXPENSES: {
-    value: "maintenance_annual_expenses",
+    value: "annual_expenses",
     type: "read",
   },
-  MAINTENANCE_INVENTORY: { value: "maintenance_inventory", type: "read" },
-  MAINTENANCE_FINANCE: { value: "maintenance_finance", type: "read" },
-  MAINTENANCE_MIX_BAG: { value: "maintenance_mix_bag", type: "read" },
-  MAINTENANCE_DATA: { value: "maintenance_data", type: "read" },
-  MAINTENANCE_SETTINGS: { value: "maintenance_settings", type: "read" },
+  MAINTENANCE_INVENTORY: { value: "inventory", type: "read" },
+  MAINTENANCE_FINANCE: { value: "finance", type: "read" },
+  MAINTENANCE_MIX_BAG: { value: "mix_bag", type: "read" },
+  MAINTENANCE_DATA: { value: "data", type: "read" },
+  MAINTENANCE_SETTINGS: { value: "settings", type: "read" },
   // 🟢 Maintenance Data Cards
   MAINTENANCE_OFFICES_UNDER_MANAGEMENT: {
-    value: "maintenance_offices_under_management",
+    value: "offices_under_management",
     type: "read",
   },
   MAINTENANCE_MONTHLY_DUE_TASKS: {
-    value: "maintenance_monthly_due_tasks",
+    value: "monthly_due_tasks",
     type: "read",
   },
   MAINTENANCE_MONTHLY_EXPENSE: {
-    value: "maintenance_monthly_expense",
+    value: "monthly_expense",
     type: "read",
   },
   MAINTENANCE_EXPENSE_PER_SQFT: {
-    value: "maintenance_expense_per_sqft",
+    value: "expense_per_sqft",
     type: "read",
   },
   MAINTENANCE_ASSETS_UNDER_MANAGEMENT: {
-    value: "maintenance_assets_under_management",
+    value: "assets_under_management",
     type: "read",
   },
   MAINTENANCE_MONTHLY_KPA: {
-    value: "maintenance_monthly_kpa",
+    value: "monthly_kpa",
     type: "read",
   },
 
   //Tables
   MAINTENANCE_TOP_HIGH_PRIORITY_TASKS: {
-    value: "maintenance_top_high_priority_tasks",
+    value: "top_high_priority_tasks",
     type: "read",
   },
   MAINTENANCE_WEEKLY_EXECUTIVE_SHIFT_TIMING: {
-    value: "maintenance_weekly_executive_shift_timing",
+    value: "weekly_executive_shift_timing",
     type: "read",
   },
 
   //Pie Charts
   MAINTENANCE_CATEGORY_WISE_MAINTENANCE: {
-    value: "maintenance_category_wise_maintenance",
+    value: "category_wise_maintenance",
     type: "read",
   },
   MAINTENANCE_DUE_MAINTENANCE: {
-    value: "maintenance_due_maintenance",
+    value: "due_maintenance",
     type: "read",
   },
   MAINTENANCE_UNIT_WISE_MAINTENANCE: {
-    value: "maintenance_unit_wise_maintenance",
+    value: "unit_wise_maintenance",
     type: "read",
   },
   MAINTENANCE_EXECUTION_CHANNEL: {
-    value: "maintenance_execution_channel",
+    value: "execution_channel",
     type: "read",
   },
   MAINTENANCE_AVERAGE_MONTHLY_DUE: {
-    value: "maintenance_average_monthly_due",
+    value: "average_monthly_due",
     type: "read",
   },
   MAINTENANCE_AVERAGE_YEARLY_DUE: {
-    value: "maintenance_average_yearly_due",
+    value: "average_yearly_due",
     type: "read",
+  },
+
+  //Finance
+  MAINTENANCE_BUDGET: {
+    value: "budget",
+    type: "read",
+    route: "/app/dashboard/maintenance-dashboard/finance/budget",
+  },
+
+  MAINTENANCE_PAYMENT_SCHEDULE: {
+    value: "payment_schedule",
+    type: "read",
+    route: "/app/dashboard/maintenance-dashboard/finance/payment-schedule",
+  },
+
+  MAINTENANCE_VOUCHER: {
+    value: "voucher",
+    type: "read",
+    route: "/app/dashboard/maintenance-dashboard/finance/voucher",
+  },
+
+  //Data
+  MAINTENANCE_AMC_RECORDS: {
+    value: "amc_records",
+    type: "read",
+    route: "/app/dashboard/maintenance-dashboard/data/amc-records",
+  },
+
+  MAINTENANCE_ASSET_LIST: {
+    value: "asset_list",
+    type: "read",
+    route: "/app/dashboard/maintenance-dashboard/data/asset-list",
+  },
+
+  MAINTENANCE_MONTHLY_INVOICE_REPORTS: {
+    value: "monthly_invoice_reports",
+    type: "read",
+    route: "/app/dashboard/maintenance-dashboard/data/monthly-invoice-reports",
+  },
+
+  MAINTENANCE_VENDOR: {
+    value: "vendor",
+    type: "read",
+    route: "/app/dashboard/maintenance-dashboard/data/vendor",
+  },
+
+  //Settings
+  MAINTENANCE_BULK_UPLOAD: {
+    value: "bulk_upload",
+    type: "read",
+    route: "/app/dashboard/maintenance-dashboard/settings/bulk-upload",
+  },
+
+  MAINTENANCE_SOPS: {
+    value: "sops",
+    type: "read",
+    route: "/app/dashboard/maintenance-dashboard/settings/sops",
+  },
+
+  MAINTENANCE_POLICIES: {
+    value: "policies",
+    type: "read",
+    route: "/app/dashboard/maintenance-dashboard/settings/policies",
   },
 
   // 🔵 IT Dashboard
@@ -1120,6 +1231,160 @@ export const PERMISSIONS = {
   IT_BIOMETRICS_GENDER_DATA: { value: "biometrics_gender_data", type: "read" },
   IT_CLIENT_WISE_COMPLAINTS: { value: "client_wise_complaints", type: "read" },
   IT_TYPE_OF_IT_COMPLAINTS: { value: "type_of_it_complaints", type: "read" },
+
+  //Finance
+  IT_BUDGET: {
+    value: "budget",
+    type: "read",
+    route: "/app/dashboard/IT-dashboard/finance/budget",
+  },
+
+  IT_PAYMENT_SCHEDULE: {
+    value: "payment_schedule",
+    type: "read",
+    route: "/app/dashboard/IT-dashboard/finance/payment-schedule",
+  },
+
+  IT_VOUCHER: {
+    value: "voucher",
+    type: "read",
+    route: "/app/dashboard/IT-dashboard/finance/voucher",
+  },
+
+  //Data
+  IT_AMC_RECORDS: {
+    value: "amc_records",
+    type: "read",
+    route: "/app/dashboard/IT-dashboard/data/amc-records",
+  },
+  IT_ASSET_LIST: {
+    value: "asset_list",
+    type: "read",
+    route: "/app/dashboard/IT-dashboard/data/asset-list",
+  },
+  IT_MONTHLY_INVOICE_REPORTS: {
+    value: "monthly_invoice_reports",
+    type: "read",
+    route: "/app/dashboard/IT-dashboard/data/monthly-invoice-reports",
+  },
+  IT_VENDOR: {
+    value: "vendor",
+    type: "read",
+    route: "/app/dashboard/IT-dashboard/data/vendor",
+  },
+  //Settings
+  IT_BULK_UPLOAD: {
+    value: "bulk_upload",
+    type: "read",
+    route: "/app/dashboard/IT-dashboard/settings/bulk-upload",
+  },
+
+  IT_SOPS: {
+    value: "sops",
+    type: "read",
+    route: "/app/dashboard/IT-dashboard/settings/sops",
+  },
+
+  IT_POLICIES: {
+    value: "policies",
+    type: "read",
+    route: "/app/dashboard/IT-dashboard/settings/policies",
+  },
+
+  // 🟣 Frontend Dashboard
+
+  //Graphs
+  FRONTEND_SITE_VISITORS: { value: "site_visitors", type: "read" },
+  FRONTEND_DEPARTMENT_EXPENSE: { value: "department_expense", type: "read" },
+  FRONTEND_WEBSITE_ISSUES_RAISED: {
+    value: "website_issues_raised",
+    type: "read",
+  },
+
+  //Nav cards
+  FRONTEND_EDIT_WEBSITE: {
+    value: "edit_website",
+    type: "read",
+    access: "page",
+  },
+  FRONTEND_NEW_THEMES: { value: "new_themes", type: "read", access: "page" },
+  FRONTEND_FINANCE: { value: "finance", type: "read", access: "page" },
+  FRONTEND_DATA: { value: "data", type: "read", access: "page" },
+  FRONTEND_SETTINGS: { value: "settings", type: "write", access: "page" },
+
+  //Pie charts
+  FRONTEND_NATION_WISE_SITE_VISITORS: {
+    value: "nation_wise_site_visitors",
+    type: "read",
+  },
+  FRONTEND_STATE_WISE_SITE_VISITORS: {
+    value: "state_wise_site_visitors",
+    type: "read",
+  },
+  //finance
+  FRONTEND_BUDGET: {
+    value: "budget",
+    type: "read",
+    route: "/app/dashboard/frontend-dashboard/finance/budget",
+  },
+
+  FRONTEND_PAYMENT_SCHEDULE: {
+    value: "payment_schedule",
+    type: "read",
+    route: "/app/dashboard/frontend-dashboard/finance/payment-schedule",
+  },
+
+  FRONTEND_VOUCHER: {
+    value: "voucher",
+    type: "read",
+    route: "/app/dashboard/frontend-dashboard/finance/voucher",
+  },
+
+  //Data
+  FRONTEND_LEADS: {
+    value: "leads",
+    type: "read",
+    route: "/app/dashboard/frontend-dashboard/data/leads",
+  },
+  FRONTEND_WEBSITE_ISSUE_REPORTS: {
+    value: "website_issue_reports",
+    type: "read",
+    route: "/app/dashboard/frontend-dashboard/data/website-issue-reports",
+  },
+  FRONTEND_ASSET_LIST: {
+    value: "asset_list",
+    type: "read",
+    route: "/app/dashboard/frontend-dashboard/data/asset-list",
+  },
+  FRONTEND_MONTHLY_INVOICE_REPORTS: {
+    value: "monthly_invoice_reports",
+    type: "read",
+    route: "/app/dashboard/frontend-dashboard/data/monthly-invoice-reports",
+  },
+  FRONTEND_VENDOR: {
+    value: "vendor",
+    type: "read",
+    route: "/app/dashboard/frontend-dashboard/data/vendor",
+  },
+
+  //Settings
+  FRONTEND_BULK_UPLOAD: {
+    value: "bulk_upload",
+    type: "read",
+    route: "/app/dashboard/frontend-dashboard/settings/bulk-upload",
+  },
+
+  FRONTEND_SOPS: {
+    value: "sops",
+    type: "read",
+    route: "/app/dashboard/frontend-dashboard/settings/sops",
+  },
+
+  FRONTEND_POLICIES: {
+    value: "policies",
+    type: "read",
+    route: "/app/dashboard/frontend-dashboard/settings/policies",
+  },
 
   ACCESS_PERMISSIONS: {
     value: "access_permissions",

@@ -638,9 +638,22 @@ const TasksDashboard = () => {
   // ✅ 1. Yearly Graph Config
   //---------------------------------------------
 
-  const yearlyGraph = configYearlyGrpah(PERMISSIONS.TASKS_OVERALL_AVERAGE_COMPLETION.value,"bargraph-hr-expense","OVERALL AVERAGE TASKS COMPLETION","TOTAL TASKS")
+   const taskGraphConfigs = [
+    {
+      key: PERMISSIONS.TASKS_OVERALL_AVERAGE_COMPLETION.value,
+      layout: 1,
+      data: series,
+      options:taskGraphOptions,
+      responsiveResize:true,
+      chartId:"bargraph-hr-expense",
+      title: "OVERALL AVERAGE TASKS COMPLETION",
+      titleAmountLabel:"Total Tasks", 
+      titleAmount:totalTasksForYear, 
+      onYearChange:{handleYearChange}
+    },
+  ];
 
-  const allowedGraph = filterPermissions(yearlyGraph,userPermissions)
+  const allowedGraph = filterPermissions(taskGraphConfigs,userPermissions)
  
 
   //---------------------------------------------

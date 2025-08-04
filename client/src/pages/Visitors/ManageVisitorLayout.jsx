@@ -37,7 +37,6 @@ const ManageVisitorLayout = () => {
   // );
 
   return (
-  
     <TabLayout
       basePath="/app/visitors/manage-visitors"
       defaultTabPath="internal-visitors"

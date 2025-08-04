@@ -13,22 +13,22 @@ const AdminData = () => {
   {
     label: "Electricity Consumption & Expenses",
     path: "electricity-expenses",
-    permission: PERMISSIONS.ADMIN_INFRA_ELECTRICITY_EXPENSES.value,
+    permission: PERMISSIONS.ADMIN_ELECTRICITY_EXPENSES.value,
   },
   {
     label: "Asset List",
     path: "asset-list",
-    permission: PERMISSIONS.ADMIN_INFRA_ASSET_LIST.value,
+    permission: PERMISSIONS.ADMIN_ASSET_LIST.value,
   },
   {
     label: "Monthly Invoice Reports",
     path: "monthly-invoice-reports",
-    permission: PERMISSIONS.ADMIN_INFRA_MONTHLY_INVOICE_REPORTS.value,
+    permission: PERMISSIONS.ADMIN_MONTHLY_INVOICE_REPORTS.value,
   },
   {
     label: "Vendor",
     path: "vendor",
-    permission: PERMISSIONS.ADMIN_INFRA_VENDOR.value,
+    permission: PERMISSIONS.ADMIN_VENDOR.value,
   },
 ];
 
