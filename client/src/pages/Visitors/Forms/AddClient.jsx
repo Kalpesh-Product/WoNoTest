@@ -59,7 +59,7 @@ const AddClient = () => {
       panNumber: "",
       gstFile: "",
       panFile: "",
-      othersFile: "",
+      otherFile: "",
     },
   });
 
@@ -146,6 +146,7 @@ const AddClient = () => {
     const payload = {
       ...data,
       visitorFlag: "Client", // Identify this as a client visitor
+      visitorType:"Meeting",
       sector: data.sector,
       hoState: data.hoState,
       hoCity: data.hoCity,
@@ -167,7 +168,7 @@ const AddClient = () => {
     const formData = new FormData();
     formData.append("panFile", data.panFile);
     formData.append("gstFile", data.gstFile);
-    formData.append("otherFile", data.othersFile);
+    formData.append("otherFile", data.otherFile);
     for (const key in payload) {
       if (payload[key] !== undefined && payload[key] !== null) {
         formData.append(key, payload[key]);
@@ -725,11 +726,11 @@ const AddClient = () => {
                   )}
                 />
                 <Controller
-                  name="othersFile"
+                  name="otherFile"
                   control={control}
                   rules={{
                     validate: (value) =>
-                      watch("othersFile") && !value
+                      watch("otherFile") && !value
                         ? "Please upload file"
                         : true,
                   }}
@@ -739,7 +740,7 @@ const AddClient = () => {
                       value={field.value}
                       onChange={field.onChange}
                       previewType="pdf"
-                      // disabled={!watch("othersFile")}
+                      // disabled={!watch("otherFile")}
                       error={!!fieldState.error}
                       helperText={fieldState.error?.message}
                       id="others"

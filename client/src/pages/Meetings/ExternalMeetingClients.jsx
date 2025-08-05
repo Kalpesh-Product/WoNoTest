@@ -91,13 +91,22 @@ const ExternalMeetingCLients = () => {
     control: paymentControl,
     reset: resetPaymentForm,
     formState: { errors: paymentErrors },
+    setValue: setPaymentValue,
+    watch: paymentWatch,
   } = useForm({
     defaultValues: {
       amount: "",
       method: "",
       transactionId: "",
+      paymentProof: "",
+      discountAmount: "",
+      discountPercentage: "",
+      gstAmount: "",
+      finalAmount: "",
     },
   });
+
+  const watchedDiscountAmount = paymentWatch("discountAmount");
 
   const {
     handleSubmit: cancelMeetingSubmit,
@@ -164,6 +173,19 @@ const ExternalMeetingCLients = () => {
       paymentMode: meeting.paymentMode ?? "",
       paymentStatus: meeting.paymentStatus ?? false,
     }));
+
+  //Fetch Single Room
+  const { data: room = {}, isLoading: isRoomLoading } = useQuery({
+    queryKey: ["room"],
+    queryFn: async () => {
+    
+      const response = await axios.get(
+        `/api/meetings/get-room/${paymentMeeting.roomName}`
+      );
+      return response.data;
+    },
+    enabled: !!paymentMeeting?.roomName,
+  });
 
   // API mutation for submitting housekeeping tasks
   const housekeepingMutation = useMutation({
@@ -297,8 +319,6 @@ const ExternalMeetingCLients = () => {
     }
   }, [selectedMeeting]);
 
-  console.log("selected meeting : ");
-
   //---------------------------------Event handlers----------------------------------------//
 
   const handleOpenChecklistModal = (mode, meetingId) => {
@@ -360,12 +380,7 @@ const ExternalMeetingCLients = () => {
 
   const handleOpenPaymentModal = (meeting) => {
     setPaymentMeeting(meeting);
-    resetPaymentForm({
-      amount: meeting.paymentDetails?.amount || "",
-      method: meeting.paymentDetails?.method || "",
-      transactionId: meeting.paymentDetails?.transactionId || "",
-    });
-    setOpenPaymentModal(true);
+    setOpenPaymentModal(true); // open the modal
   };
 
   const handleClosePaymentModal = () => {
@@ -442,6 +457,25 @@ const ExternalMeetingCLients = () => {
 
     housekeepingMutation.mutate(payload);
   };
+  useEffect(() => {
+    if (!isRoomLoading && room?.perHourPrice) {
+      const finalAmount = room.perHourPrice + room.perHourGstPrice;
+      setPaymentValue("amount", room.perHourPrice);
+      setPaymentValue("gstAmount", room.perHourGstPrice);
+      setPaymentValue("finalAmount", finalAmount);
+    }
+  }, [room, isRoomLoading]);
+
+  useEffect(() => {
+    if (!isRoomLoading) {
+      const calculatedAmount = room?.perHourPrice + room?.perHourGstPrice;
+      const discountPercentage = ((watchedDiscountAmount / calculatedAmount) * 100).toFixed(2);
+      const finalAmount = calculatedAmount - watchedDiscountAmount;
+    
+      setPaymentValue("discountPercentage", discountPercentage);
+      setPaymentValue("finalAmount", finalAmount);
+    }
+  }, [watchedDiscountAmount,room, isRoomLoading]);
 
   //---------------------------------Event handlers----------------------------------------//
 
@@ -1099,23 +1133,96 @@ const ExternalMeetingCLients = () => {
             });
           })}
         >
+          <div className="flex gap-4 items-center">
+            <Controller
+              name="amount"
+              control={paymentControl}
+              rules={{ required: "Amount is required" }}
+              render={({ field }) => (
+                <TextField
+                  {...field}
+                  disabled
+                  label="Amount"
+                  type="number"
+                  size="small"
+                  fullWidth
+                  error={!!paymentErrors.amount}
+                  helperText={paymentErrors.amount?.message}
+                />
+              )}
+            />
+            <Controller
+              name="gstAmount"
+              control={paymentControl}
+              rules={{ required: "GST Amount is required" }}
+              render={({ field }) => (
+                <TextField
+                  {...field}
+                  disabled
+                  label="GST Amount"
+                  type="number"
+                  size="small"
+                  fullWidth
+                  error={!!paymentErrors.gstAmount}
+                  helperText={paymentErrors.gstAmount?.message}
+                />
+              )}
+            />
+          </div>
+
+          <div className="flex gap-4 items-center">
+            <Controller
+              name="discountAmount"
+              control={paymentControl}
+              rules={{ required: "Discount Amount is required" }}
+              render={({ field }) => (
+                <TextField
+                  {...field}
+                  label="Discount Amount"
+                  type="number"
+                  size="small"
+                  fullWidth
+                  error={!!paymentErrors.discountAmount}
+                  helperText={paymentErrors.discountAmount?.message}
+                />
+              )}
+            />
+            <Controller
+              name="discountPercentage"
+              control={paymentControl}
+              render={({ field }) => (
+                <TextField
+                  {...field}
+                  disabled
+                  label="Discount %"
+                  type="string"
+                  size="small"
+                  fullWidth
+                  error={!!paymentErrors.discountPercentage}
+                  helperText={paymentErrors.discountPercentage?.message}
+                />
+              )}
+            />
+          </div>
           <Controller
-            name="amount"
+            name="finalAmount"
             control={paymentControl}
-            rules={{ required: "Amount is required" }}
+            rules={{ required: "Final Amount is required" }}
             render={({ field }) => (
               <TextField
                 {...field}
-                label="Amount"
+                disabled
+                label="Final Amount"
                 type="number"
                 size="small"
                 fullWidth
-                error={!!paymentErrors.amount}
-                helperText={paymentErrors.amount?.message}
+                error={!!paymentErrors.finalAmount}
+                helperText={paymentErrors.finalAmount?.message}
               />
             )}
           />
-          <Controller
+         <div className="flex gap-4 items-center">
+           <Controller
             name="paymentType"
             control={paymentControl}
             render={({ field }) => (
@@ -1154,8 +1261,9 @@ const ExternalMeetingCLients = () => {
               </TextField>
             )}
           />
+         </div>
           <Controller
-            name="invoiceFile"
+            name="paymentProof"
             control={paymentControl}
             render={({ field }) => (
               <UploadFileInput

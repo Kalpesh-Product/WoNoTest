@@ -22,6 +22,7 @@ const emitter = require("../../utils/eventEmitter");
 const { isValid } = require("date-fns/isValid");
 const Role = require("../../models/roles/Roles");
 const CoworkingMember = require("../../models/sales/CoworkingMembers");
+const { handleDocumentUpload } = require("../../config/cloudinaryConfig");
 
 const addMeetings = async (req, res, next) => {
   const logPath = "meetings/MeetingLog";
@@ -1210,22 +1211,16 @@ const updateMeeting = async (req, res, next) => {
 
   try {
     const { user, ip, company } = req;
-    const { paymentAmount, paymentMode, paymentStatus } = req.body;
+    const { paymentAmount, paymentMode, paymentStatus, discountAmount } =
+      req.body;
     const { meetingId } = req.params;
+    const paymentProofFile = req.file;
 
     if (!mongoose.Types.ObjectId.isValid(meetingId)) {
       return res.status(400).json({ message: "Invalid meeting Id provided" });
     }
 
-    const updatedMeeting = await Meeting.findByIdAndUpdate(
-      meetingId,
-      {
-        paymentAmount,
-        paymentMode,
-        paymentStatus: paymentStatus === "Paid" ? true : false,
-      },
-      { new: true }
-    ).populate([
+    const updatedMeeting = await Meeting.findById(meetingId).populate([
       { path: "bookedRoom" },
       { path: "externalClient", select: "clientCompany" },
     ]);
@@ -1253,9 +1248,8 @@ const updateMeeting = async (req, res, next) => {
     const perHourCost = updatedMeeting.bookedRoom.perHourPrice;
     const amountToBePaid = durationInHours * perHourCost;
 
-    const isValidAmount = Number(paymentAmount) === amountToBePaid;
-
-    // if (!isValidAmount) {
+    // Validate actual amount (optional)
+    // if (Number(paymentAmount) !== amountToBePaid) {
     //   throw new CustomError(
     //     `Actual amount is INR ${amountToBePaid}`,
     //     logPath,
@@ -1263,6 +1257,62 @@ const updateMeeting = async (req, res, next) => {
     //     logSourceKey
     //   );
     // }
+
+    // File Upload Handling
+    if (paymentProofFile) {
+      const allowedMimeTypes = [
+        "application/pdf",
+        "application/msword",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      ];
+
+      if (!allowedMimeTypes.includes(paymentProofFile.mimetype)) {
+        throw new CustomError(
+          "Invalid payment proof file type",
+          logPath,
+          logAction,
+          logSourceKey
+        );
+      }
+
+      let processedBuffer = paymentProofFile.buffer;
+      const originalFilename = paymentProofFile.originalname;
+
+      if (paymentProofFile.mimetype === "application/pdf") {
+        const pdfDoc = await PDFDocument.load(paymentProofFile.buffer);
+        pdfDoc.setTitle(originalFilename.split(".")[0] || "Untitled");
+        processedBuffer = await pdfDoc.save();
+      }
+
+      const response = await handleDocumentUpload(
+        processedBuffer,
+        `${company}/meetings/${meetingId}/payment-proof`,
+        originalFilename
+      );
+
+      if (!response.public_id) {
+        throw new CustomError(
+          "Failed to upload payment proof",
+          logPath,
+          logAction,
+          logSourceKey
+        );
+      }
+
+      updatedMeeting.paymentProof = {
+        name: originalFilename,
+        link: response.secure_url,
+        id: response.public_id,
+        date: new Date(),
+      };
+    }
+
+    updatedMeeting.paymentAmount = paymentAmount;
+    updatedMeeting.paymentMode = paymentMode;
+    updatedMeeting.paymentStatus = paymentStatus === "Paid";
+    updatedMeeting.discountAmount = discountAmount;
+
+    await updatedMeeting.save();
 
     const meetingRevenue = new MeetingRevenue({
       date: updatedMeeting.startDate,
@@ -1273,12 +1323,11 @@ const updateMeeting = async (req, res, next) => {
       totalAmount: paymentAmount,
       paymentDate: updatedMeeting.startDate,
       remarks: paymentMode,
-      // meetingRoomName: updatedMeeting.bookedRoom.name,
       meeting: updatedMeeting._id,
       hoursBooked: durationInHours,
     });
 
-    savedRevenue = await meetingRevenue.save();
+    const savedRevenue = await meetingRevenue.save();
 
     if (!savedRevenue) {
       throw new CustomError(
@@ -1300,7 +1349,7 @@ const updateMeeting = async (req, res, next) => {
 
     if (!updatedVisitor) {
       throw new CustomError(
-        "Failed to save meeting revenue",
+        "Failed to update visitor meeting reference",
         logPath,
         logAction,
         logSourceKey
@@ -1309,13 +1358,11 @@ const updateMeeting = async (req, res, next) => {
 
     return res.status(200).json({ message: "Meeting updated successfully" });
   } catch (error) {
-    if (error instanceof CustomError) {
-      next(error);
-    } else {
-      next(
-        new CustomError(error.message, logPath, logAction, logSourceKey, 500)
-      );
-    }
+    next(
+      error instanceof CustomError
+        ? error
+        : new CustomError(error.message, logPath, logAction, logSourceKey, 500)
+    );
   }
 };
 
@@ -1580,8 +1627,7 @@ const updateMeetingDetails = async (req, res, next) => {
         { $inc: { meetingCreditBalance: -creditDifference } },
         { new: true }
       );
-      console.log("newCreditsUsed", newCreditsUsed);
-      console.log("oldCreditsUsed", oldCreditsUsed);
+
       if (!updatedUser) {
         return res
           .status(400)

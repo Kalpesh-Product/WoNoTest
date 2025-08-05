@@ -24,6 +24,7 @@ const {
   addRoom,
   getRooms,
   updateRoom,
+  getSingleRoom,
 } = require("../controllers/meetingsControllers/roomsController");
 
 const router = require("express").Router();
@@ -35,6 +36,7 @@ router.post("/create-reply", replyReview);
 router.patch("/extend-meeting", extendMeeting);
 router.patch("/update-meeting-details", updateMeetingDetails);
 router.get("/get-rooms", getRooms);
+router.get("/get-room/:roomName", getSingleRoom);
 router.get("/get-meetings", getMeetings);
 router.get("/get-room-meetings/:roomId", getSingleRoomMeetings);
 router.get("/my-meetings", getMyMeetings);
@@ -45,7 +47,11 @@ router.patch("/create-housekeeping-tasks", addHousekeepingTask);
 router.delete("/delete-housekeeping-tasks", deleteHousekeepingTask);
 router.patch("/cancel-meeting/:meetingId", cancelMeeting);
 router.get("/get-available-users", getAvaliableUsers);
-router.patch("/update-meeting/:meetingId", updateMeeting); //Update payment details
+router.patch(
+  "/update-meeting/:meetingId",
+  upload.single("paymentProof"),
+  updateMeeting
+); //Update payment details
 router.patch("/update-meeting-status", updateMeetingStatus);
 router.get("/get-all-companies", getAllCompanies);
 

@@ -71,10 +71,10 @@ const fetchVisitors = async (req, res, next) => {
             path: "clientToMeet",
             select: "employeeName email",
           },
-          {
-            path: "clientCompany",
-            select: "clientName email",
-          },
+          // {
+          //   path: "clientCompany",
+          //   select: "clientName email",
+          // },
           {
             path: "meeting",
           },
@@ -99,10 +99,10 @@ const fetchVisitors = async (req, res, next) => {
             path: "clientToMeet",
             select: "employeeName email",
           },
-          {
-            path: "clientCompany",
-            select: "clientName email",
-          },
+          // {
+          //   path: "clientCompany",
+          //   select: "clientName email",
+          // },
           {
             path: "meeting",
           },
@@ -114,323 +114,6 @@ const fetchVisitors = async (req, res, next) => {
     next(error);
   }
 };
-
-// const addVisitor = async (req, res, next) => {
-//   const logPath = "visitor/VisitorLog";
-//   const logAction = "Add Visitor";
-//   const logSourceKey = "visitor";
-//   const { user, ip, company } = req;
-
-//   try {
-//     const {
-//       firstName,
-//       middleName,
-//       lastName,
-//       email,
-//       gender,
-//       phoneNumber,
-//       purposeOfVisit,
-//       idProof,
-//       sector,
-//       city,
-//       state,
-//       checkIn,
-//       checkOut,
-//       scheduledStartTime,
-//       scheduledEndTime,
-//       scheduledDate,
-//       toMeet,
-//       clientToMeet,
-//       toMeetCompany,
-//       department,
-//       visitorType,
-//       visitorCompany,
-//       visitorFlag,
-//       registeredClientCompany,
-//       brandName,
-//       gstNumber,
-//       panNumber,
-//     } = req.body;
-
-//     const visitDate = new Date();
-//     const clockIn = new Date(checkIn);
-//     const clockOut = checkOut ? new Date(checkOut) : null;
-//     const isScheduled = visitorType === "Scheduled";
-
-//     // Validate IDs
-//     if (toMeetCompany && !mongoose.Types.ObjectId.isValid(toMeetCompany)) {
-//       throw new CustomError(
-//         "Invalid to meet company's ID provided",
-//         logPath,
-//         logAction,
-//         logSourceKey
-//       );
-//     }
-
-//     if (toMeetCompany && !toMeet) {
-//       throw new CustomError(
-//         "Missing person to meet field",
-//         logPath,
-//         logAction,
-//         logSourceKey
-//       );
-//     }
-
-//     if (toMeet && !mongoose.Types.ObjectId.isValid(toMeet)) {
-//       throw new CustomError(
-//         "Invalid to meet ID provided",
-//         logPath,
-//         logAction,
-//         logSourceKey
-//       );
-//     }
-
-//     if (visitorFlag === "Client" && !email) {
-//       return res.status(400).json({ message: "Email is required" });
-//     }
-
-//     if (
-//       (visitorType === "Walk In" && !firstName) ||
-//       !lastName ||
-//       !phoneNumber ||
-//       !gender ||
-//       !purposeOfVisit
-//     ) {
-//       return res
-//         .status(400)
-//         .json({ message: "Missing required fields for walk-in visitor" });
-//     }
-
-//     // Scheduled-specific checks
-//     if (isScheduled) {
-//       if (!scheduledDate) {
-//         throw new CustomError(
-//           "Missing scheduled date for scheduled visitor",
-//           logPath,
-//           logAction,
-//           logSourceKey
-//         );
-//       }
-
-//       if (
-//         !firstName ||
-//         !lastName ||
-//         !phoneNumber ||
-//         !gender ||
-//         !purposeOfVisit ||
-//         !visitorCompany ||
-//         !clientToMeet ||
-//         !toMeetCompany ||
-//         !toMeet
-//       ) {
-//         return res
-//           .status(400)
-//           .json({ message: "Missing required fields for scheduled visitor" });
-//       }
-//       // if (!scheduledStartTime || !scheduledEndTime) {
-//       //   throw new CustomError(
-//       //     "Missing scheduled start/end time for scheduled visitor",
-//       //     logPath,
-//       //     logAction,
-//       //     logSourceKey
-//       //   );
-//       // }
-
-//       // Prevent overlap: check if any scheduled visitor is meeting the same person at overlapping time
-//       const overlappingVisitor = await Visitor.findOne({
-//         toMeet,
-//         visitorType: "Scheduled",
-//         company,
-//         scheduledDate,
-//         // $or: [
-//         //   {
-//         //     scheduledStartTime: {
-//         //       $lt: new Date(scheduledEndTime),
-//         //       $gte: new Date(scheduledStartTime),
-//         //     },
-//         //   },
-//         //   {
-//         //     scheduledEndTime: {
-//         //       $gt: new Date(scheduledStartTime),
-//         //       $lte: new Date(scheduledEndTime),
-//         //     },
-//         //   },
-//         // ],
-//       });
-
-//       if (overlappingVisitor) {
-//         throw new CustomError(
-//           "Another visitor is already scheduled to meet this person during that day.",
-//           logPath,
-//           logAction,
-//           logSourceKey
-//         );
-//       }
-//     }
-
-//     // Client member validation
-//     let foundClientMember = null;
-//     if (clientToMeet) {
-//       if (!mongoose.Types.ObjectId.isValid(clientToMeet)) {
-//         throw new CustomError(
-//           "Invalid client member Id provided",
-//           logPath,
-//           logAction,
-//           logSourceKey
-//         );
-//       }
-
-//       foundClientMember = await CoworkingMember.findById(clientToMeet);
-//       if (!foundClientMember) {
-//         throw new CustomError(
-//           "No client member found",
-//           logPath,
-//           logAction,
-//           logSourceKey
-//         );
-//       }
-//     }
-
-//     // Resolve visitor company
-//     let companyToMeet = null;
-//     const isClient = company !== toMeetCompany;
-
-//     if (toMeetCompany && isClient) {
-//       companyToMeet = await CoworkingClient.findById(toMeetCompany);
-//       if (!companyToMeet) {
-//         throw new CustomError(
-//           "Client company not found",
-//           logPath,
-//           logAction,
-//           logSourceKey
-//         );
-//       }
-//     } else if (toMeetCompany) {
-//       companyToMeet = await Company.findById(toMeetCompany);
-//       if (!companyToMeet) {
-//         throw new CustomError(
-//           "Company not found",
-//           logPath,
-//           logAction,
-//           logSourceKey
-//         );
-//       }
-//     }
-
-//     // Handle optional department
-//     const isDepartmentEmpty =
-//       department === null ||
-//       department === undefined ||
-//       (typeof department === "string" && department.trim() === "");
-
-//     console.log("isDepartment", isDepartmentEmpty);
-//     const newVisitor = new Visitor({
-//       firstName,
-//       middleName,
-//       lastName,
-//       email,
-//       gender,
-//       phoneNumber,
-//       purposeOfVisit,
-//       idProof: {
-//         idType: idProof?.idType || "",
-//         idNumber: idProof?.idNumber || "",
-//       },
-//       dateOfVisit: visitDate,
-//       checkIn: clockIn,
-//       checkOut: clockOut,
-//       // scheduledStartTime: scheduledStartTime
-//       //   ? new Date(scheduledStartTime)
-//       //   : null,
-//       // scheduledEndTime: scheduledEndTime ? new Date(scheduledEndTime) : null,
-//       scheduledDate: scheduledDate ? new Date(scheduledDate) : null,
-//       toMeet: isDepartmentEmpty ? null : toMeet,
-//       toMeetCompany: companyToMeet || null,
-//       clientToMeet: clientToMeet || null,
-//       sector,
-//       city,
-//       state,
-//       department: isDepartmentEmpty ? null : department,
-//       visitorType,
-//       visitorCompany,
-//       company,
-//       visitorFlag,
-//       registeredClientCompany,
-//       brandName,
-//       gstNumber,
-//       panNumber,
-//       gstFile: null,
-//       panFile: null,
-//       othersFile: null,
-//     });
-
-//     const savedVisitor = await newVisitor.save();
-
-//     // Notification that visitor was added
-
-//     // Fetch department employees (or the specific person being visited)
-
-//     if (!isDepartmentEmpty) {
-//       const foundDepartment = await Department.findById(department).select(
-//         "name"
-//       );
-
-//       let userDetails = await UserData.findById({
-//         _id: toMeet,
-//       });
-
-//       const deptEmployees = await UserData.find({
-//         departments: { $in: department },
-//       });
-
-//       emitter.emit("notification", {
-//         initiatorData: user,
-//         users:
-//           deptEmployees.length < 0
-//             ? []
-//             : deptEmployees.map((emp) => ({
-//                 userActions: {
-//                   whichUser: emp._id || null,
-//                   // whichUser: toMeet || clientToMeet || initiator._id, // send to the person being visited or fallback to initiator
-//                   hasRead: false,
-//                 },
-//               })),
-//         type: "add visitor",
-//         module: "Visitors",
-//         message: `Visitor ${firstName} ${lastName} has been registered to meet ${userDetails.firstName} ${userDetails.lastName} from ${foundDepartment.name} department.`,
-//       });
-//     }
-
-//     console.log(department);
-//     console.log("To Meet", toMeet);
-
-//     // Emit the visitor notification
-
-//     await createLog({
-//       path: logPath,
-//       action: logAction,
-//       remarks: "Visitor added successfully",
-//       status: "Success",
-//       user,
-//       ip,
-//       company,
-//       sourceKey: logSourceKey,
-//       sourceId: savedVisitor._id,
-//       changes: newVisitor,
-//     });
-
-//     return res.status(201).json({
-//       message: "Visitor added successfully",
-//       visitor: savedVisitor,
-//     });
-//   } catch (error) {
-//     next(
-//       error instanceof CustomError
-//         ? error
-//         : new CustomError(error.message, logPath, logAction, logSourceKey, 500)
-//     );
-//   }
-// };
 
 const addVisitor = async (req, res, next) => {
   const logPath = "visitor/VisitorLog";
@@ -471,7 +154,7 @@ const addVisitor = async (req, res, next) => {
 
     const gstFile = req.files?.gstFile?.[0];
     const panFile = req.files?.panFile?.[0];
-    const othersFile = req.files?.othersFile?.[0];
+    const otherFile = req.files?.otherFile?.[0];
 
     const allowedMimeTypes = [
       "application/pdf",
@@ -652,14 +335,14 @@ const addVisitor = async (req, res, next) => {
       gstNumber,
       panNumber,
     });
-    console.log("field");
+
     const companyData = await Company.findById(company).lean();
 
     // Upload and attach files
     const fileFields = [
       { file: gstFile, field: "gstFile" },
       { file: panFile, field: "panFile" },
-      { file: othersFile, field: "othersFile" },
+      { file: otherFile, field: "otherFile" },
     ];
 
     for (const { file, field } of fileFields) {
@@ -697,7 +380,6 @@ const addVisitor = async (req, res, next) => {
           );
         }
 
-        console.log("file", visitor[field]);
         visitor[field] = {
           link: uploadRes.secure_url,
           id: uploadRes.public_id,
