@@ -2,6 +2,7 @@ const Meeting = require("../../models/meetings/Meetings");
 const User = require("../../models/hr/UserData");
 const { default: mongoose } = require("mongoose");
 const Room = require("../../models/meetings/Rooms");
+const { PDFDocument } = require("pdf-lib");
 const {
   formatDate,
   formatTime,
@@ -523,6 +524,7 @@ const getMeetings = async (req, res, next) => {
             ? clientParticipants[index]
             : meeting.externalParticipants,
         reviews: meetingReviews ? meetingReviews : [],
+        discountAmount: meeting.discountAmount,
         company: meeting.company,
       };
     });
@@ -689,6 +691,7 @@ const getMyMeetings = async (req, res, next) => {
             ? clientParticipants[index]
             : meeting.externalParticipants,
         reviews: meetingReviews ? meetingReviews : [],
+        discountAmount: meeting.discountAmount,
         company: meeting.company,
       };
     });
@@ -1220,9 +1223,13 @@ const updateMeeting = async (req, res, next) => {
       return res.status(400).json({ message: "Invalid meeting Id provided" });
     }
 
+    if (!paymentAmount || !paymentMode || !paymentStatus || !paymentProofFile) {
+      return res.status(400).json({ message: "Missing required fields" });
+    }
+
     const updatedMeeting = await Meeting.findById(meetingId).populate([
       { path: "bookedRoom" },
-      { path: "externalClient", select: "clientCompany" },
+      { path: "externalClient", select: "registeredClientCompany" },
     ]);
 
     if (!updatedMeeting) {
@@ -1310,14 +1317,14 @@ const updateMeeting = async (req, res, next) => {
     updatedMeeting.paymentAmount = paymentAmount;
     updatedMeeting.paymentMode = paymentMode;
     updatedMeeting.paymentStatus = paymentStatus === "Paid";
-    updatedMeeting.discountAmount = discountAmount;
+    updatedMeeting.discountAmount = discountAmount ?? 0;
 
     await updatedMeeting.save();
 
     const meetingRevenue = new MeetingRevenue({
       date: updatedMeeting.startDate,
       company,
-      clientName: updatedMeeting.externalClient.clientCompany,
+      clientName: updatedMeeting.externalClient.registeredClientCompany,
       particulars: "Meeting room booking",
       costPerHour: updatedMeeting.bookedRoom.perHourPrice,
       totalAmount: paymentAmount,

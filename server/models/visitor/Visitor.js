@@ -74,12 +74,6 @@ const visitorSchema = new mongoose.Schema(
         type: String,
       },
     },
-    registeredClientCompany: {
-      type: String,
-    },
-    brandName: {
-      type: String,
-    },
     gstNumber: {
       type: String,
       match: [/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/],
@@ -124,6 +118,12 @@ const visitorSchema = new mongoose.Schema(
     // clientCompany: {
     //   type: String, //Add Client form
     // },
+    registeredClientCompany: {
+      type: String,
+    },
+    brandName: {
+      type: String,
+    },
     company: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Company",

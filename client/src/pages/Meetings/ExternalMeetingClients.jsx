@@ -96,7 +96,8 @@ const ExternalMeetingCLients = () => {
   } = useForm({
     defaultValues: {
       amount: "",
-      method: "",
+      paymentType: "",
+      paymentStatus: "",
       transactionId: "",
       paymentProof: "",
       discountAmount: "",
@@ -159,7 +160,8 @@ const ExternalMeetingCLients = () => {
 
   const transformedMeetings = filteredMeetings
     .filter((m) => m.meetingType === "External")
-    .map((meeting, index) => ({
+    .map((meeting, index) => {
+      return {
       ...meeting,
       date: meeting.date,
       bookedBy: meeting.bookedBy
@@ -169,16 +171,17 @@ const ExternalMeetingCLients = () => {
       endTime: meeting.endTime,
       extendTime: meeting.extendTime,
       srNo: index + 1,
-      paymentAmount: inrFormat(meeting.paymentAmount) ?? "N/A",
+      paymentAmount: meeting.paymentAmount ?? 0,
+      paymnetDiscountAmount: meeting.discountAmount ?? 0,
       paymentMode: meeting.paymentMode ?? "",
       paymentStatus: meeting.paymentStatus ?? false,
-    }));
+    }
+    });
 
   //Fetch Single Room
   const { data: room = {}, isLoading: isRoomLoading } = useQuery({
     queryKey: ["room"],
     queryFn: async () => {
-    
       const response = await axios.get(
         `/api/meetings/get-room/${paymentMeeting.roomName}`
       );
@@ -282,8 +285,13 @@ const ExternalMeetingCLients = () => {
     mutationKey: ["meeting-payment"],
     mutationFn: async (data) => {
       const response = await axios.patch(
-        `/api/meetings/update-meeting/${data.meetingId}`,
-        data
+        `/api/meetings/update-meeting/${data.get("meetingId")}`,
+        data,
+        {
+          headers: {
+            "Content-Type": "multipart/form-data",
+          },
+        }
       );
       return response.data;
     },
@@ -469,13 +477,16 @@ const ExternalMeetingCLients = () => {
   useEffect(() => {
     if (!isRoomLoading) {
       const calculatedAmount = room?.perHourPrice + room?.perHourGstPrice;
-      const discountPercentage = ((watchedDiscountAmount / calculatedAmount) * 100).toFixed(2);
+      const discountPercentage = (
+        (watchedDiscountAmount / calculatedAmount) *
+        100
+      ).toFixed(2);
       const finalAmount = calculatedAmount - watchedDiscountAmount;
-    
+
       setPaymentValue("discountPercentage", discountPercentage);
       setPaymentValue("finalAmount", finalAmount);
     }
-  }, [watchedDiscountAmount,room, isRoomLoading]);
+  }, [watchedDiscountAmount, room, isRoomLoading]);
 
   //---------------------------------Event handlers----------------------------------------//
 
@@ -565,7 +576,6 @@ const ExternalMeetingCLients = () => {
         const status = params.data.meetingStatus;
         const housekeepingStatus = params.data.housekeepingStatus;
         const isPaid = params.data.paymentStatus === true;
-        console.log("isPaid : ", isPaid);
         const isUpcoming = status === "Upcoming";
         const isCancelled = status === "Cancelled";
         const isOngoing = status === "Ongoing";
@@ -918,12 +928,17 @@ const ExternalMeetingCLients = () => {
             <div className="font-bold">Payment Details</div>
             <DetalisFormatted
               title="Amount"
-              detail={selectedMeeting?.paymentAmount}
+              detail={`INR ${inrFormat(selectedMeeting?.paymentAmount)}`}
+            />
+             <DetalisFormatted
+              title="Discount"
+              detail={`INR ${inrFormat(selectedMeeting?.paymnetDiscountAmount)}`}
             />
             <DetalisFormatted
               title="Mode"
               detail={selectedMeeting?.paymentMode || "N/A"}
             />
+           
             <DetalisFormatted
               title="Status"
               detail={selectedMeeting?.paymentStatus ? "Paid" : "Unpaid"}
@@ -1125,12 +1140,28 @@ const ExternalMeetingCLients = () => {
         <form
           className="flex flex-col gap-4"
           onSubmit={handlePaymentSubmit((data) => {
-            updatePayment({
-              paymentAmount: data?.amount,
-              paymentMode: data?.paymentType,
-              paymentStatus: data?.paymentStatus,
-              meetingId: paymentMeeting?._id,
-            });
+            console.log("Submitting form with data:", data);
+            const formData = new FormData();
+
+            formData.append("paymentAmount", data?.amount);
+            formData.append("paymentMode", data?.paymentType);
+            formData.append("paymentStatus", data?.paymentStatus);
+            formData.append("meetingId", paymentMeeting?._id);
+            formData.append("discountAmount", data?.discountAmount);
+
+            // If it's a file input (like a PDF or image):
+            if (data?.paymentProof) {
+              formData.append("paymentProof", data.paymentProof);
+            }
+            updatePayment(formData)
+            // updatePayment({
+            //   paymentAmount: data?.amount,
+            //   paymentMode: data?.paymentType,
+            //   paymentStatus: data?.paymentStatus,
+            //   meetingId: paymentMeeting?._id,
+            //   discountAmount: data.discountAmount,
+            //   paymentProof: data.paymentProof
+            // });
           })}
         >
           <div className="flex gap-4 items-center">
@@ -1174,7 +1205,6 @@ const ExternalMeetingCLients = () => {
             <Controller
               name="discountAmount"
               control={paymentControl}
-              rules={{ required: "Discount Amount is required" }}
               render={({ field }) => (
                 <TextField
                   {...field}
@@ -1221,47 +1251,47 @@ const ExternalMeetingCLients = () => {
               />
             )}
           />
-         <div className="flex gap-4 items-center">
-           <Controller
-            name="paymentType"
-            control={paymentControl}
-            render={({ field }) => (
-              <TextField
-                {...field}
-                size="small"
-                label="Payment Type"
-                select
-                fullWidth
-              >
-                <MenuItem value="" disabled>
-                  Select Payment Type
-                </MenuItem>
-                {paymentModes.map((p) => {
-                  return <MenuItem value={p}>{p}</MenuItem>;
-                })}
-              </TextField>
-            )}
-          />
-          <Controller
-            name="paymentStatus"
-            control={paymentControl}
-            rules={{ required: "Payment status is required" }}
-            render={({ field }) => (
-              <TextField
-                {...field}
-                select
-                label="Payment Status"
-                size="small"
-                fullWidth
-                error={!!paymentErrors.paymentStatus}
-                helperText={paymentErrors.paymentStatus?.message}
-              >
-                <MenuItem value="Paid">Paid</MenuItem>
-                <MenuItem value="Unpaid">Unpaid</MenuItem>
-              </TextField>
-            )}
-          />
-         </div>
+          <div className="flex gap-4 items-center">
+            <Controller
+              name="paymentType"
+              control={paymentControl}
+              render={({ field }) => (
+                <TextField
+                  {...field}
+                  size="small"
+                  label="Payment Type"
+                  select
+                  fullWidth
+                >
+                  <MenuItem value="" disabled>
+                    Select Payment Type
+                  </MenuItem>
+                  {paymentModes.map((p) => {
+                    return <MenuItem value={p}>{p}</MenuItem>;
+                  })}
+                </TextField>
+              )}
+            />
+            <Controller
+              name="paymentStatus"
+              control={paymentControl}
+              rules={{ required: "Payment status is required" }}
+              render={({ field }) => (
+                <TextField
+                  {...field}
+                  select
+                  label="Payment Status"
+                  size="small"
+                  fullWidth
+                  error={!!paymentErrors.paymentStatus}
+                  helperText={paymentErrors.paymentStatus?.message}
+                >
+                  <MenuItem value="Paid">Paid</MenuItem>
+                  <MenuItem value="Unpaid">Unpaid</MenuItem>
+                </TextField>
+              )}
+            />
+          </div>
           <Controller
             name="paymentProof"
             control={paymentControl}

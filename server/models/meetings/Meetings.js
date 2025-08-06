@@ -136,6 +136,7 @@ const meetingSchema = new mongoose.Schema(
     },
     discountAmount: {
       type: Number,
+      default: 0,
     },
   },
   { timestamps: true }
