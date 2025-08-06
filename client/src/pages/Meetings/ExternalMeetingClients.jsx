@@ -33,6 +33,7 @@ import UploadFileInput from "../../components/UploadFileInput";
 import { inrFormat } from "../../utils/currencyFormat";
 import PageFrame from "../../components/Pages/PageFrame";
 import YearWiseTable from "../../components/Tables/YearWiseTable";
+import usePageDepartment from "../../hooks/usePageDepartment";
 
 const ExternalMeetingCLients = () => {
   const axios = useAxiosPrivate();
@@ -44,6 +45,8 @@ const ExternalMeetingCLients = () => {
   const [selectedMeeting, setSelectedMeeting] = useState([]);
   const [detailsModal, setDetailsModal] = useState(false);
   const [submittedChecklists, setSubmittedChecklists] = useState({});
+  const department = usePageDepartment();
+  const isFinance = department?.name === "Finance";
 
   const paymentModes = [
     "Cash",
@@ -162,20 +165,22 @@ const ExternalMeetingCLients = () => {
     .filter((m) => m.meetingType === "External")
     .map((meeting, index) => {
       return {
-      ...meeting,
-      date: meeting.date,
-      bookedBy: meeting.bookedBy
-        ? `${meeting.bookedBy.firstName} ${meeting.bookedBy.lastName}`
-        : meeting.clientBookedBy?.employeeName || "Unknown",
-      startTime: meeting.startTime,
-      endTime: meeting.endTime,
-      extendTime: meeting.extendTime,
-      srNo: index + 1,
-      paymentAmount: meeting.paymentAmount ?? 0,
-      paymnetDiscountAmount: meeting.discountAmount ?? 0,
-      paymentMode: meeting.paymentMode ?? "",
-      paymentStatus: meeting.paymentStatus ?? false,
-    }
+        ...meeting,
+        date: meeting.date,
+        bookedBy: meeting.bookedBy
+          ? `${meeting.bookedBy.firstName} ${meeting.bookedBy.lastName}`
+          : meeting.clientBookedBy?.employeeName || "Unknown",
+        startTime: meeting.startTime,
+        endTime: meeting.endTime,
+        extendTime: meeting.extendTime,
+        srNo: index + 1,
+        paymentAmount: meeting.paymentAmount ?? 0,
+        paymnetDiscountAmount: meeting.discountAmount ?? 0,
+        paymentMode: meeting.paymentMode ?? "",
+        paymentProofUrl: meeting?.paymentProof ?? "",
+        paymentStatus: meeting.paymentStatus ?? false,
+        paymentVerification: meeting.paymentVerification || "Under Review"
+      };
     });
 
   //Fetch Single Room
@@ -304,6 +309,28 @@ const ExternalMeetingCLients = () => {
       toast.error(error.message);
     },
   });
+
+    const { mutate: verifyPayment, isPending: isVerifyPayment } = useMutation({
+    mutationFn: async (data) => {
+      const respone = await axios.patch(
+        `/api/meetings/update-meeting-payment-status`,
+        {
+          status:data,
+          meetingId: selectedMeeting._id,
+        }
+      );
+
+      return respone.data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["meetings"] });
+      toast.success(data.message || "UPDATED");
+      setDetailsModal(false);
+    },
+    onError: (error) => {
+      toast.error(error.message);
+    },
+  });
   //------------------------------API--------------------------------//
 
   // Initialize checklists when meetings are loaded
@@ -367,6 +394,11 @@ const ExternalMeetingCLients = () => {
     setSelectedMeetingId(data._id);
     setDetailsModal(true);
   };
+
+  const handleVerifyPayment = (data,status) => {
+    setSelectedMeeting(data)
+    verifyPayment(status)
+  }
 
   const handleAddChecklistItem = () => {
     if (!newItem.trim() || !selectedMeetingId) return;
@@ -488,6 +520,9 @@ const ExternalMeetingCLients = () => {
     }
   }, [watchedDiscountAmount, room, isRoomLoading]);
 
+  useEffect(()=>{
+console.log("select",selectedMeeting)
+  },[selectedMeeting])
   //---------------------------------Event handlers----------------------------------------//
 
   const columns = [
@@ -582,52 +617,66 @@ const ExternalMeetingCLients = () => {
         const isCompleted = status === "Completed";
         const isHousekeepingPending = housekeepingStatus === "Pending";
         const isHousekeepingCompleted = housekeepingStatus === "Completed";
-
+        const isVerified = params.data.paymentVerification === "Verified"
+       
         const menuItems = [
-          !isPaid && {
-            label: "Update Payment Details",
-            onClick: () => handleOpenPaymentModal(params.data),
+          {
+            label: "View",
+            onClick: () => handleSelectedMeeting("viewDetails", params.data),
           },
-
-          !isOngoing &&
-            !isHousekeepingCompleted && {
-              label: "Update Checklist",
-              onClick: () =>
-                handleOpenChecklistModal("update", params.data._id),
-            },
-          isUpcoming && {
-            label: "Edit",
-            onClick: () => handleEditMeeting("edit", params.data),
+            isPaid && isFinance && !isVerified && {
+            label: "Verify Payment",
+            onClick: () => handleVerifyPayment(params.data,"Verified")
           },
-          !isOngoing &&
-            !isHousekeepingPending && {
-              label: "Mark As Ongoing",
-              onClick: () => handleOngoing("ongoing", params.data._id),
-            },
-          !isUpcoming && {
-            label: "Mark As Completed",
-            onClick: () => handleCompleted("complete", params.data._id),
+          isPaid && isFinance && isVerified && {
+            label: "Review Payment",
+            onClick: () => handleVerifyPayment(params.data,"Under Review"),
           },
-          // !isUpcoming && {
-          //   label: "Extend Meeting",
-          //   onClick: () => handleExtendMeetingModal("extend", params.data),
-          // },
-          !isCancelled && {
-            label: "Cancel",
-            onClick: () => handleSelectedMeeting("cancel", params.data),
-          },
+        
+          // Show the following only when NOT finance
+          ...(!isFinance
+            ? [
+                !isPaid && {
+                  label: "Update Payment Details",
+                  onClick: () => handleOpenPaymentModal(params.data),
+                },
+                !isOngoing &&
+                  !isHousekeepingCompleted && {
+                    label: "Update Checklist",
+                    onClick: () =>
+                      handleOpenChecklistModal("update", params.data._id),
+                  },
+                isUpcoming && {
+                  label: "Edit",
+                  onClick: () => handleEditMeeting("edit", params.data),
+                },
+                !isOngoing &&
+                  !isHousekeepingPending && {
+                    label: "Mark As Ongoing",
+                    onClick: () => handleOngoing("ongoing", params.data._id),
+                  },
+                !isUpcoming && {
+                  label: "Mark As Completed",
+                  onClick: () => handleCompleted("complete", params.data._id),
+                },
+                !isCancelled && {
+                  label: "Cancel",
+                  onClick: () => handleSelectedMeeting("cancel", params.data),
+                },
+              ]
+            : []),
         ].filter(Boolean);
 
         return (
           <div className="flex gap-2 items-center">
-            <div
+            {/* <div
               onClick={() => handleSelectedMeeting("viewDetails", params.data)}
               className="hover:bg-gray-200 cursor-pointer p-2 rounded-full transition-all"
             >
               <span className="text-subtitle">
                 <MdOutlineRemoveRedEye />
               </span>
-            </div>
+            </div> */}
 
             {!isCancelled && <ThreeDotMenu menuItems={menuItems} />}
           </div>
@@ -930,18 +979,25 @@ const ExternalMeetingCLients = () => {
               title="Amount"
               detail={`INR ${inrFormat(selectedMeeting?.paymentAmount)}`}
             />
-             <DetalisFormatted
+            <DetalisFormatted
               title="Discount"
-              detail={`INR ${inrFormat(selectedMeeting?.paymnetDiscountAmount)}`}
+              detail={`INR ${inrFormat(
+                selectedMeeting?.paymnetDiscountAmount
+              )}`}
             />
             <DetalisFormatted
               title="Mode"
               detail={selectedMeeting?.paymentMode || "N/A"}
             />
-           
+
             <DetalisFormatted
               title="Status"
               detail={selectedMeeting?.paymentStatus ? "Paid" : "Unpaid"}
+            />
+
+            <DetalisFormatted
+              title="Verification"
+              detail={selectedMeeting?.paymentVerification}
             />
             {selectedMeeting?.paymentProofUrl && (
               <DetalisFormatted
@@ -1153,7 +1209,7 @@ const ExternalMeetingCLients = () => {
             if (data?.paymentProof) {
               formData.append("paymentProof", data.paymentProof);
             }
-            updatePayment(formData)
+            updatePayment(formData);
             // updatePayment({
             //   paymentAmount: data?.amount,
             //   paymentMode: data?.paymentType,

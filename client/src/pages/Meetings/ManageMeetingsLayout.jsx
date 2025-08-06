@@ -25,7 +25,7 @@ const tabs = [
       basePath="/app/meetings/manage-meetings"
       defaultTabPath="internal-meetings"
       tabs={tabs}
-      hideTabsCondition={(pathname) => pathname.includes("vendor/")}
+      hideTabsCondition={(pathname) => pathname.includes("internal-meetings/")}
     />
   );
 };

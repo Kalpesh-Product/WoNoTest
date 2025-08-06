@@ -501,6 +501,7 @@ const getMeetings = async (req, res, next) => {
         paymentAmount: meeting.paymentAmount ? meeting.paymentAmount : null,
         paymentMode: meeting.paymentMode ? meeting.paymentMode : null,
         paymentStatus: meeting.paymentStatus ? meeting.paymentStatus : null,
+        paymentProof: meeting.paymentProof ? meeting.paymentProof.link : null,
         meetingType: meeting.meetingType,
         housekeepingStatus: meeting.houeskeepingStatus,
         date: meeting.startDate,
@@ -525,6 +526,7 @@ const getMeetings = async (req, res, next) => {
             : meeting.externalParticipants,
         reviews: meetingReviews ? meetingReviews : [],
         discountAmount: meeting.discountAmount,
+        paymentVerification: meeting.paymentVerification,
         company: meeting.company,
       };
     });
@@ -668,6 +670,7 @@ const getMyMeetings = async (req, res, next) => {
         paymentAmount: meeting.paymentAmount ? meeting.paymentAmount : null,
         paymentMode: meeting.paymentMode ? meeting.paymentMode : null,
         paymentStatus: meeting.paymentStatus ? meeting.paymentStatus : null,
+        paymentProof: meeting.paymentProof ? meeting.paymentProof.link : null,
         meetingType: meeting.meetingType,
         housekeepingStatus: meeting.houeskeepingStatus,
         date: meeting.startDate,
@@ -692,6 +695,7 @@ const getMyMeetings = async (req, res, next) => {
             : meeting.externalParticipants,
         reviews: meetingReviews ? meetingReviews : [],
         discountAmount: meeting.discountAmount,
+        paymentVerification: meeting.paymentVerification,
         company: meeting.company,
       };
     });
@@ -1373,6 +1377,25 @@ const updateMeeting = async (req, res, next) => {
   }
 };
 
+const updateMeetingPaymentStatus = async (req, res, next) => {
+  const { status, meetingId } = req.body;
+  const { user } = req;
+
+  const updatedMeeting = await Meeting.findByIdAndUpdate(
+    meetingId,
+    { paymentVerification: status },
+    { new: true }
+  ).populate("bookedBy", "firstName lastName");
+
+  if (!updatedMeeting) {
+    return res.status(404).json({ message: "Meeting not found" });
+  }
+  const message =
+    status === "Verified" ? "Payment verified" : "Payment under review";
+
+  return res.status(200).json({ message });
+};
+
 const updateMeetingStatus = async (req, res, next) => {
   const { status, meetingId } = req.body;
   const { user } = req;
@@ -1732,4 +1755,5 @@ module.exports = {
   updateMeetingStatus,
   updateMeeting,
   updateMeetingDetails,
+  updateMeetingPaymentStatus,
 };

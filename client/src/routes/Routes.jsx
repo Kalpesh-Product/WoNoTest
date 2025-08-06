@@ -397,6 +397,7 @@ import LogPage from "../pages/LogPage";
 import VirtualOfficeForm from "../pages/Dashboard/SalesDashboard/VirtualOfficeForm";
 import AccessPages from "../pages/Access/AccessPages";
 import ModulePermissions from "../pages/Access/ModulePermissions";
+import ManageMeetingsFinanceLayout from "../pages/Dashboard/FinanceDashboard/MixBag/ManageMeetingsFinanceLayout";
 
 export const routes = createBrowserRouter([
   {
@@ -555,6 +556,20 @@ export const routes = createBrowserRouter([
                       {
                         path: "mix-bag",
                         element: <MixBag />,
+                      },
+                      {
+                        path: "mix-bag/manage-meetings",
+                        element: <ManageMeetingsFinanceLayout />,
+                        children: [
+                          {
+                            path: "internal-meetings",
+                            element: <ManageMeetings />,
+                          },
+                          {
+                            path: "external-clients",
+                            element: <ExternalMeetingClients />,
+                          },
+                        ],
                       },
                       {
                         path: "mix-bag/directors-company-KYC",

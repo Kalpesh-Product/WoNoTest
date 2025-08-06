@@ -675,6 +675,168 @@ const uploadClientOccupancyImage = async (req, res, next) => {
   }
 };
 
+// Sample client data extracted from the table (Brand Name, Registered Name, Credits Per Desk, Total Credits)
+const clientsData = [
+  {
+    brand: "WONO",
+    registered: "WONOCO PRIVATE LIMITED",
+    perDeskCredits: 3,
+    totalCredits: 111,
+  },
+  {
+    brand: "SQUADSTACK",
+    registered: "SQUADRUN SOLUTIONS PVT LTD",
+    perDeskCredits: 0,
+    totalCredits: 0,
+  },
+  {
+    brand: "BDO",
+    registered: "BDO INDIA LIMITED LIABILITY PARTNERSHIP",
+    perDeskCredits: 0,
+    totalCredits: 30,
+  },
+  {
+    brand: "MSKA & ASSOCIATES",
+    registered: "MSKA & ASSOCIATES",
+    perDeskCredits: 3,
+    totalCredits: 30,
+  },
+  {
+    brand: "AXIS FINANCE",
+    registered: "AXIS FINANCE LIMITED",
+    perDeskCredits: 3.5,
+    totalCredits: 20,
+  },
+  {
+    brand: "LGT",
+    registered: "LGT Wealth India Pvt.Ltd.",
+    perDeskCredits: 0,
+    totalCredits: 3,
+  },
+  {
+    brand: "RAKHEE VERMA",
+    registered: "RAKHEE VERMA",
+    perDeskCredits: 2,
+    totalCredits: 6,
+  },
+  {
+    brand: "BENCHMARK HOLIDAYS",
+    registered: "BENCHMARK HOLIDAYS",
+    perDeskCredits: 0,
+    totalCredits: 0,
+  },
+  { brand: "TEDx", registered: "TEDx", perDeskCredits: 0, totalCredits: 0 },
+  {
+    brand: "CMR SURGICAL",
+    registered: "CMR SURGICAL",
+    perDeskCredits: 0,
+    totalCredits: 0,
+  },
+  {
+    brand: "AVIDANT",
+    registered: "AVIDANT PROPERTIES LLP",
+    perDeskCredits: 0,
+    totalCredits: 0,
+  },
+  {
+    brand: "BUILD HIGH INFRA",
+    registered: "BUILD HIGH INFRA",
+    perDeskCredits: 0,
+    totalCredits: 0,
+  },
+  { brand: "APICES", registered: "APICES", perDeskCredits: 0, totalCredits: 0 },
+  {
+    brand: "Infuse",
+    registered: "INFUSE NUTRIENTE PRIVATE LIMITED",
+    perDeskCredits: 4,
+    totalCredits: 200,
+  },
+  {
+    brand: "AFour",
+    registered: "AFOUR TECHNOLOGIES PRIVATE LIMITED",
+    perDeskCredits: 3,
+    totalCredits: 45,
+  },
+  {
+    brand: "Waterfield Advisors",
+    registered: "Waterfield Advisors Private Limited",
+    perDeskCredits: 0,
+    totalCredits: 0,
+  },
+  {
+    brand: "Zimetrics",
+    registered: "ZIMETRICS TECHNOLOGIES PRIVATE LIMITED",
+    perDeskCredits: 6,
+    totalCredits: 426,
+  },
+  {
+    brand: "IC Partners",
+    registered: "IC PARTNERS MANAGEMENT CONSULTANTS PRIVATE LIMITED",
+    perDeskCredits: 0,
+    totalCredits: 0,
+  },
+  {
+    brand: "Lancesoft",
+    registered: "LANCESOFT INDIA PRIVATE LIMITED",
+    perDeskCredits: 5,
+    totalCredits: 295,
+  },
+  {
+    brand: "Turtlemint",
+    registered: "FINTECH BLUE SOLUTION PRIVATE LIMITED",
+    perDeskCredits: 5,
+    totalCredits: 295,
+  },
+  {
+    brand: "COLLISON",
+    registered: "COLLISON SERVICES INDIA LLP",
+    perDeskCredits: 3,
+    totalCredits: 15,
+  },
+  {
+    brand: "Nuvama",
+    registered: "NUVAMA WEALTH & INVESTMENT LTD",
+    perDeskCredits: 2,
+    totalCredits: 12,
+  },
+  {
+    brand: "Housing.com",
+    registered: "LOCON SOLUTIONS PRIVATE LIMITED",
+    perDeskCredits: 2,
+    totalCredits: 12,
+  },
+  {
+    brand: "Crayon",
+    registered: "CRAYON SOFTWARE EXPERTS INDIA PRIVATE LIMITED",
+    perDeskCredits: 5,
+    totalCredits: 100,
+  },
+  {
+    brand: "Tech Gig Export",
+    registered: "Tech Gig Export",
+    perDeskCredits: 1,
+    totalCredits: 2,
+  },
+  {
+    brand: "BRIJESH MORAJKAR",
+    registered: "BRIJESH MORAJKAR",
+    perDeskCredits: 2,
+    totalCredits: 6,
+  },
+  {
+    brand: "RAKESH BUSINESS SOLUTION",
+    registered: "RAKESH BUSINESS SOLUTION",
+    perDeskCredits: 1,
+    totalCredits: 3,
+  },
+  {
+    brand: "MALHIR",
+    registered: "MIHIR....",
+    perDeskCredits: 3,
+    totalCredits: 36,
+  },
+];
+
 module.exports = {
   createCoworkingClient,
   updateCoworkingClient,

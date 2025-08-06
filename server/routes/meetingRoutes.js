@@ -14,6 +14,7 @@ const {
   getAllCompanies,
   updateMeeting,
   updateMeetingDetails,
+  updateMeetingPaymentStatus,
 } = require("../controllers/meetingsControllers/meetingsControllers");
 const {
   getReviews,
@@ -52,6 +53,7 @@ router.patch(
   upload.single("paymentProof"),
   updateMeeting
 ); //Update payment details
+router.patch("/update-meeting-payment-status", updateMeetingPaymentStatus);
 router.patch("/update-meeting-status", updateMeetingStatus);
 router.get("/get-all-companies", getAllCompanies);
 

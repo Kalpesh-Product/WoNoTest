@@ -474,6 +474,20 @@ export const PERMISSIONS = {
     access: "page",
     route: "/app/dashboard/finance-dashboard/finance/landlord-payments",
   },
+  FINANCE_MEETINGS_EXTERNAL: {
+    value: "finance_meetings_external",
+    type: "read",
+    access: "page",
+    route:
+      "/app/dashboard/finance-dashboard/mix-bag/manage-meetings/external-meetings",
+  },
+  FINANCE_MEETINGS_INTERNAL: {
+    value: "finance_meetings_internal",
+    type: "read",
+    access: "page",
+    route:
+      "/app/dashboard/finance-dashboard/mix-bag/manage-meetings/internal-meetings",
+  },
 
   FINANCE_BILLING_CLIENT_INVOICE: {
     value: "client_invoice",
