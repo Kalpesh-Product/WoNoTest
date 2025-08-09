@@ -301,7 +301,7 @@ const ExternalMeetingCLients = () => {
       return response.data;
     },
     onSuccess: () => {
-      toast.success("payment details updated successfully");
+      toast.success("Payment details updated successfully");
       queryClient.invalidateQueries({ queryKey: ["meetings"] });
       setOpenPaymentModal(false);
     },
@@ -499,7 +499,7 @@ const ExternalMeetingCLients = () => {
   };
   useEffect(() => {
     if (!isRoomLoading && room?.perHourPrice) {
-      const finalAmount = room.perHourPrice + room.perHourGstPrice;
+      const finalAmount = room.perHourGstPrice;
       setPaymentValue("amount", room.perHourPrice);
       setPaymentValue("gstAmount", room.perHourGstPrice);
       setPaymentValue("finalAmount", finalAmount);
@@ -508,7 +508,7 @@ const ExternalMeetingCLients = () => {
 
   useEffect(() => {
     if (!isRoomLoading) {
-      const calculatedAmount = room?.perHourPrice + room?.perHourGstPrice;
+      const calculatedAmount = room?.perHourGstPrice;
       const discountPercentage = (
         (watchedDiscountAmount / calculatedAmount) *
         100
@@ -520,9 +520,6 @@ const ExternalMeetingCLients = () => {
     }
   }, [watchedDiscountAmount, room, isRoomLoading]);
 
-  useEffect(()=>{
-console.log("select",selectedMeeting)
-  },[selectedMeeting])
   //---------------------------------Event handlers----------------------------------------//
 
   const columns = [
