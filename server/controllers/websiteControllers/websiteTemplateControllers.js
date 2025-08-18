@@ -13,6 +13,7 @@ const createTemplates = async (req, res) => {
 const getTemplates = async (req, res) => {
   try {
     const templates = await WebsiteTemplate.find();
+    console.log("get-template");
     res.json(templates);
   } catch (error) {
     res.status(500).json({ error: error.message });

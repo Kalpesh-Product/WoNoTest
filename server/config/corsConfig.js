@@ -1,34 +1,35 @@
 // corsConfig.js
-import cors from "cors";
+require("dotenv").config();
 
-const staticAllowedOrigins = [
-  "http://localhost:3000", // your backend dev
-  "http://localhost:4173", // vite preview/dev
-  process.env.CORS_FRONTEND_URL, // your deployed frontend (if set)
+const allowedOrigins = [
+  "http://localhost:3000",
+  "http://localhost:4173",
+  process.env.CORS_FRONTEND_URL,
 ];
 
+// regex rules for subdomains
 const regexAllowedOrigins = [
-  /\.wono\.co$/, // allow any subdomain of wono.co
-  /\.localhost:5173$/, // allow any subdomain of localhost:5173 (for Vite dev tenant sites)
+  /\.wono\.co$/, // any subdomain of wono.co
+  /\.localhost:5173$/, // any subdomain of localhost:5173 (vite tenant sites)
 ];
 
-const corsOptions = {
-  origin: (origin, callback) => {
-    if (!origin) return callback(null, true); // allow non-browser / curl / server-side requests
-
+const corsConfig = {
+  origin: function (origin, callback) {
     if (
-      staticAllowedOrigins.includes(origin) ||
-      regexAllowedOrigins.some((regex) => regex.test(origin))
+      !origin || // allow server-to-server or curl
+      allowedOrigins.includes(origin) || // exact matches
+      regexAllowedOrigins.some((regex) => regex.test(origin)) // regex matches
     ) {
-      return callback(null, true);
+      callback(null, true);
+    } else {
+      callback(new Error(`Not allowed by CORS: ${origin}`));
     }
-
-    return callback(new Error(`Not allowed by CORS: ${origin}`));
   },
-  credentials: true, // important if you use cookies/sessions
+  optionsSuccessStatus: 200,
+  credentials: true,
 };
 
-export default cors(corsOptions);
+module.exports = { corsConfig, allowedOrigins };
 
 // require("dotenv").config();
 
