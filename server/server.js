@@ -34,6 +34,7 @@ const payrollRoutes = require("./routes/payrollRoutes");
 const salesRoutes = require("./routes/salesRoutes");
 const visitorRoutes = require("./routes/visitorRoutes");
 const websiteRoutes = require("./routes/websiteTemplatesRoutes");
+const websiteTemplateRoutes = require("./routes/websiteTemplateRoutes");
 const inventoryRoutes = require("./routes/inventoryRoutes");
 const administrationRoutes = require("./routes/administrationRoutes");
 const financeRoutes = require("./routes/financeRoutes");
@@ -86,7 +87,8 @@ app.use(
   employeeAgreementRoutes
 );
 app.use("/api/notifications", verifyJwt, notificationRoutes);
-app.use("/api/editor", websiteRoutes);
+// app.use("/api/editor", websiteRoutes);
+app.use("/api/editor", websiteTemplateRoutes);
 app.use("/api/users", verifyJwt, auditLogger, userRoutes);
 app.use("/api/agreement", verifyJwt, auditLogger, agreementRoutes);
 app.use("/api/roles", verifyJwt, auditLogger, roleRoutes);
