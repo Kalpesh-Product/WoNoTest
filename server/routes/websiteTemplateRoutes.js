@@ -1,10 +1,10 @@
 const router = require("express").Router();
 const {
   createTemplates,
-  getTemplates,
+  getTemplate,
 } = require("../controllers/websiteControllers/websiteTemplateControllers");
 
 router.post("/create-template", createTemplates);
-router.get("/get-templates", getTemplates);
+router.get("/get-template/:company", getTemplate);
 
 module.exports = router;
