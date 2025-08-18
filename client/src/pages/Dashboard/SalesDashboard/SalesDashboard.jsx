@@ -875,6 +875,7 @@ const SalesDashboard = () => {
   //Unique Leads Graph
   const graphCountConfig = [
     {
+      key:PERMISSIONS.SALES_MONTHLY_UNIQUE_LEADS.value,
       graphTitle: "MONTHLY UNIQUE LEADS",
       data: graphData,
       chartOptions: monthlyLeadsOptions,
