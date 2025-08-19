@@ -17,13 +17,6 @@ const createTemplate = async (req, res, next) => {
     const baseFolder = `${foundCompany}/template/${searchKey}`;
     let template = await WebsiteTemplate.findOne({ searchKey });
 
-    // if template exists → update, else → create
-    // if (!template) {
-    //   template = new WebsiteTemplate({ ...req.body, searchKey });
-    // } else {
-    //   Object.assign(template, req.body); // merge new values
-    // }
-
     if (template) {
       return res
         .status(400)

@@ -30,6 +30,7 @@ const templateSchema = new mongoose.Schema(
         },
       },
     ],
+    galleryTitle: { type: String },
     gallery: [
       {
         id: { type: String },
