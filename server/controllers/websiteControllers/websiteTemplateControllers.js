@@ -9,7 +9,7 @@ const createTemplate = async (req, res, next) => {
   session.startTransaction();
 
   try {
-    const { company } = req;
+    const company = "biznest";
     // `products` might arrive as a JSON string in multipart. Normalize it.
 
     // let { products, testimonials, ...rest } = req.body;
