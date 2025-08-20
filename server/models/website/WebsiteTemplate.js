@@ -4,6 +4,10 @@ const templateSchema = new mongoose.Schema(
   {
     searchKey: { type: String, required: true, index: true },
     //hero
+    companyLogo: {
+      id: { type: String },
+      url: { type: String },
+    },
     companyName: { type: String, required: true },
     title: { type: String, required: true },
     subTitle: { type: String, required: true },
@@ -20,14 +24,16 @@ const templateSchema = new mongoose.Schema(
     productTitle: { type: String },
     products: [
       {
+        type: { type: String, required: true },
         name: { type: String, required: true },
-        subtitle: { type: String, required: true },
         cost: { type: String, required: true },
         description: { type: String, required: true },
-        image: {
-          id: { type: String },
-          url: { type: String },
-        },
+        images: [
+          {
+            id: { type: String },
+            url: { type: String },
+          },
+        ],
       },
     ],
     galleryTitle: { type: String },
@@ -51,7 +57,7 @@ const templateSchema = new mongoose.Schema(
         rating: { type: Number, required: true },
       },
     ],
-    //   //contact
+    //contact
     contactTitle: { type: String },
     mapUrl: { type: String, required: true },
     email: { type: String, required: true },
