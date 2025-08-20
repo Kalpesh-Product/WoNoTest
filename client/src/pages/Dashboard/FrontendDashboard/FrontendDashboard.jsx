@@ -465,6 +465,12 @@ const FrontendDashboard = () => {
   );
 
   const cardsConfigFrontend = [
+    {
+    key: PERMISSIONS.FRONTEND_CREATE_WEBSITE.value,
+    route: "create-website",
+    title: "Create Website",
+    icon: <LuHardDriveUpload />,
+  },
   {
     key: PERMISSIONS.FRONTEND_EDIT_WEBSITE.value,
     route: "/app/dashboard/frontend-dashboard/edit-theme/BIZNest/Home",

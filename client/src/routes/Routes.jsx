@@ -398,6 +398,7 @@ import VirtualOfficeForm from "../pages/Dashboard/SalesDashboard/VirtualOfficeFo
 import AccessPages from "../pages/Access/AccessPages";
 import ModulePermissions from "../pages/Access/ModulePermissions";
 import ManageMeetingsFinanceLayout from "../pages/Dashboard/FinanceDashboard/MixBag/ManageMeetingsFinanceLayout";
+import CreateWebsite from "../pages/Dashboard/FrontendDashboard/WebsiteBuilder/CreateWebsite";
 
 export const routes = createBrowserRouter([
   {
@@ -447,6 +448,10 @@ export const routes = createBrowserRouter([
                       {
                         path: "*",
                         element: <ThemeGrid />,
+                      },
+                      {
+                        path: "create-website",
+                        element: <CreateWebsite />,
                       },
                       {
                         path: "select-theme/edit-theme/:templateName/:pageName",

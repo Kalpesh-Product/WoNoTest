@@ -1316,6 +1316,11 @@ export const PERMISSIONS = {
   },
 
   //Nav cards
+  FRONTEND_CREATE_WEBSITE: {
+    value: "create_website",
+    type: "read",
+    access: "page",
+  },
   FRONTEND_EDIT_WEBSITE: {
     value: "edit_website",
     type: "read",
