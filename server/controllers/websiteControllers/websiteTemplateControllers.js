@@ -9,12 +9,9 @@ const createTemplate = async (req, res, next) => {
   session.startTransaction();
 
   try {
-    const { company } = req;
-    // `products` might arrive as a JSON string in multipart. Normalize it.
+    // const { company } = req;
+    const company = "Biznest";
 
-    // let { products, testimonials, ...rest } = req.body;
-    // products = mustParseArray(products, "products");
-    // testimonials = mustParseArray(testimonials, "testimonials");
     let { products, testimonials } = req.body;
     products = JSON.parse(products || "[]");
     testimonials = JSON.parse(testimonials || "[]");
