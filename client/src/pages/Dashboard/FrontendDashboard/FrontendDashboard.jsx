@@ -473,7 +473,7 @@ const FrontendDashboard = () => {
   },
   {
     key: PERMISSIONS.FRONTEND_EDIT_WEBSITE.value,
-    route: "/app/dashboard/frontend-dashboard/edit-theme/BIZNest/Home",
+    route: "edit-website",
     title: "Edit website",
     icon: <LuHardDriveUpload />,
   },

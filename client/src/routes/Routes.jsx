@@ -399,6 +399,7 @@ import AccessPages from "../pages/Access/AccessPages";
 import ModulePermissions from "../pages/Access/ModulePermissions";
 import ManageMeetingsFinanceLayout from "../pages/Dashboard/FinanceDashboard/MixBag/ManageMeetingsFinanceLayout";
 import CreateWebsite from "../pages/Dashboard/FrontendDashboard/WebsiteBuilder/CreateWebsite";
+import EditWebsite from "../pages/Dashboard/FrontendDashboard/WebsiteBuilder/EditWebsite";
 
 export const routes = createBrowserRouter([
   {
@@ -454,9 +455,13 @@ export const routes = createBrowserRouter([
                         element: <CreateWebsite />,
                       },
                       {
-                        path: "select-theme/edit-theme/:templateName/:pageName",
-                        element: <EditTemplate />,
+                        path: "edit-website",
+                        element: <EditWebsite />,
                       },
+                      // {
+                      //   path: "select-theme/edit-theme/:templateName/:pageName",
+                      //   element: <EditTemplate />,
+                      // },
                       {
                         path: "edit-theme/:templateName/:pageName",
                         element: <EditTemplate />,
