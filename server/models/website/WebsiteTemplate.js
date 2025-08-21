@@ -8,6 +8,7 @@ const templateSchema = new mongoose.Schema(
       id: { type: String },
       url: { type: String },
     },
+
     companyName: { type: String, required: true },
     title: { type: String, required: true },
     subTitle: { type: String, required: true },
