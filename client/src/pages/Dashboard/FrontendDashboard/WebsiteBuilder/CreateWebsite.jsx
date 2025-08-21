@@ -41,6 +41,7 @@ const CreateWebsite = () => {
       title: "",
       subTitle: "",
       CTAButtonText: "",
+      companyLogo:null,
       heroImages: [],
       gallery: [],
       // about
@@ -102,6 +103,9 @@ const CreateWebsite = () => {
       if (/^(products|testimonials)\.\d+\./.test(key)) fd.delete(key);
     }
 
+
+    fd.append("companyLogo",values.companyLogo);
+
     fd.delete("heroImages");
     (values.heroImages || []).forEach((file) => fd.append("heroImages", file));
 
@@ -145,7 +149,7 @@ const CreateWebsite = () => {
   };
 
   return (
-    <div>
+    <div className="pb-2">
       {!isCreateWebsite ? (
         <div className="p-4 flex flex-col gap-4">
           <div className="themePage-content-header bg-white flex flex-col gap-4">
