@@ -20,15 +20,15 @@ const templateSchema = new mongoose.Schema(
       },
     ],
     //about
-    // about: { type: String, required: true },
+    about: { type: String, required: true },
     //products
     productTitle: { type: String },
     products: [
       {
-        // type: { type: String, required: true },
-        // name: { type: String, required: true },
-        // cost: { type: String,  },
-        // description: { type: String, required: true },
+        type: { type: String, required: true },
+        name: { type: String, required: true },
+        cost: { type: String },
+        description: { type: String, required: true },
         images: [
           {
             id: { type: String },
@@ -46,21 +46,21 @@ const templateSchema = new mongoose.Schema(
     ],
     //   //testimonials
     testimonialTitle: { type: String },
-    // testimonials: [
-    //   {
-    //     image: {
-    //       id: { type: String },
-    //       url: { type: String },
-    //     },
-    //     name: { type: String, required: true },
-    //     jobPosition: { type: String, required: true },
-    //     testimony: { type: String, required: true },
-    //     rating: { type: Number, required: true },
-    //   },
-    // ],
+    testimonials: [
+      {
+        image: {
+          id: { type: String },
+          url: { type: String },
+        },
+        name: { type: String, required: true },
+        jobPosition: { type: String, required: true },
+        testimony: { type: String, required: true },
+        rating: { type: Number, required: true },
+      },
+    ],
     //contact
     contactTitle: { type: String },
-    // mapUrl: { type: String, required: true },
+    mapUrl: { type: String, required: true },
     // email: { type: String, required: true },
     // phone: { type: String, required: true },
     // address: { type: String, required: true },
