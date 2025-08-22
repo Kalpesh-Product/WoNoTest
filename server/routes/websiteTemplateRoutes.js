@@ -4,21 +4,13 @@ const upload = require("../config/multerConfig");
 const {
   createTemplate,
   getTemplate,
+  editTemplate,
+  getTemplates,
 } = require("../controllers/websiteControllers/websiteTemplateControllers");
 
 router.post("/create-website", upload.any(), createTemplate);
-// router.post(
-//   "/create-template",
-//   upload.fields([
-//     { name: "companyLogo", maxCount: 1 },
-//     { name: "heroImages", maxCount: 5 },
-//     { name: "gallery", maxCount: 10 },
-//     { name: "productImages", maxCount: 10 },
-//     { name: "testimonialImages", maxCount: 20 },
-//   ]),
-//   createTemplate
-// );
-
+router.patch("/edit-website", upload.any(), editTemplate);
 router.get("/get-template/:company", getTemplate);
+router.get("/get-templates", getTemplates);
 
 module.exports = router;

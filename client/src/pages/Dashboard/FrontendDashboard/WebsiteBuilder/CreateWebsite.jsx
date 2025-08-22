@@ -41,7 +41,7 @@ const CreateWebsite = () => {
       title: "",
       subTitle: "",
       CTAButtonText: "",
-      companyLogo:null,
+      companyLogo: null,
       heroImages: [],
       gallery: [],
       // about
@@ -103,8 +103,7 @@ const CreateWebsite = () => {
       if (/^(products|testimonials)\.\d+\./.test(key)) fd.delete(key);
     }
 
-
-    fd.append("companyLogo",values.companyLogo);
+    fd.append("companyLogo", values.companyLogo);
 
     fd.delete("heroImages");
     (values.heroImages || []).forEach((file) => fd.append("heroImages", file));
@@ -122,25 +121,31 @@ const CreateWebsite = () => {
       if (t?.file) fd.append(`testimonialImages_${i}`, t.file);
     });
 
+    // const srcFromIframe = raw.match(/src=["']([^"']+)["']/i)?.[1];
+    // const srcUrl = values.mapUrl.split(" ")[1].split(" ")[1];
+    // values.mapUrl = srcUrl;
+    // console.log("src", srcUrl);
+
     createWebsite(fd);
   };
 
-  const { mutate: createWebsite, isPending: isCreateWebsite } = useMutation({
-    mutationKey: ["create-website"],
-    mutationFn: async (fd) => {
-      const res = await axios.post("/api/editor/create-website", fd, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-      return res.data;
-    },
-    onSuccess: () => {
-      toast.success("Website created successfully");
-      reset();
-    },
-    onError: (err) => {
-      toast.error(err?.response?.data?.message || "Failed to create website");
-    },
-  });
+  const { mutate: createWebsite, isLoading: isCreateWebsiteLoading } =
+    useMutation({
+      mutationKey: ["create-website"],
+      mutationFn: async (fd) => {
+        const res = await axios.post("/api/editor/create-website", fd, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+        return res.data;
+      },
+      onSuccess: () => {
+        toast.success("Website created successfully");
+        reset();
+      },
+      onError: (err) => {
+        toast.error(err?.response?.data?.message || "Failed to create website");
+      },
+    });
 
   const handleReset = () => {
     const node = formRef.current;
@@ -150,260 +155,249 @@ const CreateWebsite = () => {
 
   return (
     <div className="pb-2">
-      {!isCreateWebsite ? (
-        <div className="p-4 flex flex-col gap-4">
-          <div className="themePage-content-header bg-white flex flex-col gap-4">
-            <h4 className="text-4xl text-left">Create Website</h4>
-            <hr />
-          </div>
+      <div className="p-4 flex flex-col gap-4">
+        <div className="themePage-content-header bg-white flex flex-col gap-4">
+          <h4 className="text-4xl text-left">Create Website</h4>
+          <hr />
+        </div>
 
-          <form
-            ref={formRef}
-            encType="multipart/form-data"
-            onSubmit={handleSubmit(onSubmit)}
-          >
-            <div className="grid grid-cols-2 sm:grid-cols-1 md:grid-cols-2 gap-4">
-              {/* HERO / COMPANY */}
-              <div>
-                <div className="py-4 border-b-default border-borderGray">
-                  <span className="text-subtitle font-pmedium">
-                    Hero Section
-                  </span>
-                </div>
-                <div className="grid grid-cols sm:grid-cols-1 md:grid-cols-1 gap-4 p-4 ">
-                  <Controller
-                    name="companyName"
-                    control={control}
-                    rules={{ required: "Company name is required" }}
-                    render={({ field }) => (
-                      <TextField
-                        {...field}
-                        size="small"
-                        label="Company Name"
-                        fullWidth
-                        helperText={errors?.companyName?.message}
-                        error={!!errors.companyName}
-                      />
-                    )}
-                  />
-                  <Controller
-                    name="title"
-                    control={control}
-                    rules={{ required: "Title is required" }}
-                    render={({ field }) => (
-                      <TextField
-                        {...field}
-                        size="small"
-                        label="Hero Title"
-                        fullWidth
-                        helperText={errors?.title?.message}
-                        error={!!errors.title}
-                      />
-                    )}
-                  />
-                  <Controller
-                    name="subTitle"
-                    control={control}
-                    rules={{ required: "Sub Title is required" }}
-                    render={({ field }) => (
-                      <TextField
-                        {...field}
-                        size="small"
-                        label="Hero Sub Title"
-                        fullWidth
-                        helperText={errors?.subTitle?.message}
-                        error={!!errors.subTitle}
-                      />
-                    )}
-                  />
-                  <Controller
-                    name="CTAButtonText"
-                    control={control}
-                    render={({ field }) => (
-                      <TextField
-                        {...field}
-                        size="small"
-                        label="CTA Button Text"
-                        fullWidth
-                      />
-                    )}
-                  />
-
-                  {/* companyLogo (single) */}
-
-                  <Controller
-                    name="companyLogo"
-                    control={control}
-                    render={({ field }) => (
-                      <UploadFileInput
-                        id="companyLogo"
-                        value={field.value}
-                        label="Company Logo"
-                        onChange={field.onChange}
-                      />
-                    )}
-                  />
-
-                  {/* heroImages (multiple) */}
-                  <Controller
-                    name="heroImages"
-                    control={control}
-                    render={({ field }) => (
-                      <UploadMultipleFilesInput
-                        {...field}
-                        name="heroImages" // important so FormData picks the files
-                        label="Hero Images"
-                        maxFiles={5}
-                        allowedExtensions={[
-                          "jpg",
-                          "jpeg",
-                          "png",
-                          "pdf",
-                          "webp",
-                        ]}
-                        id="heroImages"
-                      />
-                    )}
-                  />
-                </div>
+        <form
+          ref={formRef}
+          encType="multipart/form-data"
+          onSubmit={handleSubmit(onSubmit)}
+        >
+          <div className="grid grid-cols-2 sm:grid-cols-1 md:grid-cols-2 gap-4">
+            {/* HERO / COMPANY */}
+            <div>
+              <div className="py-4 border-b-default border-borderGray">
+                <span className="text-subtitle font-pmedium">Hero Section</span>
               </div>
+              <div className="grid grid-cols sm:grid-cols-1 md:grid-cols-1 gap-4 p-4 ">
+                <Controller
+                  name="companyName"
+                  control={control}
+                  rules={{ required: "Company name is required" }}
+                  render={({ field }) => (
+                    <TextField
+                      {...field}
+                      size="small"
+                      label="Company Name"
+                      fullWidth
+                      helperText={errors?.companyName?.message}
+                      error={!!errors.companyName}
+                    />
+                  )}
+                />
+                <Controller
+                  name="title"
+                  control={control}
+                  rules={{ required: "Title is required" }}
+                  render={({ field }) => (
+                    <TextField
+                      {...field}
+                      size="small"
+                      label="Hero Title"
+                      fullWidth
+                      helperText={errors?.title?.message}
+                      error={!!errors.title}
+                    />
+                  )}
+                />
+                <Controller
+                  name="subTitle"
+                  control={control}
+                  rules={{ required: "Sub Title is required" }}
+                  render={({ field }) => (
+                    <TextField
+                      {...field}
+                      size="small"
+                      label="Hero Sub Title"
+                      fullWidth
+                      helperText={errors?.subTitle?.message}
+                      error={!!errors.subTitle}
+                    />
+                  )}
+                />
+                <Controller
+                  name="CTAButtonText"
+                  control={control}
+                  render={({ field }) => (
+                    <TextField
+                      {...field}
+                      size="small"
+                      label="CTA Button Text"
+                      fullWidth
+                    />
+                  )}
+                />
 
-              {/* ABOUT */}
-              <div>
-                <div className="py-4 border-b-default border-borderGray">
-                  <span className="text-subtitle font-pmedium">About</span>
-                </div>
-                <div className="grid grid-cols sm:grid-cols-1 md:grid-cols-1 gap-4 p-4 ">
-                  <Controller
-                    name="about"
-                    control={control}
-                    rules={{ required: "About is required" }}
-                    render={({ field }) => (
-                      <TextField
-                        {...field}
-                        size="small"
-                        label="About"
-                        fullWidth
-                        multiline
-                        minRows={3}
-                        helperText={errors?.about?.message}
-                        error={!!errors.about}
-                      />
-                    )}
-                  />
-                </div>
+                {/* companyLogo (single) */}
+
+                <Controller
+                  name="companyLogo"
+                  control={control}
+                  render={({ field }) => (
+                    <UploadFileInput
+                      id="companyLogo"
+                      value={field.value}
+                      label="Company Logo"
+                      onChange={field.onChange}
+                    />
+                  )}
+                />
+
+                {/* heroImages (multiple) */}
+                <Controller
+                  name="heroImages"
+                  control={control}
+                  render={({ field }) => (
+                    <UploadMultipleFilesInput
+                      {...field}
+                      name="heroImages" // important so FormData picks the files
+                      label="Hero Images"
+                      maxFiles={5}
+                      allowedExtensions={["jpg", "jpeg", "png", "pdf", "webp"]}
+                      id="heroImages"
+                    />
+                  )}
+                />
               </div>
+            </div>
 
-              {/* PRODUCTS */}
-              <div className="col-span-2">
-                <div className="py-4 border-b-default border-borderGray">
-                  <span className="text-subtitle font-pmedium">Products</span>
-                </div>
-                <div className="grid grid-cols sm:grid-cols-1 md:grid-cols-1 gap-4 p-4 ">
-                  <Controller
-                    name="productTitle"
-                    control={control}
-                    render={({ field }) => (
-                      <TextField
-                        {...field}
-                        size="small"
-                        label="Products Section Title"
-                        fullWidth
+            {/* ABOUT */}
+            <div>
+              <div className="py-4 border-b-default border-borderGray">
+                <span className="text-subtitle font-pmedium">About</span>
+              </div>
+              <div className="grid grid-cols sm:grid-cols-1 md:grid-cols-1 gap-4 p-4 ">
+                <Controller
+                  name="about"
+                  control={control}
+                  rules={{ required: "About is required" }}
+                  render={({ field }) => (
+                    <TextField
+                      {...field}
+                      size="small"
+                      label="About"
+                      fullWidth
+                      multiline
+                      minRows={3}
+                      helperText={errors?.about?.message}
+                      error={!!errors.about}
+                    />
+                  )}
+                />
+              </div>
+            </div>
+
+            {/* PRODUCTS */}
+            <div className="col-span-2">
+              <div className="py-4 border-b-default border-borderGray">
+                <span className="text-subtitle font-pmedium">Products</span>
+              </div>
+              <div className="grid grid-cols sm:grid-cols-1 md:grid-cols-1 gap-4 p-4 ">
+                <Controller
+                  name="productTitle"
+                  control={control}
+                  render={({ field }) => (
+                    <TextField
+                      {...field}
+                      size="small"
+                      label="Products Section Title"
+                      fullWidth
+                    />
+                  )}
+                />
+
+                {productFields.map((field, index) => (
+                  <div
+                    key={field.id}
+                    className="rounded-xl border border-borderGray p-4 mb-3"
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="font-pmedium">Product #{index + 1}</span>
+                      <button
+                        type="button"
+                        onClick={() => removeProduct(index)}
+                        className="text-sm text-red-600"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <Controller
+                        name={`products.${index}.type`}
+                        control={control}
+                        rules={{ required: "Type is required" }}
+                        render={({ field }) => (
+                          <TextField
+                            {...field}
+                            size="small"
+                            label="Type"
+                            fullWidth
+                            helperText={
+                              errors?.products?.[index]?.type?.message
+                            }
+                            error={!!errors?.products?.[index]?.type}
+                          />
+                        )}
                       />
-                    )}
-                  />
+                      <Controller
+                        name={`products.${index}.name`}
+                        control={control}
+                        rules={{ required: "Name is required" }}
+                        render={({ field }) => (
+                          <TextField
+                            {...field}
+                            size="small"
+                            label="Name"
+                            fullWidth
+                            helperText={
+                              errors?.products?.[index]?.name?.message
+                            }
+                            error={!!errors?.products?.[index]?.name}
+                          />
+                        )}
+                      />
 
-                  {productFields.map((field, index) => (
-                    <div
-                      key={field.id}
-                      className="rounded-xl border border-borderGray p-4 mb-3"
-                    >
-                      <div className="flex items-center justify-between mb-3">
-                        <span className="font-pmedium">
-                          Product #{index + 1}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => removeProduct(index)}
-                          className="text-sm text-red-600"
-                        >
-                          Remove
-                        </button>
-                      </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <Controller
-                          name={`products.${index}.type`}
-                          control={control}
-                          rules={{ required: "Type is required" }}
-                          render={({ field }) => (
-                            <TextField
-                              {...field}
-                              size="small"
-                              label="Type"
-                              fullWidth
-                              helperText={
-                                errors?.products?.[index]?.type?.message
-                              }
-                              error={!!errors?.products?.[index]?.type}
-                            />
-                          )}
-                        />
-                        <Controller
-                          name={`products.${index}.name`}
-                          control={control}
-                          rules={{ required: "Name is required" }}
-                          render={({ field }) => (
-                            <TextField
-                              {...field}
-                              size="small"
-                              label="Name"
-                              fullWidth
-                              helperText={
-                                errors?.products?.[index]?.name?.message
-                              }
-                              error={!!errors?.products?.[index]?.name}
-                            />
-                          )}
-                        />
-                        
-                        <Controller
-                          name={`products.${index}.cost`}
-                          control={control}
-                          rules={{ required: "Cost is required" }}
-                          render={({ field }) => (
-                            <TextField
-                              {...field}
-                              size="small"
-                              label="Cost"
-                              fullWidth
-                              helperText={
-                                errors?.products?.[index]?.cost?.message
-                              }
-                              error={!!errors?.products?.[index]?.cost}
-                            />
-                          )}
-                        />
-                        <Controller
-                          name={`products.${index}.description`}
-                          control={control}
-                          rules={{ required: "Description is required" }}
-                          render={({ field }) => (
-                            <TextField
-                              {...field}
-                              size="small"
-                              label="Description"
-                              fullWidth
-                              multiline
-                              minRows={3}
-                              helperText={
-                                errors?.products?.[index]?.description?.message
-                              }
-                              error={!!errors?.products?.[index]?.description}
-                            />
-                          )}
-                        />
-                         {/* productImages_${index} (multiple) */}
-                      
+                      <Controller
+                        name={`products.${index}.cost`}
+                        control={control}
+                        rules={{ required: "Cost is required" }}
+                        render={({ field }) => (
+                          <TextField
+                            {...field}
+                            size="small"
+                            label="Cost"
+                            fullWidth
+                            helperText={
+                              errors?.products?.[index]?.cost?.message
+                            }
+                            error={!!errors?.products?.[index]?.cost}
+                          />
+                        )}
+                      />
+                      <Controller
+                        name={`products.${index}.description`}
+                        control={control}
+                        rules={{ required: "Description is required" }}
+                        render={({ field }) => (
+                          <TextField
+                            {...field}
+                            size="small"
+                            label="Description"
+                            fullWidth
+                            multiline
+                            minRows={3}
+                            helperText={
+                              errors?.products?.[index]?.description?.message
+                            }
+                            error={!!errors?.products?.[index]?.description}
+                          />
+                        )}
+                      />
+                      {/* productImages_${index} (multiple) */}
+
                       <Controller
                         name={`products.${index}.files`}
                         control={control}
@@ -423,373 +417,361 @@ const CreateWebsite = () => {
                           />
                         )}
                       />
-                      </div>
-
-                     
                     </div>
-                  ))}
-
-                  <div>
-                    <button
-                      type="button"
-                      onClick={() => appendProduct({ ...defaultProduct })}
-                      className="text-sm text-primary"
-                    >
-                      + Add Product
-                    </button>
                   </div>
+                ))}
+
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => appendProduct({ ...defaultProduct })}
+                    className="text-sm text-primary"
+                  >
+                    + Add Product
+                  </button>
                 </div>
               </div>
+            </div>
 
-              {/* GALLERY */}
-              <div>
-                <div className="py-4 border-b-default border-borderGray">
-                  <span className="text-subtitle font-pmedium">Gallery</span>
-                </div>
-                <div className="grid grid-cols sm:grid-cols-1 md:grid-cols-1 gap-4 p-4 ">
-                  <Controller
-                    name="galleryTitle"
-                    control={control}
-                    render={({ field }) => (
-                      <TextField
-                        {...field}
-                        size="small"
-                        label="Gallery Section Title"
-                        fullWidth
-                      />
-                    )}
-                  />
-
-                  <Controller
-                    name="gallery"
-                    control={control}
-                    render={({ field }) => (
-                      <UploadMultipleFilesInput
-                        {...field}
-                        name="gallery"
-                        label="Gallery Images"
-                        maxFiles={10}
-                        allowedExtensions={[
-                          "jpg",
-                          "jpeg",
-                          "png",
-                          "pdf",
-                          "webp",
-                        ]}
-                        id="gallery"
-                      />
-                    )}
-                  />
-                </div>
+            {/* GALLERY */}
+            <div>
+              <div className="py-4 border-b-default border-borderGray">
+                <span className="text-subtitle font-pmedium">Gallery</span>
               </div>
+              <div className="grid grid-cols sm:grid-cols-1 md:grid-cols-1 gap-4 p-4 ">
+                <Controller
+                  name="galleryTitle"
+                  control={control}
+                  render={({ field }) => (
+                    <TextField
+                      {...field}
+                      size="small"
+                      label="Gallery Section Title"
+                      fullWidth
+                    />
+                  )}
+                />
 
-              {/* TESTIMONIALS */}
-              <div className="col-span-2">
-                <div className="py-4 border-b-default border-borderGray">
-                  <span className="text-subtitle font-pmedium">
-                    Testimonials
-                  </span>
-                </div>
-                <div className="grid grid-cols sm:grid-cols-1 md:grid-cols-1 gap-4 p-4 ">
-                  <Controller
-                    name="testimonialTitle"
-                    control={control}
-                    render={({ field }) => (
-                      <TextField
-                        {...field}
-                        size="small"
-                        label="Testimonials Section Title"
-                        fullWidth
-                      />
-                    )}
-                  />
+                <Controller
+                  name="gallery"
+                  control={control}
+                  render={({ field }) => (
+                    <UploadMultipleFilesInput
+                      {...field}
+                      name="gallery"
+                      label="Gallery Images"
+                      maxFiles={10}
+                      allowedExtensions={["jpg", "jpeg", "png", "pdf", "webp"]}
+                      id="gallery"
+                    />
+                  )}
+                />
+              </div>
+            </div>
 
-                  {testimonialFields.map((field, index) => (
-                    <div
-                      key={field.id}
-                      className="rounded-xl border border-borderGray p-4 mb-3"
-                    >
-                      <div className="flex items-center justify-between mb-3">
-                        <span className="font-pmedium">
-                          Testimonial #{index + 1}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => removeTestimonial(index)}
-                          className="text-sm text-red-600"
-                        >
-                          Remove
-                        </button>
-                      </div>
+            {/* TESTIMONIALS */}
+            <div className="col-span-2">
+              <div className="py-4 border-b-default border-borderGray">
+                <span className="text-subtitle font-pmedium">Testimonials</span>
+              </div>
+              <div className="grid grid-cols sm:grid-cols-1 md:grid-cols-1 gap-4 p-4 ">
+                <Controller
+                  name="testimonialTitle"
+                  control={control}
+                  render={({ field }) => (
+                    <TextField
+                      {...field}
+                      size="small"
+                      label="Testimonials Section Title"
+                      fullWidth
+                    />
+                  )}
+                />
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <Controller
-                          name={`testimonials.${index}.name`}
-                          control={control}
-                          rules={{ required: "Name is required" }}
-                          render={({ field }) => (
-                            <TextField
-                              {...field}
-                              size="small"
-                              label="Name"
-                              fullWidth
-                              helperText={
-                                errors?.testimonials?.[index]?.name?.message
-                              }
-                              error={!!errors?.testimonials?.[index]?.name}
-                            />
-                          )}
-                        />
-                        <Controller
-                          name={`testimonials.${index}.jobPosition`}
-                          control={control}
-                          rules={{ required: "Job Position is required" }}
-                          render={({ field }) => (
-                            <TextField
-                              {...field}
-                              size="small"
-                              label="Job Position"
-                              fullWidth
-                              helperText={
-                                errors?.testimonials?.[index]?.jobPosition
-                                  ?.message
-                              }
-                              error={
-                                !!errors?.testimonials?.[index]?.jobPosition
-                              }
-                            />
-                          )}
-                        />
-                        <Controller
-                          name={`testimonials.${index}.rating`}
-                          control={control}
-                          rules={{ required: "Rating is required" }}
-                          render={({ field }) => (
-                            <TextField
-                              {...field}
-                              type="number"
-                              size="small"
-                              label="Rating (1-5)"
-                              fullWidth
-                              inputProps={{ min: 1, max: 5 }}
-                              helperText={
-                                errors?.testimonials?.[index]?.rating?.message
-                              }
-                              error={!!errors?.testimonials?.[index]?.rating}
-                            />
-                          )}
-                        />
-                        <Controller
-                          name={`testimonials.${index}.testimony`}
-                          control={control}
-                          rules={{ required: "Testimony is required" }}
-                          render={({ field }) => (
-                            <TextField
-                              {...field}
-                              size="small"
-                              label="Testimony"
-                              fullWidth
-                              multiline
-                              minRows={3}
-                              helperText={
-                                errors?.testimonials?.[index]?.testimony
-                                  ?.message
-                              }
-                              error={!!errors?.testimonials?.[index]?.testimony}
-                            />
-                          )}
-                        />
-                      </div>
+                {testimonialFields.map((field, index) => (
+                  <div
+                    key={field.id}
+                    className="rounded-xl border border-borderGray p-4 mb-3"
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="font-pmedium">
+                        Testimonial #{index + 1}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => removeTestimonial(index)}
+                        className="text-sm text-red-600"
+                      >
+                        Remove
+                      </button>
+                    </div>
 
-                      {/* testimonialImages_${index} (single) */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <Controller
-                        name={`testimonials.${index}.file`}
+                        name={`testimonials.${index}.name`}
                         control={control}
+                        rules={{ required: "Name is required" }}
                         render={({ field }) => (
-                          <UploadFileInput
-                            value={field.value}
-                            label="Testimonial Image"
-                            onChange={field.onChange}
-                            id={`testimonial-file-${index}`}
+                          <TextField
+                            {...field}
+                            size="small"
+                            label="Name"
+                            fullWidth
+                            helperText={
+                              errors?.testimonials?.[index]?.name?.message
+                            }
+                            error={!!errors?.testimonials?.[index]?.name}
+                          />
+                        )}
+                      />
+                      <Controller
+                        name={`testimonials.${index}.jobPosition`}
+                        control={control}
+                        rules={{ required: "Job Position is required" }}
+                        render={({ field }) => (
+                          <TextField
+                            {...field}
+                            size="small"
+                            label="Job Position"
+                            fullWidth
+                            helperText={
+                              errors?.testimonials?.[index]?.jobPosition
+                                ?.message
+                            }
+                            error={!!errors?.testimonials?.[index]?.jobPosition}
+                          />
+                        )}
+                      />
+                      <Controller
+                        name={`testimonials.${index}.rating`}
+                        control={control}
+                        rules={{ required: "Rating is required" }}
+                        render={({ field }) => (
+                          <TextField
+                            {...field}
+                            type="number"
+                            size="small"
+                            label="Rating (1-5)"
+                            fullWidth
+                            inputProps={{ min: 1, max: 5 }}
+                            helperText={
+                              errors?.testimonials?.[index]?.rating?.message
+                            }
+                            error={!!errors?.testimonials?.[index]?.rating}
+                          />
+                        )}
+                      />
+                      <Controller
+                        name={`testimonials.${index}.testimony`}
+                        control={control}
+                        rules={{ required: "Testimony is required" }}
+                        render={({ field }) => (
+                          <TextField
+                            {...field}
+                            size="small"
+                            label="Testimony"
+                            fullWidth
+                            multiline
+                            minRows={3}
+                            helperText={
+                              errors?.testimonials?.[index]?.testimony?.message
+                            }
+                            error={!!errors?.testimonials?.[index]?.testimony}
                           />
                         )}
                       />
                     </div>
-                  ))}
 
-                  <div>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        appendTestimonial({ ...defaultTestimonial })
-                      }
-                      className="text-sm text-primary"
-                    >
-                      + Add Testimonial
-                    </button>
+                    {/* testimonialImages_${index} (single) */}
+                    <Controller
+                      name={`testimonials.${index}.file`}
+                      control={control}
+                      render={({ field }) => (
+                        <UploadFileInput
+                          value={field.value}
+                          label="Testimonial Image"
+                          onChange={field.onChange}
+                          id={`testimonial-file-${index}`}
+                        />
+                      )}
+                    />
                   </div>
-                </div>
-              </div>
+                ))}
 
-              {/* CONTACT */}
-              <div>
-                <div className="py-4 border-b-default border-borderGray">
-                  <span className="text-subtitle font-pmedium">Contact</span>
-                </div>
-                <div className="grid grid-cols sm:grid-cols-1 md:grid-cols-1 gap-4 p-4 ">
-                  <Controller
-                    name="contactTitle"
-                    control={control}
-                    render={({ field }) => (
-                      <TextField
-                        {...field}
-                        size="small"
-                        label="Contact Section Title"
-                        fullWidth
-                      />
-                    )}
-                  />
-                  <Controller
-                    name="mapUrl"
-                    control={control}
-                    rules={{ required: "Map URL is required" }}
-                    render={({ field }) => (
-                      <TextField
-                        {...field}
-                        size="small"
-                        label="Map URL"
-                        fullWidth
-                        helperText={errors?.mapUrl?.message}
-                        error={!!errors.mapUrl}
-                      />
-                    )}
-                  />
-                  <Controller
-                    name="email"
-                    control={control}
-                    rules={{ required: "Email is required" }}
-                    render={({ field }) => (
-                      <TextField
-                        {...field}
-                        size="small"
-                        label="Email"
-                        fullWidth
-                        helperText={errors?.email?.message}
-                        error={!!errors.email}
-                      />
-                    )}
-                  />
-                  <Controller
-                    name="phone"
-                    control={control}
-                    rules={{ required: "Phone is required" }}
-                    render={({ field }) => (
-                      <TextField
-                        {...field}
-                        size="small"
-                        label="Phone"
-                        fullWidth
-                        helperText={errors?.phone?.message}
-                        error={!!errors.phone}
-                      />
-                    )}
-                  />
-                  <Controller
-                    name="address"
-                    control={control}
-                    rules={{ required: "Address is required" }}
-                    render={({ field }) => (
-                      <TextField
-                        {...field}
-                        size="small"
-                        label="Address"
-                        fullWidth
-                        multiline
-                        minRows={2}
-                        helperText={errors?.address?.message}
-                        error={!!errors.address}
-                      />
-                    )}
-                  />
-                </div>
-              </div>
-
-              {/* FOOTER */}
-              <div>
-                <div className="py-4 border-b-default border-borderGray">
-                  <span className="text-subtitle font-pmedium">Footer</span>
-                </div>
-                <div className="grid grid-cols sm:grid-cols-1 md:grid-cols-1 gap-4 p-4 ">
-                  <Controller
-                    name="registeredCompanyName"
-                    control={control}
-                    rules={{ required: "Registered company name is required" }}
-                    render={({ field }) => (
-                      <TextField
-                        {...field}
-                        size="small"
-                        label="Registered Company Name"
-                        fullWidth
-                        helperText={errors?.registeredCompanyName?.message}
-                        error={!!errors.registeredCompanyName}
-                      />
-                    )}
-                  />
-                  <Controller
-                    name="copyrightText"
-                    control={control}
-                    rules={{ required: "Copyright text is required" }}
-                    render={({ field }) => (
-                      <TextField
-                        {...field}
-                        size="small"
-                        label="Copyright Text"
-                        fullWidth
-                        helperText={errors?.copyrightText?.message}
-                        error={!!errors.copyrightText}
-                      />
-                    )}
-                  />
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => appendTestimonial({ ...defaultTestimonial })}
+                    className="text-sm text-primary"
+                  >
+                    + Add Testimonial
+                  </button>
                 </div>
               </div>
             </div>
 
-            {/* Submit / Reset */}
-            <div className="flex items-center justify-center gap-4">
-              <PrimaryButton type="submit" title={"Submit"} />
-              <SecondaryButton handleSubmit={handleReset} title={"Reset"} />
-            </div>
-          </form>
+            {/* CONTACT */}
+            <div>
+              <div className="py-4 border-b-default border-borderGray">
+                <span className="text-subtitle font-pmedium">Contact</span>
+              </div>
+              <div className="grid grid-cols sm:grid-cols-1 md:grid-cols-1 gap-4 p-4 ">
+                <Controller
+                  name="contactTitle"
+                  control={control}
+                  render={({ field }) => (
+                    <TextField
+                      {...field}
+                      size="small"
+                      label="Contact Section Title"
+                      fullWidth
+                    />
+                  )}
+                />
+                <Controller
+                  name="mapUrl"
+                  control={control}
+                  rules={{
+                    required: "Map URL is required",
+                    validate: (val) => {
+                      const MAP_EMBED_REGEX =
+                        /^https?:\/\/(www\.)?(google\.com|maps\.google\.com)\/maps\/embed(\/v1\/[a-z]+|\?pb=|\/?\?)/i;
 
-          {/* Hints for integrators */}
-          <div className="mt-6 p-3 rounded-md bg-gray-50 text-xs text-textSecondary">
-            <p className="mb-1">Files are sent as:</p>
-            <ul className="list-disc ml-6">
-              <li>
-                <code>companyLogo</code> (single)
-              </li>
-              <li>
-                <code>heroImages</code> (multiple)
-              </li>
-              <li>
-                <code>gallery</code> (multiple)
-              </li>
-              <li>
-                <code>productImages_0..n</code> (multiple per product)
-              </li>
-              <li>
-                <code>testimonialImages_0..n</code> (single per testimonial)
-              </li>
-            </ul>
-            <p className="mt-2">
-              Arrays <code>products</code> and <code>testimonials</code> are
-              JSON-stringified in the request body.
-            </p>
+                      
+                      const v = (val || "").trim();
+
+                      // If they pasted a full iframe, fail validation (or you can auto-extract)
+                      // if (/<\s*iframe/i.test(v)) {
+                      //   return 'Paste only the "src" URL from the embed code (not the full <iframe>).';
+                      // }
+
+                      return (
+                        MAP_EMBED_REGEX.test(v) ||
+                        "Ewnter a valid Google Maps *embed* URL (e.g. https://www.google.com/maps/embed?pb=...)"
+                      );
+                    },
+                  }}
+                  render={({ field }) => (
+                    <TextField
+                      {...field}
+                      onChange={(e) => {
+                        // Optional: auto-extract src if a whole iframe was pasted
+                        const extractIframeSrc = (val = "") =>
+                        val.match(/src=["']([^"']+)["']/i)?.[1] || val;
+                        const raw = e.target.value;
+                        const cleaned = extractIframeSrc(raw).trim();
+                        
+                        field.onChange(cleaned);
+                      }}
+                      size="small"
+                      label="Embed Map URL"
+                      fullWidth
+                      helperText={errors?.mapUrl?.message}
+                      error={!!errors.mapUrl}
+                    />
+                  )}
+                />
+                <Controller
+                  name="email"
+                  control={control}
+                  rules={{ required: "Email is required" }}
+                  render={({ field }) => (
+                    <TextField
+                      {...field}
+                      size="small"
+                      label="Email"
+                      fullWidth
+                      helperText={errors?.email?.message}
+                      error={!!errors.email}
+                    />
+                  )}
+                />
+                <Controller
+                  name="phone"
+                  control={control}
+                  rules={{ required: "Phone is required" }}
+                  render={({ field }) => (
+                    <TextField
+                      {...field}
+                      size="small"
+                      label="Phone"
+                      fullWidth
+                      helperText={errors?.phone?.message}
+                      error={!!errors.phone}
+                    />
+                  )}
+                />
+                <Controller
+                  name="address"
+                  control={control}
+                  rules={{ required: "Address is required" }}
+                  render={({ field }) => (
+                    <TextField
+                      {...field}
+                      size="small"
+                      label="Address"
+                      fullWidth
+                      multiline
+                      minRows={2}
+                      helperText={errors?.address?.message}
+                      error={!!errors.address}
+                    />
+                  )}
+                />
+              </div>
+            </div>
+
+            {/* FOOTER */}
+            <div>
+              <div className="py-4 border-b-default border-borderGray">
+                <span className="text-subtitle font-pmedium">Footer</span>
+              </div>
+              <div className="grid grid-cols sm:grid-cols-1 md:grid-cols-1 gap-4 p-4 ">
+                <Controller
+                  name="registeredCompanyName"
+                  control={control}
+                  rules={{ required: "Registered company name is required" }}
+                  render={({ field }) => (
+                    <TextField
+                      {...field}
+                      size="small"
+                      label="Registered Company Name"
+                      fullWidth
+                      helperText={errors?.registeredCompanyName?.message}
+                      error={!!errors.registeredCompanyName}
+                    />
+                  )}
+                />
+                <Controller
+                  name="copyrightText"
+                  control={control}
+                  rules={{ required: "Copyright text is required" }}
+                  render={({ field }) => (
+                    <TextField
+                      {...field}
+                      size="small"
+                      label="Copyright Text"
+                      fullWidth
+                      helperText={errors?.copyrightText?.message}
+                      error={!!errors.copyrightText}
+                    />
+                  )}
+                />
+              </div>
+            </div>
           </div>
-        </div>
-      ) : (
-        <CircularProgress />
-      )}
+
+          {/* Submit / Reset */}
+          <div className="flex items-center justify-center gap-4">
+            <PrimaryButton
+              type="submit"
+              title={"Submit"}
+              isLoading={isCreateWebsiteLoading}
+            />
+            <SecondaryButton handleSubmit={handleReset} title={"Reset"} />
+          </div>
+        </form>
+      </div>
     </div>
   );
 };
