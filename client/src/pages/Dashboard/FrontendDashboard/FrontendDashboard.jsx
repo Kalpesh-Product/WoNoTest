@@ -473,7 +473,7 @@ const FrontendDashboard = () => {
   },
   {
     key: PERMISSIONS.FRONTEND_EDIT_WEBSITE.value,
-    route: "edit-website",
+    route: "websites",
     title: "Edit website",
     icon: <LuHardDriveUpload />,
   },
