@@ -20,7 +20,7 @@ const templateSchema = new mongoose.Schema(
       },
     ],
     //about
-    about: { type: String, required: true },
+    about: [{ type: String, required: true }],
     //products
     productTitle: { type: String },
     products: [

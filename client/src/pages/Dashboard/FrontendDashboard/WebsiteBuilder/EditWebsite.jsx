@@ -46,15 +46,6 @@ const EditWebsite = () => {
   const tpl = state.website;
 
   const isLoading = state.isLoading;
-  // 1) Fetch template
-  //   const { data: tpl, isLoading } = useQuery({
-  //     queryKey: ["website-template", tenant],
-  //     queryFn: async () => {
-  //       const res = await axios.get(`/api/editor/get-template/${tenant}`);
-  //       return res.data;
-  //     },
-  //     enabled: !!tenant,
-  //   });
 
   const {
     control,
@@ -69,7 +60,7 @@ const EditWebsite = () => {
       title: "",
       subTitle: "",
       CTAButtonText: "",
-      about: "",
+      about: [],
       productTitle: "",
       galleryTitle: "",
       testimonialTitle: "",
@@ -107,6 +98,12 @@ const EditWebsite = () => {
     remove: removeTestimonial,
   } = useFieldArray({ control, name: "testimonials" });
 
+  const {
+    fields: aboutFields,
+    append: appendAbout,
+    remove: removeAbout,
+  } = useFieldArray({ control, name: "about" });
+
   // queue delete of an existing image (works for arrays or single-object fields)
   const queueDelete = (pathExisting, pathDeletedIds, img) => {
     const current = watch(pathExisting);
@@ -143,7 +140,11 @@ const EditWebsite = () => {
       title: tpl?.title ?? "",
       subTitle: tpl?.subTitle ?? "",
       CTAButtonText: tpl?.CTAButtonText ?? "",
-      about: tpl?.about ?? "",
+      // about: tpl?.about ?? "",
+      about:
+        Array.isArray(tpl?.about) && tpl.about.length
+          ? tpl.about.map((para) => ({ text: para }))
+          : [{ text: "" }],
       productTitle: tpl?.productTitle ?? "",
       galleryTitle: tpl?.galleryTitle ?? "",
       testimonialTitle: tpl?.testimonialTitle ?? "",
@@ -218,7 +219,7 @@ const EditWebsite = () => {
     fd.append("title", vals.title || "");
     fd.append("subTitle", vals.subTitle || "");
     fd.append("CTAButtonText", vals.CTAButtonText || "");
-    fd.append("about", vals.about || "");
+  
     fd.append("productTitle", vals.productTitle || "");
     fd.append("galleryTitle", vals.galleryTitle || "");
     fd.append("testimonialTitle", vals.testimonialTitle || "");
@@ -231,8 +232,7 @@ const EditWebsite = () => {
     fd.append("copyrightText", vals.copyrightText || "");
 
     // NEW: keep-lists for hero & gallery (computed from remaining existing arrays)
-    // const companyLogoId = vals.companyLogoExisting?.id ?? null;
-    // fd.append("companyLogoId", JSON.stringify(companyLogoId));
+      fd.append("about", JSON.stringify(vals.about.map((a) => a.text)));
     const heroKeepIds = (vals.heroImagesExisting || []).map((x) => x.id);
     const galleryKeepIds = (vals.galleryExisting || []).map((x) => x.id);
     fd.append("heroImageIds", JSON.stringify(heroKeepIds));
@@ -259,7 +259,10 @@ const EditWebsite = () => {
       imageId: t.image?.id ?? null, // NEW
     }));
 
-    fd.append("companyLogoId", JSON.stringify(vals.companyLogoExisting?.id ?? null));
+    fd.append(
+      "companyLogoId",
+      JSON.stringify(vals.companyLogoExisting?.id ?? null)
+    );
     fd.append("products", JSON.stringify(productsMeta));
     fd.append("testimonials", JSON.stringify(testimonialsMeta));
 
@@ -318,7 +321,6 @@ const EditWebsite = () => {
   };
 
   const handleReset = () => {
-   
     // const node = formRef.current;
     // node && node.reset();
     // if (tpl) {
@@ -326,7 +328,7 @@ const EditWebsite = () => {
     //   const evt = new Event("reset", { bubbles: true });
     //   node.dispatchEvent(evt);
     // }
-    reset()
+    reset();
   };
 
   // 5) Render
@@ -465,10 +467,7 @@ const EditWebsite = () => {
                     />
                   )}
                 />
-                {/* <NewFilesGrid
-                  files={values.heroImages}
-                  onDeleteAt={(idx) => removeNewFileAt("heroImages", idx)}
-                /> */}
+              
               </div>
             </div>
 
@@ -478,23 +477,51 @@ const EditWebsite = () => {
                 <span className="text-subtitle font-pmedium">About</span>
               </div>
               <div className="grid grid-cols sm:grid-cols-1 md:grid-cols-1 gap-4 p-4 ">
-                <Controller
-                  name="about"
-                  control={control}
-                  rules={{ required: "About is required" }}
-                  render={({ field }) => (
-                    <TextField
-                      {...field}
-                      size="small"
-                      label="About"
-                      fullWidth
-                      multiline
-                      minRows={3}
-                      helperText={errors?.about?.message}
-                      error={!!errors.about}
+
+                {aboutFields.map((field, index) => (
+                  <div
+                    key={field.id}
+                    className="rounded-xl border border-borderGray p-4 mb-3"
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="font-pmedium">Para #{index + 1}</span>
+                      <button
+                        type="button"
+                        onClick={() => removeAbout(index)}
+                        className="text-sm text-red-600"
+                      >
+                        Remove
+                      </button>
+                    </div>
+
+                    <Controller
+                      name={`about.${index}.text`}
+                      control={control}
+                      rules={{ required: "About paragraph is required" }}
+                      render={({ field }) => (
+                        <TextField
+                          {...field}
+                          size="small"
+                          label="About Paragraph"
+                          fullWidth
+                          multiline
+                          minRows={3}
+                          helperText={errors?.about?.[index]?.text?.message}
+                          error={!!errors?.about?.[index]?.text}
+                        />
+                      )}
                     />
-                  )}
-                />
+                  </div>
+                ))}
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => appendAbout({ text: "" })}
+                    className="text-sm text-primary"
+                  >
+                    + Add Para
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -762,7 +789,6 @@ const EditWebsite = () => {
                       <Controller
                         name={`testimonials.${index}.jobPosition`}
                         control={control}
-                        
                         render={({ field }) => (
                           <TextField
                             {...field}
@@ -968,7 +994,6 @@ const EditWebsite = () => {
                 <Controller
                   name="registeredCompanyName"
                   control={control}
-                  
                   render={({ field }) => (
                     <TextField
                       {...field}
@@ -1006,9 +1031,11 @@ const EditWebsite = () => {
               title={isUpdating ? "Updating..." : "Submit"}
               isLoading={isUpdating}
             />
-            <SecondaryButton 
-             type="button" 
-             handleSubmit={handleReset} title="Reset" />
+            <SecondaryButton
+              type="button"
+              handleSubmit={handleReset}
+              title="Reset"
+            />
           </div>
         </form>
       </div>

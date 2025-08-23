@@ -45,7 +45,7 @@ const CreateWebsite = () => {
       heroImages: [],
       gallery: [],
       // about
-      about: "",
+      about: [{text:""}],
       // products
       productTitle: "",
       products: [defaultProduct],
@@ -65,6 +65,12 @@ const CreateWebsite = () => {
       copyrightText: "",
     },
   });
+
+  const {
+    fields: aboutFields,
+    append: appendAbout,
+    remove: removeAbout,
+  } = useFieldArray({ control, name: "about" });
 
   const {
     fields: productFields,
@@ -96,6 +102,7 @@ const CreateWebsite = () => {
       testimony: t.testimony,
       rating: Number(t.rating) || 0,
     }));
+    fd.set("about", JSON.stringify(values.about.map((p) => p.text)));
     fd.set("products", JSON.stringify(productsMeta));
     fd.set("testimonials", JSON.stringify(testimonialsMeta));
 
@@ -103,6 +110,7 @@ const CreateWebsite = () => {
       if (/^(products|testimonials)\.\d+\./.test(key)) fd.delete(key);
     }
 
+    fd.set("about", JSON.stringify(values.about.map((p) => p.text)));
     fd.append("companyLogo", values.companyLogo);
 
     fd.delete("heroImages");
@@ -265,7 +273,7 @@ const CreateWebsite = () => {
             </div>
 
             {/* ABOUT */}
-            <div>
+            {/* <div>
               <div className="py-4 border-b-default border-borderGray">
                 <span className="text-subtitle font-pmedium">About</span>
               </div>
@@ -287,6 +295,58 @@ const CreateWebsite = () => {
                     />
                   )}
                 />
+              </div>
+            </div> */}
+
+            {/* ABOUT */}
+            <div>
+              <div className="py-4 border-b-default border-borderGray">
+                <span className="text-subtitle font-pmedium">About</span>
+              </div>
+              <div className="grid grid-cols sm:grid-cols-1 md:grid-cols-1 gap-4 p-4 ">
+                {aboutFields.map((field, index) => (
+                  <div
+                    key={field.id}
+                    className="rounded-xl border border-borderGray p-4 mb-3"
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="font-pmedium">Para #{index + 1}</span>
+                      <button
+                        type="button"
+                        onClick={() => removeAbout(index)}
+                        className="text-sm text-red-600"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                    <Controller
+                      name={`about.${index}.text`}
+                      control={control}
+                      rules={{ required: "About paragraph is required" }}
+                      render={({ field }) => (
+                        <TextField
+                          {...field}
+                          size="small"
+                          label="About Paragraph"
+                          fullWidth
+                          multiline
+                          minRows={3}
+                          helperText={errors?.about?.[index]?.text?.message}
+                          error={!!errors?.about?.[index]?.text}
+                        />
+                      )}
+                    />
+                  </div>
+                ))}
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => appendAbout({ text: "" })}
+                    className="text-sm text-primary"
+                  >
+                    + Add Para
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -510,8 +570,7 @@ const CreateWebsite = () => {
                       <Controller
                         name={`testimonials.${index}.name`}
                         control={control}
-                        rules={{ required: "Name is required" }}
-                        render={({ field }) => (
+                         render={({ field }) => (
                           <TextField
                             {...field}
                             size="small"
@@ -527,7 +586,7 @@ const CreateWebsite = () => {
                       <Controller
                         name={`testimonials.${index}.jobPosition`}
                         control={control}
-                        rules={{ required: "Job Position is required" }}
+                         
                         render={({ field }) => (
                           <TextField
                             {...field}
@@ -545,7 +604,7 @@ const CreateWebsite = () => {
                       <Controller
                         name={`testimonials.${index}.rating`}
                         control={control}
-                        rules={{ required: "Rating is required" }}
+                        
                         render={({ field }) => (
                           <TextField
                             {...field}
@@ -564,7 +623,7 @@ const CreateWebsite = () => {
                       <Controller
                         name={`testimonials.${index}.testimony`}
                         control={control}
-                        rules={{ required: "Testimony is required" }}
+                        
                         render={({ field }) => (
                           <TextField
                             {...field}
@@ -637,7 +696,6 @@ const CreateWebsite = () => {
                       const MAP_EMBED_REGEX =
                         /^https?:\/\/(www\.)?(google\.com|maps\.google\.com)\/maps\/embed(\/v1\/[a-z]+|\?pb=|\/?\?)/i;
 
-                      
                       const v = (val || "").trim();
 
                       // If they pasted a full iframe, fail validation (or you can auto-extract)
@@ -657,10 +715,10 @@ const CreateWebsite = () => {
                       onChange={(e) => {
                         // Optional: auto-extract src if a whole iframe was pasted
                         const extractIframeSrc = (val = "") =>
-                        val.match(/src=["']([^"']+)["']/i)?.[1] || val;
+                          val.match(/src=["']([^"']+)["']/i)?.[1] || val;
                         const raw = e.target.value;
                         const cleaned = extractIframeSrc(raw).trim();
-                        
+
                         field.onChange(cleaned);
                       }}
                       size="small"
