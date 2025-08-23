@@ -15,7 +15,8 @@ const createTemplate = async (req, res, next) => {
     const company = "BizNest";
     // `products` might arrive as a JSON string in multipart. Normalize it.
 
-    let { products, testimonials } = req.body;
+    let { products, testimonials, about } = req.body;
+    about = JSON.parse(about || "[]");
     products = JSON.parse(products || "[]");
     testimonials = JSON.parse(testimonials || "[]");
 
@@ -48,7 +49,7 @@ const createTemplate = async (req, res, next) => {
       title: req.body.title,
       subTitle: req.body.subTitle,
       CTAButtonText: req.body.CTAButtonText,
-      about: req.body.about,
+      about: about,
       productTitle: req.body?.productTitle,
       galleryTitle: req.body?.galleryTitle,
       testimonialTitle: req.body.testimonialTitle,
@@ -222,6 +223,7 @@ const editTemplate = async (req, res, next) => {
       heroImageIds,
       galleryImageIds,
       companyLogoId,
+      about,
     } = req.body;
     const company = "BizNest";
 
@@ -256,6 +258,7 @@ const editTemplate = async (req, res, next) => {
       return out;
     };
 
+    about = parseJson(about, []);
     companyLogoId = parseJson(companyLogoId, undefined);
     products = parseJson(products, []); // [{ _id?, type, name, cost, description, imageIds? }]
     testimonials = parseJson(testimonials, []); // [{ _id?, name, jobPosition, testimony, rating, imageId? }]
@@ -290,7 +293,7 @@ const editTemplate = async (req, res, next) => {
       title: req.body.title ?? template.title,
       subTitle: req.body.subTitle ?? template.subTitle,
       CTAButtonText: req.body.CTAButtonText ?? template.CTAButtonText,
-      about: req.body.about ?? template.about,
+      about: Array.isArray(about) ? about : template.about,
       productTitle: req.body.productTitle ?? template.productTitle,
       galleryTitle: req.body.galleryTitle ?? template.galleryTitle,
       testimonialTitle: req.body.testimonialTitle ?? template.testimonialTitle,
