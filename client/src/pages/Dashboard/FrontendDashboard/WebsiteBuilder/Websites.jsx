@@ -44,48 +44,6 @@ const Websites = () => {
     queryFn: fetchTemplates,
   });
 
-  const themeImages = [
-    {
-      src: CoWorkingMewo,
-      mockup: CoWorkingMewoMockup,
-      alt: "CoWorkingMewo",
-      tag: "co-working",
-    },
-    {
-      src: CoWorkingImage,
-      mockup: CoWorkingImageMockup,
-      alt: "Co-Working Image",
-      tag: "co-working",
-    },
-    {
-      src: Boutique,
-      mockup: BoutiqueMockup,
-      alt: "Boutique Image",
-      tag: "boutique",
-    },
-    {
-      src: CoLivingImage,
-      mockup: CoLivingImageMockup,
-      alt: "Co-Living Image",
-      tag: "co-living",
-    },
-    {
-      src: CoWorkingImage_2,
-      mockup: CoWorkingNomad,
-      alt: "CoLivingImage_2",
-      tag: "co-working",
-    },
-    {
-      src: CoWorkingImage_3,
-      mockup: CoWorkingImage_3_Mockup,
-      alt: "CoLivingImage_3",
-      tag: "co-working",
-    },
-    { src: Cafe_2, mockup: Cafe2Mockup, alt: "Cafe_2", tag: "cafe" },
-    { src: Cafe_3, mockup: Cafe3Mockup, alt: "Cafe_3", tag: "cafe" },
-    { src: Hostels, mockup: Hostels_mockup, alt: "Hostels", tag: "hostels" },
-  ];
-
   return (
     <div>
       <div className="p-4 flex flex-col gap-4">
@@ -96,44 +54,87 @@ const Websites = () => {
 
         {!isTemplatesPending ? (
           <div className="grid grid-cols-2 sm:grid-cols1 gap-6">
-            {templates.map((template, index) => (
+            {/* {templates.map((template) => (
               <div key={template._id}>
                 <div
-                  className="theme-grid w-full h-full overflow-hidden shadow-lg rounded-xl"
-                  key={index}
                   onClick={() =>
-                    navigate(`/app/dashboard/frontend-dashboard/websites/${template.companyName}`, {
-                      state: { website: template,isLoading:isTemplatesPending },
-                      
-                    })
+                    navigate(
+                      `/app/dashboard/frontend-dashboard/websites/${template.companyName}`,
+                      {
+                        state: {
+                          website: template,
+                          isLoading: isTemplatesPending,
+                        },
+                      }
+                    )
                   }
+                  className="relative group overflow-hidden shadow-lg rounded-xl cursor-pointer aspect-[16/9]" // ← fixed height via aspect ratio
                 >
                   <img
-                    src={template?.heroImages[0]?.url}
+                    src={template?.heroImages?.[0]?.url}
                     alt={template.companyName}
-                    className="w-full h-full object-cover transition-transform duration-200 hover:scale-110 cursor-pointer"
+                    className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" // ← fill box
                   />
+
+                  {/* bottom gradient 
+                  <div className="pointer-events-none absolute inset-x-0 bottom-0">
+                    <div className="bg-gradient-to-t from-black/70 via-black/30 to-transparent h-20 w-full" />
+                  </div>
+
+                  {/* company name 
+                  <div className="pointer-events-none absolute left-3 right-3 bottom-3">
+                    <span className="inline-block max-w-full truncate text-white font-semibold text-lg drop-shadow-sm">
+                      {template.companyName || "Untitled"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ))} */}
+
+            {templates.map((template) => (
+              <div key={template._id}>
+                <div
+                  onClick={() =>
+                    navigate(
+                      `/app/dashboard/frontend-dashboard/websites/${template.companyName}`,
+                      {
+                        state: {
+                          website: template,
+                          isLoading: isTemplatesPending,
+                        },
+                      }
+                    )
+                  }
+                  className="relative group overflow-hidden shadow-lg rounded-xl cursor-pointer aspect-[16/9]"
+                >
+                  <img
+                    src={template?.heroImages?.[0]?.url}
+                    alt={template.companyName}
+                    className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                  />
+
+                  {/* subtle dark overlay for readability */}
+                  <div className="absolute inset-0 bg-black/30" />
+
+                  {/* centered title + subtitle */}
+                  <div className="absolute inset-0 flex flex-col items-center justify-center px-4 text-center">
+                    <h3 className="text-white font-semibold text-xl md:text-2xl drop-shadow-sm truncate w-full">
+                      {template.title || template.companyName || "Untitled"}
+                    </h3>
+                    {template.subTitle ? (
+                      <p className="mt-1 text-white/90 text-sm md:text-base drop-shadow-sm truncate w-full">
+                        {template.subTitle}
+                      </p>
+                    ) : null}
+                    {template.companyName ? (
+                      <h2 className="mt-1 font-bold text-white/90 text-sm md:text-base drop-shadow-sm truncate w-full">
+                        {template.companyName}
+                      </h2>
+                    ) : null}
+                  </div>
                 </div>
               </div>
             ))}
-            {/* {themeImages.map((image, index) => (
-              <div
-                className="theme-grid w-full h-full overflow-hidden shadow-lg rounded-xl"
-                key={index}
-                onClick={() => {
-                  navigate("/app/dashboard/frontend-dashboard/view-theme", {
-                    state: { image },
-                  }); // Pass theme data
-                  window.scrollTo({ top: 0, behavior: "instant" });
-                }}
-              >
-                <img
-                  src={image.src}
-                  alt={image.alt}
-                  className="w-full h-full object-cover transition-transform duration-200 hover:scale-110 cursor-pointer"
-                />
-              </div>
-            ))} */}
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols2 gap-2">

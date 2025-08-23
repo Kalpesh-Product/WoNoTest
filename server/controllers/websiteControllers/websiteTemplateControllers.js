@@ -218,6 +218,14 @@ const editTemplate = async (req, res, next) => {
   session.startTransaction();
 
   try {
+    // --- parse body meta (JSON strings in multipart) ---
+    let {
+      products,
+      testimonials,
+      heroImageIds,
+      galleryImageIds,
+      companyLogoId,
+    } = req.body;
     const company = "BizNest";
 
     // --- helpers ---
@@ -251,9 +259,7 @@ const editTemplate = async (req, res, next) => {
       return out;
     };
 
-    // --- parse body meta (JSON strings in multipart) ---
-    let { products, testimonials, heroImageIds, galleryImageIds } = req.body;
-
+    companyLogoId = parseJson(companyLogoId, undefined);
     products = parseJson(products, []); // [{ _id?, type, name, cost, description, imageIds? }]
     testimonials = parseJson(testimonials, []); // [{ _id?, name, jobPosition, testimony, rating, imageId? }]
     const heroKeepIds = new Set(parseJson(heroImageIds, undefined)); // undefined => don't perform delete
@@ -300,6 +306,15 @@ const editTemplate = async (req, res, next) => {
         req.body.registeredCompanyName ?? template.registeredCompanyName,
       copyrightText: req.body.copyrightText ?? template.copyrightText,
     });
+
+    if (companyLogoId !== undefined) {
+      const currentId = template.companyLogo?.id || null;
+      // If client wants it gone (null) or changed (id mismatch), remove the old one
+      if (currentId && currentId !== companyLogoId) {
+        await handleFileDelete(currentId).catch(() => null);
+        template.companyLogo = null;
+      }
+    }
 
     // --- companyLogo (replace) ---
     if (filesByField.companyLogo?.[0]) {
