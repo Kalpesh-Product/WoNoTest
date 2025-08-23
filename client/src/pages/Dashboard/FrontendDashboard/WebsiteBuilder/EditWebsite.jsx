@@ -40,21 +40,21 @@ const fileUrl = (file) => (file ? URL.createObjectURL(file) : "");
 
 const EditWebsite = () => {
   const axios = useAxiosPrivate();
-  const {state} = useLocation()
+  const { state } = useLocation();
   const formRef = useRef(null);
   const tenant = "spring";
-const tpl = state.website
+  const tpl = state.website;
 
-const isLoading = state.isLoading
+  const isLoading = state.isLoading;
   // 1) Fetch template
-//   const { data: tpl, isLoading } = useQuery({
-//     queryKey: ["website-template", tenant],
-//     queryFn: async () => {
-//       const res = await axios.get(`/api/editor/get-template/${tenant}`);
-//       return res.data;
-//     },
-//     enabled: !!tenant,
-//   });
+  //   const { data: tpl, isLoading } = useQuery({
+  //     queryKey: ["website-template", tenant],
+  //     queryFn: async () => {
+  //       const res = await axios.get(`/api/editor/get-template/${tenant}`);
+  //       return res.data;
+  //     },
+  //     enabled: !!tenant,
+  //   });
 
   const {
     control,
@@ -194,7 +194,7 @@ const isLoading = state.isLoading
   const values = watch();
 
   // 4) Submit -> FormData for /api/editor/edit-template
-  const { mutate: updateTemplate, isLoading: isUpdating } = useMutation({
+  const { mutate: updateTemplate, isPending: isUpdating } = useMutation({
     mutationKey: ["website-update", tenant],
     mutationFn: async (fd) => {
       const res = await axios.patch(`/api/editor/edit-website`, fd, {
@@ -259,6 +259,7 @@ const isLoading = state.isLoading
       imageId: t.image?.id ?? null, // NEW
     }));
 
+    fd.append("companyLogoId", JSON.stringify(vals.companyLogoExisting?.id ?? null));
     fd.append("products", JSON.stringify(productsMeta));
     fd.append("testimonials", JSON.stringify(testimonialsMeta));
 
@@ -317,13 +318,15 @@ const isLoading = state.isLoading
   };
 
   const handleReset = () => {
-    const node = formRef.current;
-    node && node.reset();
-    if (tpl) {
-      // re-run the reset with tpl to restore server state
-      const evt = new Event("reset", { bubbles: true });
-      node.dispatchEvent(evt);
-    }
+   
+    // const node = formRef.current;
+    // node && node.reset();
+    // if (tpl) {
+    //   // re-run the reset with tpl to restore server state
+    //   const evt = new Event("reset", { bubbles: true });
+    //   node.dispatchEvent(evt);
+    // }
+    reset()
   };
 
   // 5) Render
@@ -406,36 +409,19 @@ const isLoading = state.isLoading
                   )}
                 />
 
-                {/* existing logo preview */}
-                {values.companyLogoExisting?.url ? (
-                  <div className="text-xs text-gray-500">
-                    Current logo:{" "}
-                    <a
-                      href={values.companyLogoExisting.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="underline"
-                    >
-                      view
-                    </a>
-                  </div>
-                ) : null}
-                {/* <div className="text-xs text-gray-500">
-                  Current logo:{" "}
-                  {values?.companyLogoExisting?.url ? "Yes" : "No"}
+                <div className="text-xs text-gray-500">
+                  Current logo: {values?.companyLogoExisting ? "Yes" : "No"}
                 </div>
                 {values.companyLogoExisting && (
                   <ExistingImagesGrid
-                    items={values.companyLogoExisting} // can be object now, grid handles it
-                    onDelete={(img) =>
-                      queueDelete(
-                        "companyLogoExisting",
-                        "deletedCompanyLogo",
-                        img
-                      )
+                    items={values.companyLogoExisting} // single object works now
+                    onDelete={() =>
+                      setValue("companyLogoExisting", null, {
+                        shouldDirty: true,
+                      })
                     }
                   />
-                )} */}
+                )}
 
                 {/* companyLogo (single) */}
                 <Controller
@@ -776,7 +762,7 @@ const isLoading = state.isLoading
                       <Controller
                         name={`testimonials.${index}.jobPosition`}
                         control={control}
-                        rules={{ required: "Job Position is required" }}
+                        
                         render={({ field }) => (
                           <TextField
                             {...field}
@@ -982,7 +968,7 @@ const isLoading = state.isLoading
                 <Controller
                   name="registeredCompanyName"
                   control={control}
-                  rules={{ required: "Registered company name is required" }}
+                  
                   render={({ field }) => (
                     <TextField
                       {...field}
@@ -1020,7 +1006,9 @@ const isLoading = state.isLoading
               title={isUpdating ? "Updating..." : "Submit"}
               isLoading={isUpdating}
             />
-            <SecondaryButton handleSubmit={handleReset} title="Reset" />
+            <SecondaryButton 
+             type="button" 
+             handleSubmit={handleReset} title="Reset" />
           </div>
         </form>
       </div>
@@ -1028,56 +1016,31 @@ const isLoading = state.isLoading
   );
 };
 
-// Existing images preview (DB) with delete
-const ExistingImagesGrid = ({ items = [], onDelete }) => (
-  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mt-2">
-    {items.map((img) => (
-      <div key={img.id} className="relative rounded-lg overflow-hidden border">
-        <img src={img.url} alt="" className="w-full h-36 object-cover" />
-        <div className="px-2 py-1 text-xs truncate">
-          {img.id?.split("/").pop()}
-        </div>
-        <button
-          type="button"
-          className="absolute bottom-2 right-2 bg-white/90 hover:bg-white p-2 rounded-full shadow"
-          onClick={() => onDelete(img)}
-          title="Delete"
+const ExistingImagesGrid = ({ items = [], onDelete }) => {
+  const list = Array.isArray(items) ? items : items ? [items] : [];
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mt-2">
+      {list.map((img) => (
+        <div
+          key={img.id}
+          className="relative rounded-lg overflow-hidden border"
         >
-          <FiTrash2 />
-        </button>
-      </div>
-    ))}
-  </div>
-);
-
-// New files preview with delete
-const NewFilesGrid = ({ files = [], onDeleteAt }) => (
-  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mt-2">
-    {files.map((f, i) => {
-      const url = fileUrl(f);
-      return (
-        <div key={i} className="relative rounded-lg overflow-hidden border">
-          {/* if not an image, skip the <img/> to avoid broken preview */}
-          {/^image\//.test(f.type) ? (
-            <img src={url} alt="" className="w-full h-36 object-cover" />
-          ) : (
-            <div className="w-full h-36 flex items-center justify-center text-xs text-gray-500">
-              {f.name}
-            </div>
-          )}
-          <div className="px-2 py-1 text-xs truncate">{f.name}</div>
+          <img src={img.url} alt="" className="w-full h-36 object-cover" />
+          <div className="px-2 py-1 text-xs truncate">
+            {img.id?.split("/").pop()}
+          </div>
           <button
             type="button"
             className="absolute bottom-2 right-2 bg-white/90 hover:bg-white p-2 rounded-full shadow"
-            onClick={() => onDeleteAt(i)}
-            title="Remove"
+            onClick={() => onDelete(img)}
+            title="Delete"
           >
             <FiTrash2 />
           </button>
         </div>
-      );
-    })}
-  </div>
-);
+      ))}
+    </div>
+  );
+};
 
 export default EditWebsite;
