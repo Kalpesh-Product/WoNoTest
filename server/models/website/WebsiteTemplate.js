@@ -8,6 +8,7 @@ const templateSchema = new mongoose.Schema(
       id: { type: String },
       url: { type: String },
     },
+
     companyName: { type: String, required: true },
     title: { type: String, required: true },
     subTitle: { type: String, required: true },
@@ -19,14 +20,14 @@ const templateSchema = new mongoose.Schema(
       },
     ],
     //about
-    about: { type: String, required: true },
+    about: [{ type: String, required: true }],
     //products
     productTitle: { type: String },
     products: [
       {
         type: { type: String, required: true },
         name: { type: String, required: true },
-        cost: { type: String, required: true },
+        cost: { type: String },
         description: { type: String, required: true },
         images: [
           {
@@ -51,10 +52,10 @@ const templateSchema = new mongoose.Schema(
           id: { type: String },
           url: { type: String },
         },
-        name: { type: String, required: true },
-        jobPosition: { type: String, required: true },
-        testimony: { type: String, required: true },
-        rating: { type: Number, required: true },
+        name: { type: String },
+        jobPosition: { type: String },
+        testimony: { type: String },
+        rating: { type: Number },
       },
     ],
     //contact
@@ -64,7 +65,7 @@ const templateSchema = new mongoose.Schema(
     phone: { type: String, required: true },
     address: { type: String, required: true },
     //footer
-    registeredCompanyName: { type: String, required: true },
+    registeredCompanyName: { type: String },
     copyrightText: { type: String, required: true },
   },
   { timestamps: true }

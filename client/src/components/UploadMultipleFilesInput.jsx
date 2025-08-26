@@ -9,7 +9,7 @@ const UploadMultipleFilesInput = ({
   onChange,                  // (files: File[]) => void
   disabled = false,
   label = "Upload Files",
-  allowedExtensions = ["jpg", "jpeg", "png", "pdf"],
+  allowedExtensions = ["jpg", "jpeg", "png", "pdf","webp"],
   previewType = "auto",      // "image", "pdf", "none", or "auto"
   name,                      // optional: set to include in FormData (e.g., "heroImages")
   id,                        // input id for htmlFor

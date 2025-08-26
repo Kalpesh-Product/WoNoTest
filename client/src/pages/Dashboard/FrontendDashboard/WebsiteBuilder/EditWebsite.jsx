@@ -1,76 +1,90 @@
-import React, { useRef } from "react";
-import { useForm, Controller, useFieldArray } from "react-hook-form";
-import { TextField, MenuItem, CircularProgress } from "@mui/material";
-import PageFrame from "../../../../components/Pages/PageFrame";
+import React, { useState, useEffect, useRef } from "react";
+import { Controller, useForm, useFieldArray } from "react-hook-form";
+import { TextField, CircularProgress } from "@mui/material";
 import PrimaryButton from "../../../../components/PrimaryButton";
 import SecondaryButton from "../../../../components/SecondaryButton";
-import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
 import useAxiosPrivate from "../../../../hooks/useAxiosPrivate";
+import { useLocation, useParams } from "react-router-dom";
+import { useSelector } from "react-redux";
+import dayjs from "dayjs";
+import customParseFormat from "dayjs/plugin/customParseFormat";
 import UploadMultipleFilesInput from "../../../../components/UploadMultipleFilesInput";
 import UploadFileInput from "../../../../components/UploadFileInput";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { FiTrash2 } from "react-icons/fi";
+
+dayjs.extend(customParseFormat);
 
 const defaultProduct = {
+  _id: null,
   type: "",
   name: "",
   cost: "",
   description: "",
+  images: [],
+  files: [], // File[] to append
 };
 
 const defaultTestimonial = {
+  _id: null,
   name: "",
   jobPosition: "",
   testimony: "",
   rating: 5,
+  image: null,
+  file: null, // File to add/replace
 };
 
-const CreateWebsite = () => {
+const fileUrl = (file) => (file ? URL.createObjectURL(file) : "");
+
+const EditWebsite = () => {
   const axios = useAxiosPrivate();
+  const { state } = useLocation();
   const formRef = useRef(null);
+  const tenant = "spring";
+  const tpl = state.website;
+
+  const isLoading = state.isLoading;
 
   const {
     control,
     handleSubmit,
     reset,
     watch,
+    setValue,
     formState: { errors },
   } = useForm({
     defaultValues: {
-      // hero/company
       companyName: "",
       title: "",
       subTitle: "",
       CTAButtonText: "",
-      companyLogo: null,
-      heroImages: [],
-      gallery: [],
-      // about
-      about: [{text:""}],
-      // products
+      about: [],
       productTitle: "",
-      products: [defaultProduct],
-      // gallery
       galleryTitle: "",
-      // testimonials
       testimonialTitle: "",
-      testimonials: [defaultTestimonial],
-      // contact
       contactTitle: "",
       mapUrl: "",
       email: "",
       phone: "",
       address: "",
-      // footer
       registeredCompanyName: "",
       copyrightText: "",
+
+      companyLogoExisting: null,
+      heroImagesExisting: [],
+      galleryExisting: [],
+      products: [defaultProduct],
+      testimonials: [defaultTestimonial],
+
+      // NEW: deletion queues
+      deletedHeroImageIds: [],
+      deletedGalleryImageIds: [],
+      deletedProductImages: [], // [{ productId, imageId }]
+      deletedTestimonialImageIds: [], // [imageId]
     },
   });
-
-  const {
-    fields: aboutFields,
-    append: appendAbout,
-    remove: removeAbout,
-  } = useFieldArray({ control, name: "about" });
 
   const {
     fields: productFields,
@@ -84,88 +98,245 @@ const CreateWebsite = () => {
     remove: removeTestimonial,
   } = useFieldArray({ control, name: "testimonials" });
 
-  const onSubmit = (values, e) => {
-    const formEl = e?.target || formRef.current;
-    const fd = new FormData(formEl);
+  const {
+    fields: aboutFields,
+    append: appendAbout,
+    remove: removeAbout,
+  } = useFieldArray({ control, name: "about" });
 
-    // Replace structured arrays with JSON
-    const productsMeta = (values.products || []).map((p) => ({
+  // queue delete of an existing image (works for arrays or single-object fields)
+  const queueDelete = (pathExisting, pathDeletedIds, img) => {
+    const current = watch(pathExisting);
+    const deleted = new Set([...(watch(pathDeletedIds) || [])]);
+
+    if (Array.isArray(current)) {
+      // array field (heroImagesExisting, galleryExisting, products[i].images)
+      const nextExisting = current.filter((x) => x?.id !== img?.id);
+      setValue(pathExisting, nextExisting, { shouldDirty: true });
+    } else if (current && typeof current === "object") {
+      // single object field (testimonials[i].image)
+      setValue(pathExisting, null, { shouldDirty: true });
+    }
+
+    if (img?.id) {
+      deleted.add(img.id);
+      setValue(pathDeletedIds, Array.from(deleted), { shouldDirty: true });
+    }
+  };
+
+  // remove one newly selected file from a multi-file field (hero, gallery, product.files)
+  const removeNewFileAt = (pathFiles, idx) => {
+    const next = [...(watch(pathFiles) || [])];
+    next.splice(idx, 1);
+    setValue(pathFiles, next, { shouldDirty: true });
+  };
+
+  // 3) Load template -> form
+  useEffect(() => {
+    if (isLoading || !tpl) return;
+
+    reset({
+      companyName: tpl?.companyName ?? "",
+      title: tpl?.title ?? "",
+      subTitle: tpl?.subTitle ?? "",
+      CTAButtonText: tpl?.CTAButtonText ?? "",
+      // about: tpl?.about ?? "",
+      about:
+        Array.isArray(tpl?.about) && tpl.about.length
+          ? tpl.about.map((para) => ({ text: para }))
+          : [{ text: "" }],
+      productTitle: tpl?.productTitle ?? "",
+      galleryTitle: tpl?.galleryTitle ?? "",
+      testimonialTitle: tpl?.testimonialTitle ?? "",
+      contactTitle: tpl?.contactTitle ?? "",
+      mapUrl: tpl?.mapUrl ?? "",
+      email: tpl?.email ?? "",
+      phone: tpl?.phone ?? "",
+      address: tpl?.address ?? "",
+      registeredCompanyName: tpl?.registeredCompanyName ?? "",
+      copyrightText: tpl?.copyrightText ?? "",
+
+      companyLogoExisting: tpl?.companyLogo ?? null,
+      heroImagesExisting: Array.isArray(tpl?.heroImages) ? tpl.heroImages : [],
+      galleryExisting: Array.isArray(tpl?.gallery) ? tpl.gallery : [],
+
+      companyLogo: null,
+      heroImages: [],
+      gallery: [],
+
+      products:
+        Array.isArray(tpl?.products) && tpl.products.length
+          ? tpl.products.map((p) => ({
+              _id: p?._id ?? null,
+              type: p?.type ?? "",
+              name: p?.name ?? "",
+              cost: p?.cost ?? "",
+              description: p?.description ?? "",
+              images: Array.isArray(p?.images) ? p.images : [],
+              files: [],
+            }))
+          : [defaultProduct],
+
+      testimonials:
+        Array.isArray(tpl?.testimonials) && tpl.testimonials.length
+          ? tpl.testimonials.map((t) => ({
+              _id: t?._id ?? null,
+              name: t?.name ?? "",
+              jobPosition: t?.jobPosition ?? "",
+              testimony: t?.testimony ?? "",
+              rating: t?.rating ?? 5,
+              image: t?.image ?? null,
+              file: null,
+            }))
+          : [defaultTestimonial],
+    });
+  }, [isLoading, tpl, reset]);
+
+  const values = watch();
+
+  // 4) Submit -> FormData for /api/editor/edit-template
+  const { mutate: updateTemplate, isPending: isUpdating } = useMutation({
+    mutationKey: ["website-update", tenant],
+    mutationFn: async (fd) => {
+      const res = await axios.patch(`/api/editor/edit-website`, fd, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      return res.data;
+    },
+    onSuccess: () => {
+      toast.success("Website updated successfully");
+    },
+    onError: (err) => {
+      toast.error(err?.response?.data?.message || "Update failed");
+    },
+  });
+
+  const onSubmit = (vals, e) => {
+    const fd = new FormData();
+
+    // text fields used by server (companyName builds searchKey)
+    fd.append("companyName", vals.companyName || "");
+    fd.append("title", vals.title || "");
+    fd.append("subTitle", vals.subTitle || "");
+    fd.append("CTAButtonText", vals.CTAButtonText || "");
+  
+    fd.append("productTitle", vals.productTitle || "");
+    fd.append("galleryTitle", vals.galleryTitle || "");
+    fd.append("testimonialTitle", vals.testimonialTitle || "");
+    fd.append("contactTitle", vals.contactTitle || "");
+    fd.append("mapUrl", vals.mapUrl || "");
+    fd.append("email", vals.email || "");
+    fd.append("phone", vals.phone || "");
+    fd.append("address", vals.address || "");
+    fd.append("registeredCompanyName", vals.registeredCompanyName || "");
+    fd.append("copyrightText", vals.copyrightText || "");
+
+    // NEW: keep-lists for hero & gallery (computed from remaining existing arrays)
+      fd.append("about", JSON.stringify(vals.about.map((a) => a.text)));
+    const heroKeepIds = (vals.heroImagesExisting || []).map((x) => x.id);
+    const galleryKeepIds = (vals.galleryExisting || []).map((x) => x.id);
+    fd.append("heroImageIds", JSON.stringify(heroKeepIds));
+    fd.append("galleryImageIds", JSON.stringify(galleryKeepIds));
+
+    // JSON payloads (keep _id for merge-by-id)
+    // NEW: include imageIds for each product from its remaining existing images
+    const productsMeta = (vals.products || []).map((p) => ({
+      _id: p._id || undefined,
       type: p.type,
       name: p.name,
-      subtitle: p.subtitle,
       cost: p.cost,
       description: p.description,
+      imageIds: (p.images || []).map((img) => img.id), // NEW
     }));
-    const testimonialsMeta = (values.testimonials || []).map((t) => ({
+
+    // NEW: include imageId for each testimonial (null if no image should be kept)
+    const testimonialsMeta = (vals.testimonials || []).map((t) => ({
+      _id: t._id || undefined,
       name: t.name,
       jobPosition: t.jobPosition,
       testimony: t.testimony,
       rating: Number(t.rating) || 0,
+      imageId: t.image?.id ?? null, // NEW
     }));
-    fd.set("about", JSON.stringify(values.about.map((p) => p.text)));
-    fd.set("products", JSON.stringify(productsMeta));
-    fd.set("testimonials", JSON.stringify(testimonialsMeta));
 
-    for (const key of Array.from(fd.keys())) {
-      if (/^(products|testimonials)\.\d+\./.test(key)) fd.delete(key);
-    }
+    fd.append(
+      "companyLogoId",
+      JSON.stringify(vals.companyLogoExisting?.id ?? null)
+    );
+    fd.append("products", JSON.stringify(productsMeta));
+    fd.append("testimonials", JSON.stringify(testimonialsMeta));
 
-    fd.set("about", JSON.stringify(values.about.map((p) => p.text)));
-    fd.append("companyLogo", values.companyLogo);
+    // files: logo (replace), hero/gallery (append)
+    if (vals.companyLogo) fd.append("companyLogo", vals.companyLogo);
+    (vals.heroImages || []).forEach((f) => fd.append("heroImages", f));
+    (vals.gallery || []).forEach((f) => fd.append("gallery", f));
 
-    fd.delete("heroImages");
-    (values.heroImages || []).forEach((file) => fd.append("heroImages", file));
+    // --- Map product images by FINAL index ---
+    const existingProducts = tpl?.products || [];
+    const idxById = new Map(existingProducts.map((p, i) => [String(p._id), i]));
+    const baseLen = existingProducts.length;
+    let newCounter = 0;
 
-    fd.delete("gallery");
-    (values.gallery || []).forEach((file) => fd.append("gallery", file));
+    (vals.products || []).forEach((p) => {
+      const files = p.files || [];
+      if (!files.length) return;
 
-    fd.delete("productImages");
-    (values.products || []).forEach((p, i) => {
-      (p.files || []).forEach((f) => fd.append(`productImages_${i}`, f));
+      let targetIndex;
+      if (p._id && idxById.has(String(p._id))) {
+        targetIndex = idxById.get(String(p._id));
+      } else {
+        targetIndex = baseLen + newCounter;
+        newCounter++;
+      }
+
+      files.forEach((file) => {
+        fd.append(`productImages_${targetIndex}`, file);
+      });
     });
 
-    fd.delete("testimonialImages");
-    (values.testimonials || []).forEach((t, i) => {
-      if (t?.file) fd.append(`testimonialImages_${i}`, t.file);
+    // --- Map testimonial image by FINAL index ---
+    const existingTestimonials = tpl?.testimonials || [];
+    const tIdxById = new Map(
+      existingTestimonials.map((t, i) => [String(t._id), i])
+    );
+    const tBaseLen = existingTestimonials.length;
+    let tNewCounter = 0;
+
+    (vals.testimonials || []).forEach((t) => {
+      const file = t.file;
+      if (!file) return;
+
+      let targetIndex;
+      if (t._id && tIdxById.has(String(t._id))) {
+        targetIndex = tIdxById.get(String(t._id));
+      } else {
+        targetIndex = tBaseLen + tNewCounter;
+        tNewCounter++;
+      }
+
+      fd.append(`testimonialImages_${targetIndex}`, file);
     });
 
-    // const srcFromIframe = raw.match(/src=["']([^"']+)["']/i)?.[1];
-    // const srcUrl = values.mapUrl.split(" ")[1].split(" ")[1];
-    // values.mapUrl = srcUrl;
-    // console.log("src", srcUrl);
-
-    createWebsite(fd);
+    updateTemplate(fd);
   };
 
-  const { mutate: createWebsite, isLoading: isCreateWebsiteLoading } =
-    useMutation({
-      mutationKey: ["create-website"],
-      mutationFn: async (fd) => {
-        const res = await axios.post("/api/editor/create-website", fd, {
-          headers: { "Content-Type": "multipart/form-data" },
-        });
-        return res.data;
-      },
-      onSuccess: () => {
-        toast.success("Website created successfully");
-        reset();
-      },
-      onError: (err) => {
-        toast.error(err?.response?.data?.message || "Failed to create website");
-      },
-    });
-
   const handleReset = () => {
-    const node = formRef.current;
-    node && node.reset();
+    // const node = formRef.current;
+    // node && node.reset();
+    // if (tpl) {
+    //   // re-run the reset with tpl to restore server state
+    //   const evt = new Event("reset", { bubbles: true });
+    //   node.dispatchEvent(evt);
+    // }
     reset();
   };
 
+  // 5) Render
   return (
     <div className="pb-2">
       <div className="p-4 flex flex-col gap-4">
         <div className="themePage-content-header bg-white flex flex-col gap-4">
-          <h4 className="text-4xl text-left">Create Website</h4>
+          <h4 className="text-4xl text-left">Edit Website</h4>
           <hr />
         </div>
 
@@ -180,6 +351,7 @@ const CreateWebsite = () => {
               <div className="py-4 border-b-default border-borderGray">
                 <span className="text-subtitle font-pmedium">Hero Section</span>
               </div>
+
               <div className="grid grid-cols sm:grid-cols-1 md:grid-cols-1 gap-4 p-4 ">
                 <Controller
                   name="companyName"
@@ -239,8 +411,21 @@ const CreateWebsite = () => {
                   )}
                 />
 
-                {/* companyLogo (single) */}
+                <div className="text-xs text-gray-500">
+                  Current logo: {values?.companyLogoExisting ? "Yes" : "No"}
+                </div>
+                {values.companyLogoExisting && (
+                  <ExistingImagesGrid
+                    items={values.companyLogoExisting} // single object works now
+                    onDelete={() =>
+                      setValue("companyLogoExisting", null, {
+                        shouldDirty: true,
+                      })
+                    }
+                  />
+                )}
 
+                {/* companyLogo (single) */}
                 <Controller
                   name="companyLogo"
                   control={control}
@@ -248,55 +433,43 @@ const CreateWebsite = () => {
                     <UploadFileInput
                       id="companyLogo"
                       value={field.value}
-                      label="Company Logo"
+                      label="Replace Company Logo"
                       onChange={field.onChange}
                     />
                   )}
                 />
 
-                {/* heroImages (multiple) */}
+                <div className="text-xs text-gray-500 mt-2">
+                  Existing hero images: {values.heroImagesExisting?.length || 0}
+                </div>
+                <ExistingImagesGrid
+                  items={values.heroImagesExisting}
+                  onDelete={(img) =>
+                    queueDelete(
+                      "heroImagesExisting",
+                      "deletedHeroImageIds",
+                      img
+                    )
+                  }
+                />
+
                 <Controller
                   name="heroImages"
                   control={control}
                   render={({ field }) => (
                     <UploadMultipleFilesInput
                       {...field}
-                      name="heroImages" // important so FormData picks the files
-                      label="Hero Images"
-                      maxFiles={5}
-                      allowedExtensions={["jpg", "jpeg", "png", "pdf", "webp"]}
+                      name="heroImages"
+                      label="Add Hero Images (max 10)"
+                      maxFiles={10}
+                      allowedExtensions={["jpg", "jpeg", "png", "webp", "pdf"]}
                       id="heroImages"
                     />
                   )}
                 />
+              
               </div>
             </div>
-
-            {/* ABOUT */}
-            {/* <div>
-              <div className="py-4 border-b-default border-borderGray">
-                <span className="text-subtitle font-pmedium">About</span>
-              </div>
-              <div className="grid grid-cols sm:grid-cols-1 md:grid-cols-1 gap-4 p-4 ">
-                <Controller
-                  name="about"
-                  control={control}
-                  rules={{ required: "About is required" }}
-                  render={({ field }) => (
-                    <TextField
-                      {...field}
-                      size="small"
-                      label="About"
-                      fullWidth
-                      multiline
-                      minRows={3}
-                      helperText={errors?.about?.message}
-                      error={!!errors.about}
-                    />
-                  )}
-                />
-              </div>
-            </div> */}
 
             {/* ABOUT */}
             <div>
@@ -304,6 +477,7 @@ const CreateWebsite = () => {
                 <span className="text-subtitle font-pmedium">About</span>
               </div>
               <div className="grid grid-cols sm:grid-cols-1 md:grid-cols-1 gap-4 p-4 ">
+
                 {aboutFields.map((field, index) => (
                   <div
                     key={field.id}
@@ -319,6 +493,7 @@ const CreateWebsite = () => {
                         Remove
                       </button>
                     </div>
+
                     <Controller
                       name={`about.${index}.text`}
                       control={control}
@@ -384,6 +559,7 @@ const CreateWebsite = () => {
                         Remove
                       </button>
                     </div>
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <Controller
                         name={`products.${index}.type`}
@@ -419,7 +595,6 @@ const CreateWebsite = () => {
                           />
                         )}
                       />
-
                       <Controller
                         name={`products.${index}.cost`}
                         control={control}
@@ -456,15 +631,30 @@ const CreateWebsite = () => {
                           />
                         )}
                       />
-                      {/* productImages_${index} (multiple) */}
 
+                      {/* Existing images count */}
+                      <div className="text-xs text-gray-500 md:col-span-2">
+                        Existing images:{" "}
+                        {values?.products?.[index]?.images?.length || 0}
+                      </div>
+                      <ExistingImagesGrid
+                        items={values.products[index].images}
+                        onDelete={(img) =>
+                          queueDelete(
+                            `products.${index}.images`,
+                            "deletedProductImages",
+                            img
+                          )
+                        }
+                      />
+                      {/* productImages_${finalIndex} */}
                       <Controller
                         name={`products.${index}.files`}
                         control={control}
                         render={({ field }) => (
                           <UploadMultipleFilesInput
                             {...field}
-                            label="Product Images"
+                            label="Add Product Images"
                             maxFiles={15}
                             allowedExtensions={[
                               "jpg",
@@ -499,6 +689,19 @@ const CreateWebsite = () => {
                 <span className="text-subtitle font-pmedium">Gallery</span>
               </div>
               <div className="grid grid-cols sm:grid-cols-1 md:grid-cols-1 gap-4 p-4 ">
+                <div className="text-xs text-gray-500">
+                  Existing gallery images: {values.galleryExisting?.length || 0}
+                </div>
+                <ExistingImagesGrid
+                  items={values.galleryExisting}
+                  onDelete={(img) =>
+                    queueDelete(
+                      "galleryExisting",
+                      "deletedGalleryImageIds",
+                      img
+                    )
+                  }
+                />
                 <Controller
                   name="galleryTitle"
                   control={control}
@@ -511,7 +714,6 @@ const CreateWebsite = () => {
                     />
                   )}
                 />
-
                 <Controller
                   name="gallery"
                   control={control}
@@ -519,7 +721,7 @@ const CreateWebsite = () => {
                     <UploadMultipleFilesInput
                       {...field}
                       name="gallery"
-                      label="Gallery Images"
+                      label="Add Gallery Images"
                       maxFiles={10}
                       allowedExtensions={["jpg", "jpeg", "png", "pdf", "webp"]}
                       id="gallery"
@@ -570,7 +772,8 @@ const CreateWebsite = () => {
                       <Controller
                         name={`testimonials.${index}.name`}
                         control={control}
-                         render={({ field }) => (
+                        rules={{ required: "Name is required" }}
+                        render={({ field }) => (
                           <TextField
                             {...field}
                             size="small"
@@ -586,7 +789,6 @@ const CreateWebsite = () => {
                       <Controller
                         name={`testimonials.${index}.jobPosition`}
                         control={control}
-                         
                         render={({ field }) => (
                           <TextField
                             {...field}
@@ -604,7 +806,7 @@ const CreateWebsite = () => {
                       <Controller
                         name={`testimonials.${index}.rating`}
                         control={control}
-                        
+                        rules={{ required: "Rating is required" }}
                         render={({ field }) => (
                           <TextField
                             {...field}
@@ -623,7 +825,7 @@ const CreateWebsite = () => {
                       <Controller
                         name={`testimonials.${index}.testimony`}
                         control={control}
-                        
+                        rules={{ required: "Testimony is required" }}
                         render={({ field }) => (
                           <TextField
                             {...field}
@@ -641,14 +843,30 @@ const CreateWebsite = () => {
                       />
                     </div>
 
-                    {/* testimonialImages_${index} (single) */}
+                    <div className="text-xs text-gray-500">
+                      Current image:{" "}
+                      {values?.testimonials?.[index]?.image ? "Yes" : "No"}
+                    </div>
+                    {values.testimonials[index].image && (
+                      <ExistingImagesGrid
+                        items={[values.testimonials[index].image]}
+                        onDelete={(img) =>
+                          queueDelete(
+                            `testimonials.${index}.image`,
+                            "deletedTestimonialImageIds",
+                            img
+                          )
+                        }
+                      />
+                    )}
+
                     <Controller
                       name={`testimonials.${index}.file`}
                       control={control}
                       render={({ field }) => (
                         <UploadFileInput
                           value={field.value}
-                          label="Testimonial Image"
+                          label="Add/Replace Testimonial Image"
                           onChange={field.onChange}
                           id={`testimonial-file-${index}`}
                         />
@@ -693,19 +911,11 @@ const CreateWebsite = () => {
                   rules={{
                     required: "Map URL is required",
                     validate: (val) => {
-                      const MAP_EMBED_REGEX =
-                        /^https?:\/\/(www\.)?(google\.com|maps\.google\.com)\/maps\/embed(\/v1\/[a-z]+|\?pb=|\/?\?)/i;
-
+                      const rgx =
+                        /^https?:\/\/(www\.)?(google\.com|maps\.google\.com)\/maps\/embed/i;
                       const v = (val || "").trim();
-
-                      // If they pasted a full iframe, fail validation (or you can auto-extract)
-                      // if (/<\s*iframe/i.test(v)) {
-                      //   return 'Paste only the "src" URL from the embed code (not the full <iframe>).';
-                      // }
-
                       return (
-                        MAP_EMBED_REGEX.test(v) ||
-                        "Ewnter a valid Google Maps *embed* URL (e.g. https://www.google.com/maps/embed?pb=...)"
+                        rgx.test(v) || "Enter a valid Google Maps embed URL"
                       );
                     },
                   }}
@@ -713,13 +923,9 @@ const CreateWebsite = () => {
                     <TextField
                       {...field}
                       onChange={(e) => {
-                        // Optional: auto-extract src if a whole iframe was pasted
-                        const extractIframeSrc = (val = "") =>
-                          val.match(/src=["']([^"']+)["']/i)?.[1] || val;
-                        const raw = e.target.value;
-                        const cleaned = extractIframeSrc(raw).trim();
-
-                        field.onChange(cleaned);
+                        const extract = (s = "") =>
+                          s.match(/src=["']([^"']+)["']/i)?.[1] || s;
+                        field.onChange(extract(e.target.value).trim());
                       }}
                       size="small"
                       label="Embed Map URL"
@@ -788,7 +994,6 @@ const CreateWebsite = () => {
                 <Controller
                   name="registeredCompanyName"
                   control={control}
-                  rules={{ required: "Registered company name is required" }}
                   render={({ field }) => (
                     <TextField
                       {...field}
@@ -823,10 +1028,14 @@ const CreateWebsite = () => {
           <div className="flex items-center justify-center gap-4">
             <PrimaryButton
               type="submit"
-              title={"Submit"}
-              isLoading={isCreateWebsiteLoading}
+              title={isUpdating ? "Updating..." : "Submit"}
+              isLoading={isUpdating}
             />
-            <SecondaryButton handleSubmit={handleReset} title={"Reset"} />
+            <SecondaryButton
+              type="button"
+              handleSubmit={handleReset}
+              title="Reset"
+            />
           </div>
         </form>
       </div>
@@ -834,4 +1043,31 @@ const CreateWebsite = () => {
   );
 };
 
-export default CreateWebsite;
+const ExistingImagesGrid = ({ items = [], onDelete }) => {
+  const list = Array.isArray(items) ? items : items ? [items] : [];
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mt-2">
+      {list.map((img) => (
+        <div
+          key={img.id}
+          className="relative rounded-lg overflow-hidden border"
+        >
+          <img src={img.url} alt="" className="w-full h-36 object-cover" />
+          <div className="px-2 py-1 text-xs truncate">
+            {img.id?.split("/").pop()}
+          </div>
+          <button
+            type="button"
+            className="absolute bottom-2 right-2 bg-white/90 hover:bg-white p-2 rounded-full shadow"
+            onClick={() => onDelete(img)}
+            title="Delete"
+          >
+            <FiTrash2 />
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+export default EditWebsite;

@@ -399,6 +399,9 @@ import AccessPages from "../pages/Access/AccessPages";
 import ModulePermissions from "../pages/Access/ModulePermissions";
 import ManageMeetingsFinanceLayout from "../pages/Dashboard/FinanceDashboard/MixBag/ManageMeetingsFinanceLayout";
 import CreateWebsite from "../pages/Dashboard/FrontendDashboard/WebsiteBuilder/CreateWebsite";
+import EditWebsite from "../pages/Dashboard/FrontendDashboard/WebsiteBuilder/EditWebsite";
+import Websites from "../pages/Dashboard/FrontendDashboard/WebsiteBuilder/Websites";
+import WebsitesLayout from "../pages/Dashboard/FrontendDashboard/WebsiteBuilder/WebsitesLayout";
 
 export const routes = createBrowserRouter([
   {
@@ -445,18 +448,27 @@ export const routes = createBrowserRouter([
                         path: "live-demo",
                         element: <PageDemo />,
                       },
-                      {
-                        path: "*",
-                        element: <ThemeGrid />,
-                      },
+                      // {
+                      //   path: "*",
+                      //   element: <ThemeGrid />,
+                      // },
                       {
                         path: "create-website",
                         element: <CreateWebsite />,
                       },
                       {
-                        path: "select-theme/edit-theme/:templateName/:pageName",
-                        element: <EditTemplate />,
+                        path: "websites",
+                        element: <WebsitesLayout />, 
+                        children: [
+                          { index: true, element: <Websites /> },  
+                          { path: ":website", element: <EditWebsite /> },  
+                        ],
                       },
+
+                      // {
+                      //   path: "select-theme/edit-theme/:templateName/:pageName",
+                      //   element: <EditTemplate />,
+                      // },
                       {
                         path: "edit-theme/:templateName/:pageName",
                         element: <EditTemplate />,
