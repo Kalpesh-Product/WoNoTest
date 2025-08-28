@@ -83,7 +83,7 @@ const testDataSchema = new mongoose.Schema({
     trim: true,
   },
   employeeType: {
-    name: { type: String, required: true },
+    name: { type: String },
     leavesCount: [
       {
         leaveType: { type: String, required: true },

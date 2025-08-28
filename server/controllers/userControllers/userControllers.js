@@ -620,10 +620,13 @@ const bulkInsertUsers = async (req, res, next) => {
           rowPromises.push(
             (async () => {
               try {
+                console.log("Row keys:", Object.keys(row));
                 const departmentIds = row["Department (ID)"]
                   ? row["Department (ID)"].split("/").map((d) => d.trim())
                   : [];
 
+                // console.log("map:", departmentMap);
+                console.log("deptIdsss", departmentIds);
                 const departmentObjectIds = departmentIds.map((id) => {
                   if (!departmentMap.has(id)) {
                     throw new Error(`Invalid department: ${id}`);
@@ -719,14 +722,13 @@ const bulkInsertUsers = async (req, res, next) => {
 
                 //Agreements Bulk Insertion
                 let agreementObj = {
-                  name: row["Work Schedule Policy"] || "",
-                  empId: row["Emp ID"],
-                  url: row["Work Schedule Policy"] || "",
-                  id: row["Work Schedule Policy"] || "",
+                  name: row["Shift Policy"] || "",
+                  empId: row["Emp ID"] || "",
+                  url: row["Shift Policy"] || "",
+                  id: row["Shift Policy"] || "",
                   isActive: true,
                   isDeleted: false,
                 };
-                console.log("agreementObj", agreementObj);
 
                 newAgreements.push(agreementObj);
               } catch (error) {
@@ -775,15 +777,25 @@ const bulkInsertUsers = async (req, res, next) => {
 
     const uploadedUserData = await TestUserData.insertMany(newUsers);
 
+    console.log("uploadedUserData", uploadedUserData[0]._id);
     console.log("newAgreements", newAgreements);
-    const transformedAgreements = uploadedUserData.filter((user) => {
-      const foundUsers = newAgreements.map((agreement) =>
-        agreement.empId === user.empId
-          ? { ...agreement, user: user._id }
-          : agreement
-      );
+    // const transformedAgreements = uploadedUserData.filter((user) => {
+    //   const foundUsers = newAgreements.map((agreement) =>
+    //     agreement.empId === user.empId
+    //       ? { ...agreement, user: user._id }
+    //       : agreement
+    //   );
 
-      return foundUsers;
+    //   console.log("foundUsers", foundUsers);
+    //   return foundUsers;
+    // });
+
+    const transformedAgreements = newAgreements.map((agreement) => {
+      const matchedUser = uploadedUserData.find(
+        (user) => user.empId === agreement.empId
+      );
+      console.log("matchedUser", matchedUser);
+      return matchedUser ? { ...agreement, user: matchedUser._id } : agreement;
     });
 
     console.log("transformedAgreements", transformedAgreements);
