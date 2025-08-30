@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import useAxiosPrivate from "../hooks/useAxiosPrivate";
 import useAuth from "../hooks/useAuth";
@@ -19,6 +19,15 @@ import {
   setLastUserId,
   resetAttendanceState,
 } from "../redux/slices/userSlice";
+import { Controller, useForm } from "react-hook-form";
+import MuiModal from "./MuiModal";
+import { DatePicker, LocalizationProvider, TimePicker } from "@mui/x-date-pickers";
+import { TextField } from "@mui/material";
+import SecondaryButton from "./SecondaryButton";
+import PrimaryButton from "./PrimaryButton";
+import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
+import { isAlphanumeric, noOnlyWhitespace } from "../utils/validators";
+import dayjs from "dayjs";
 
 const ClockInOutAttendance = () => {
   const axios = useAxiosPrivate();
@@ -37,6 +46,22 @@ const ClockInOutAttendance = () => {
   } = useSelector((state) => {
     return state.user;
   });
+
+    const [openModal, setOpenModal] = useState(false);
+  
+    const {
+      control,
+      reset,
+      handleSubmit,
+      formState: { errors },
+    } = useForm({
+      defaultValues: {
+        targetedDay: null,
+        inTime: null,
+        outTime: null,
+        reason: "",
+      },
+    });
 
   const [startTime, setStartTime] = useState(clockInTime);
   const [clockTime, setClockTime] = useState({
@@ -304,6 +329,39 @@ const ClockInOutAttendance = () => {
     onError: (error) => toast.error(error.response.data.message),
   });
 
+   const { mutate: correctionPost, isPending: correctionPending } = useMutation({
+    mutationFn: async (data) => {
+      const payload = {
+        ...data,
+        empId: auth?.user?.empId || "",
+      };
+      const response = await axios.post(
+        "/api/attendance/correct-attendance",
+        payload
+      );
+      return response.data;
+    },
+    onSuccess: (data) => {
+      setOpenModal(false);
+      toast.success(data.message);
+      queryClient.invalidateQueries({ queryKey: ["attendance"] });
+      reset();
+      dispatch(resetAttendanceState());
+    },
+    onError: (error) => {
+      toast.error(
+        error?.response?.data?.message || "Error submitting correction"
+      );
+    },
+  });
+
+  
+
+     const onSubmit = (data) => {
+    if (!auth?.user?.empId) return toast.error("User not found");
+
+    correctionPost(data);
+  };
   const handleStart = () => {
     const now = new Date().toISOString();
     clockIn(now); // Only call the API, don't start timer yet
@@ -479,13 +537,20 @@ const ClockInOutAttendance = () => {
 
           <div className="flex gap-12">
             <button
-              onClick={hasClockedIn ? handleStop : handleStart}
+              onClick={()=>{
+              
+                if(hasClockedIn && !isToday){
+                   setOpenModal(true)
+                }
+                hasClockedIn ? isToday && handleStop() : isToday && handleStart()
+                // hasClockedIn ? handleStop() : handleStart()
+              }}
               className={`h-40 w-40 rounded-full ${
-                hasClockedIn ? "bg-[#EB5C45]" : "bg-wonoGreen  transition-all"
+                hasClockedIn && !correctionPending ? "bg-[#EB5C45]" : "bg-wonoGreen  transition-all"
               }  text-white flex justify-center items-center hover:scale-105`}
               disabled={isClockingIn || isClockingOut}
             >
-              {hasClockedIn
+              {hasClockedIn && !correctionPending
                 ? "Clock Out"
                 : isClockingIn
                 ? "Starting..."
@@ -536,6 +601,108 @@ const ClockInOutAttendance = () => {
           </div>
         </div>
       </div>
+      <MuiModal
+              title={"Correction Request"}
+              open={openModal}
+              onClose={() => setOpenModal(false)}
+            >
+              <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
+                <Controller
+                  name="targetedDay"
+                  control={control}
+                  render={({ field }) => (
+                    <LocalizationProvider dateAdapter={AdapterDayjs}>
+                      <DatePicker
+                        {...field}
+                        label={"Select Date"}
+                        format="DD-MM-YYYY"
+                        slotProps={{ textField: { size: "small" } }}
+                        value={field.value ? dayjs(field.value) : null}
+                        onChange={(date) => {
+                          field.onChange(date ? date.toISOString() : null);
+                        }}
+                      />
+                    </LocalizationProvider>
+                  )}
+                />
+      
+                <LocalizationProvider dateAdapter={AdapterDayjs}>
+                  <Controller
+                    name="inTime"
+                    control={control}
+                    render={({ field }) => (
+                      <TimePicker
+                        {...field}
+                        label={"Select In-Time"}
+                        slotProps={{ textField: { size: "small", fullWidth: true } }}
+                        value={field.value ? dayjs(field.value) : null}
+                        onChange={(time) => {
+                          field.onChange(time ? time.toISOString() : null);
+                        }}
+                      />
+                    )}
+                  />
+                </LocalizationProvider>
+      
+                <LocalizationProvider dateAdapter={AdapterDayjs}>
+                  <Controller
+                    name="outTime"
+                    control={control}
+                    render={({ field }) => (
+                      <TimePicker
+                        {...field}
+                        label={"Select Out-Time"}
+                        slotProps={{ textField: { size: "small", fullWidth: true } }}
+                        value={field.value ? dayjs(field.value) : null}
+                        onChange={(time) => {
+                          field.onChange(time ? time.toISOString() : null);
+                        }}
+                      />
+                    )}
+                  />
+                </LocalizationProvider>
+                <Controller
+                  name="reason"
+                  control={control}
+                  rules={{
+                    required: "Please specify your reason",
+                    validate: { noOnlyWhitespace, isAlphanumeric },
+                  }}
+                  render={({ field }) => (
+                    <>
+                      <TextField
+                        {...field}
+                        size="small"
+                        label="Reason"
+                        fullWidth
+                        multiline
+                        rows={3} // ← Change this number to increase/decrease height
+                        error={!!errors?.reason}
+                        helperText={errors?.reason?.message}
+                      />
+                    </>
+                  )}
+                />
+      
+                <div className="flex items-center justify-center gap-4">
+                  <SecondaryButton
+                    title={"Cancel"}
+                    handleSubmit={() => setOpenModal(false)}
+                  />
+                  <PrimaryButton
+                    title={"Submit"}
+                    type={"submit"}
+                    isLoading={correctionPending}
+                    disabled={correctionPending}
+                  />
+                </div>
+                {/* {Object.keys(errors).length > 0 && (
+                  <pre className="text-red-500">
+                    {JSON.stringify(errors, null, 2)}
+                  </pre>
+                )} */}
+              </form>
+            </MuiModal>
     </div>
   );
 };
