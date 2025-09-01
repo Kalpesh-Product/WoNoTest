@@ -21,7 +21,11 @@ import {
 } from "../redux/slices/userSlice";
 import { Controller, useForm } from "react-hook-form";
 import MuiModal from "./MuiModal";
-import { DatePicker, LocalizationProvider, TimePicker } from "@mui/x-date-pickers";
+import {
+  DatePicker,
+  LocalizationProvider,
+  TimePicker,
+} from "@mui/x-date-pickers";
 import { TextField } from "@mui/material";
 import SecondaryButton from "./SecondaryButton";
 import PrimaryButton from "./PrimaryButton";
@@ -47,21 +51,21 @@ const ClockInOutAttendance = () => {
     return state.user;
   });
 
-    const [openModal, setOpenModal] = useState(false);
-  
-    const {
-      control,
-      reset,
-      handleSubmit,
-      formState: { errors },
-    } = useForm({
-      defaultValues: {
-        targetedDay: null,
-        inTime: null,
-        outTime: null,
-        reason: "",
-      },
-    });
+  const [openModal, setOpenModal] = useState(false);
+
+  const {
+    control,
+    reset,
+    handleSubmit,
+    setValue,
+    formState: { errors },
+  } = useForm({
+    defaultValues: {
+      targetedDay: null,
+      outTime: null,
+      reason: "",
+    },
+  });
 
   const [startTime, setStartTime] = useState(clockInTime);
   const [clockTime, setClockTime] = useState({
@@ -103,12 +107,15 @@ const ClockInOutAttendance = () => {
     const clockOut = auth?.user?.clockInDetails?.clockOutTime; // if clock out for prev day then clock out time may be stored and used to calculate today's work hours
     const serverNow = auth?.user?.time;
     const breaksFromServer = auth?.user?.clockInDetails?.breaks;
-    const todayClockIn = clockIn && new Date(clockIn)
-      const todayClockOut = clockOut && new Date(clockOut)
-      const startBreakTime = Array.isArray(breaksFromServer) && breaksFromServer.length > 0 && new Date(breaksFromServer[0].start)
-      const isTodayBreak = isSameDay(startBreakTime)
+    const todayClockIn = clockIn && new Date(clockIn);
+    const todayClockOut = clockOut && new Date(clockOut);
+    const startBreakTime =
+      Array.isArray(breaksFromServer) &&
+      breaksFromServer.length > 0 &&
+      new Date(breaksFromServer[0].start);
+    const isTodayBreak = isSameDay(startBreakTime);
 
-    dispatch(setLastUserId(userId)); 
+    dispatch(setLastUserId(userId));
 
     if (hasClockedIn && clockIn && serverNow) {
       dispatch(setIsToday(isSameDay(clockIn)));
@@ -128,13 +135,13 @@ const ClockInOutAttendance = () => {
       }));
     }
 
-   
     if (
       hasClockedIn &&
       Array.isArray(breaksFromServer) &&
-      breaksFromServer.length > 0 && isTodayBreak
+      breaksFromServer.length > 0 &&
+      isTodayBreak
     ) {
-       console.log("isTodayBreak",isTodayBreak)
+      console.log("isTodayBreak", isTodayBreak);
       setBreaks(breaksFromServer);
 
       const breakDuration = breaksFromServer.reduce((total, brk) => {
@@ -143,17 +150,16 @@ const ClockInOutAttendance = () => {
         }
         return total;
       }, 0);
-        
-        calculateTotalHoursServer(breaksFromServer, clockIn, clockOut);
-      
+
+      calculateTotalHoursServer(breaksFromServer, clockIn, clockOut);
     }
 
     const isTodayClockout = isSameDay(clockOut);
 
-    if (clockOut && isTodayClockout ) {
+    if (clockOut && isTodayClockout) {
       dispatch(setClockOutTime(clockOut));
       dispatch(setHasClockedIn(false));
- 
+
       //Set redux state to display today's timings even after session storage is deleted
       dispatch(setClockInTime(clockIn));
 
@@ -191,7 +197,7 @@ const ClockInOutAttendance = () => {
       setStartTime(inTime);
       setClockTime((prev) => ({ ...prev, startTime: inTime }));
       dispatch(setIsToday(isSameDay(inTime)));
-    
+
       setOffset(0); // start fresh
       setElapsedTime(getElapsedSecondsWithOffset(inTime, 0));
       setClockedInStatus(true);
@@ -215,23 +221,23 @@ const ClockInOutAttendance = () => {
       if (clockInTime) {
         // avoid showing clock-out time if clocking out for prev day
         setClockTime((prev) => ({ ...prev, endTime: outTime }));
-        
-        if(breaks.length > 0){
-        //     setTotalHours((prev) => ({
-        //   ...prev,
-        //   workHours: calculateTotalHours(
-        //     breaks,
-        //     startTime,
-        //     outTime,
-        //     "workhours"
-        //   ),
-        // }));
 
-         dispatch(
-          setWorkHours(
-            calculateTotalHours(breaks, startTime, outTime, "workhours")
-          )
-        );
+        if (breaks.length > 0) {
+          //     setTotalHours((prev) => ({
+          //   ...prev,
+          //   workHours: calculateTotalHours(
+          //     breaks,
+          //     startTime,
+          //     outTime,
+          //     "workhours"
+          //   ),
+          // }));
+
+          dispatch(
+            setWorkHours(
+              calculateTotalHours(breaks, startTime, outTime, "workhours")
+            )
+          );
         }
 
         dispatch(setClockOutTime(outTime));
@@ -329,10 +335,11 @@ const ClockInOutAttendance = () => {
     onError: (error) => toast.error(error.response.data.message),
   });
 
-   const { mutate: correctionPost, isPending: correctionPending } = useMutation({
+  const { mutate: correctionPost, isPending: correctionPending } = useMutation({
     mutationFn: async (data) => {
       const payload = {
         ...data,
+        targetedDay: data.targetedDay ? new Date(data.targetedDay) : null,
         empId: auth?.user?.empId || "",
       };
       const response = await axios.post(
@@ -355,9 +362,7 @@ const ClockInOutAttendance = () => {
     },
   });
 
-  
-
-     const onSubmit = (data) => {
+  const onSubmit = (data) => {
     if (!auth?.user?.empId) return toast.error("User not found");
 
     correctionPost(data);
@@ -485,14 +490,14 @@ const ClockInOutAttendance = () => {
     dispatch(setBreakHours(formatTime(completedBreakDuration)));
     dispatch(setWorkHours(formatTime(netWorkSeconds > 0 ? netWorkSeconds : 0)));
 
-    calculatedWorkHours = formatTime(netWorkSeconds > 0 ? netWorkSeconds : 0)
-    
-    calculatedBreakHours = formatTime(completedBreakDuration)
-    
-      // setTotalHours((prev) => ({
-      //   workHours: calculatedWorkHours,
-      //   breakHours: calculatedBreakHours,
-      // }));
+    calculatedWorkHours = formatTime(netWorkSeconds > 0 ? netWorkSeconds : 0);
+
+    calculatedBreakHours = formatTime(completedBreakDuration);
+
+    // setTotalHours((prev) => ({
+    //   workHours: calculatedWorkHours,
+    //   breakHours: calculatedBreakHours,
+    // }));
   };
 
   if (isBooting) {
@@ -504,6 +509,14 @@ const ClockInOutAttendance = () => {
       </div>
     );
   }
+
+  const getPrevDay = () => {
+    const yesterday = dayjs().subtract(1, "day");
+    // If yesterday is Sunday (0 in dayjs), pick Saturday
+    return yesterday.day() === 0
+      ? dayjs().subtract(2, "day") // Saturday
+      : yesterday;
+  };
 
   const timeStats = [
     {
@@ -537,16 +550,21 @@ const ClockInOutAttendance = () => {
 
           <div className="flex gap-12">
             <button
-              onClick={()=>{
-              
-                if(hasClockedIn && !isToday){
-                   setOpenModal(true)
+              onClick={() => {
+                if (hasClockedIn && !isToday) {
+                  setValue("targetedDay", getPrevDay().format("YYYY-MM-DD"));
+                  setOpenModal(true);
+                } else {
+                  hasClockedIn
+                    ? isToday && handleStop()
+                    : isToday && handleStart();
                 }
-                hasClockedIn ? isToday && handleStop() : isToday && handleStart()
                 // hasClockedIn ? handleStop() : handleStart()
               }}
               className={`h-40 w-40 rounded-full ${
-                hasClockedIn && !correctionPending ? "bg-[#EB5C45]" : "bg-wonoGreen  transition-all"
+                hasClockedIn && !correctionPending
+                  ? "bg-[#EB5C45]"
+                  : "bg-wonoGreen  transition-all"
               }  text-white flex justify-center items-center hover:scale-105`}
               disabled={isClockingIn || isClockingOut}
             >
@@ -602,107 +620,122 @@ const ClockInOutAttendance = () => {
         </div>
       </div>
       <MuiModal
-              title={"Correction Request"}
-              open={openModal}
-              onClose={() => setOpenModal(false)}
-            >
-              <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
-                <Controller
-                  name="targetedDay"
-                  control={control}
-                  render={({ field }) => (
-                    <LocalizationProvider dateAdapter={AdapterDayjs}>
-                      <DatePicker
-                        {...field}
-                        label={"Select Date"}
-                        format="DD-MM-YYYY"
-                        slotProps={{ textField: { size: "small" } }}
-                        value={field.value ? dayjs(field.value) : null}
-                        onChange={(date) => {
-                          field.onChange(date ? date.toISOString() : null);
-                        }}
-                      />
-                    </LocalizationProvider>
-                  )}
+        title={"Correction Request"}
+        open={openModal}
+        onClose={() => setOpenModal(false)}
+      >
+        <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
+          {/* <Controller
+            name="targetedDay"
+            control={control}
+            defaultValue={getPrevDay().format("YYYY-MM-DD")}
+            render={({ field }) => (
+              // <LocalizationProvider dateAdapter={AdapterDayjs}>
+              //   <DatePicker
+              //     {...field}
+              //     label={"Select Date"}
+              //     format="DD-MM-YYYY"
+              //     slotProps={{ textField: { size: "small" } }}
+              //     value={field.value ? dayjs(field.value) : null}
+              //     onChange={(date) => {
+              //       field.onChange(date ? date.toISOString() : null);
+              //     }}
+              //   />
+              // </LocalizationProvider>
+              <>
+                <TextField
+                  {...field}
+                  size="small"
+                  label="Select Date"
+                  value={field.value ? dayjs(field.value) : null}
+                  fullWidth
+                  multiline
+                  error={!!errors?.targetedDay}
+                  helperText={errors?.targetedDay?.message}
                 />
-      
-                <LocalizationProvider dateAdapter={AdapterDayjs}>
-                  <Controller
-                    name="inTime"
-                    control={control}
-                    render={({ field }) => (
-                      <TimePicker
-                        {...field}
-                        label={"Select In-Time"}
-                        slotProps={{ textField: { size: "small", fullWidth: true } }}
-                        value={field.value ? dayjs(field.value) : null}
-                        onChange={(time) => {
-                          field.onChange(time ? time.toISOString() : null);
-                        }}
-                      />
-                    )}
-                  />
-                </LocalizationProvider>
-      
-                <LocalizationProvider dateAdapter={AdapterDayjs}>
-                  <Controller
-                    name="outTime"
-                    control={control}
-                    render={({ field }) => (
-                      <TimePicker
-                        {...field}
-                        label={"Select Out-Time"}
-                        slotProps={{ textField: { size: "small", fullWidth: true } }}
-                        value={field.value ? dayjs(field.value) : null}
-                        onChange={(time) => {
-                          field.onChange(time ? time.toISOString() : null);
-                        }}
-                      />
-                    )}
-                  />
-                </LocalizationProvider>
-                <Controller
-                  name="reason"
-                  control={control}
-                  rules={{
-                    required: "Please specify your reason",
-                    validate: { noOnlyWhitespace, isAlphanumeric },
+              </>
+            )}
+          /> */}
+
+          <Controller
+            name="targetedDay"
+            control={control}
+            defaultValue={getPrevDay().format("YYYY-MM-DD")}
+            render={({ field }) => (
+              <TextField
+                {...field}
+                size="small"
+                label="Selected Date"
+                value={
+                  field.value ? dayjs(field.value).format("DD-MM-YYYY") : ""
+                }
+                fullWidth
+                InputProps={{ readOnly: true }}
+                error={!!errors?.targetedDay}
+                helperText={errors?.targetedDay?.message}
+              />
+            )}
+          />
+
+          <LocalizationProvider dateAdapter={AdapterDayjs}>
+            <Controller
+              name="outTime"
+              control={control}
+              render={({ field }) => (
+                <TimePicker
+                  {...field}
+                  label={"Select Out-Time"}
+                  slotProps={{ textField: { size: "small", fullWidth: true } }}
+                  value={field.value ? dayjs(field.value) : null}
+                  onChange={(time) => {
+                    field.onChange(time ? time.toISOString() : null);
                   }}
-                  render={({ field }) => (
-                    <>
-                      <TextField
-                        {...field}
-                        size="small"
-                        label="Reason"
-                        fullWidth
-                        multiline
-                        rows={3} // ← Change this number to increase/decrease height
-                        error={!!errors?.reason}
-                        helperText={errors?.reason?.message}
-                      />
-                    </>
-                  )}
                 />
-      
-                <div className="flex items-center justify-center gap-4">
-                  <SecondaryButton
-                    title={"Cancel"}
-                    handleSubmit={() => setOpenModal(false)}
-                  />
-                  <PrimaryButton
-                    title={"Submit"}
-                    type={"submit"}
-                    isLoading={correctionPending}
-                    disabled={correctionPending}
-                  />
-                </div>
-                {/* {Object.keys(errors).length > 0 && (
+              )}
+            />
+          </LocalizationProvider>
+          <Controller
+            name="reason"
+            control={control}
+            rules={{
+              required: "Please specify your reason",
+              validate: { noOnlyWhitespace, isAlphanumeric },
+            }}
+            render={({ field }) => (
+              <>
+                <TextField
+                  {...field}
+                  size="small"
+                  label="Reason"
+                  fullWidth
+                  multiline
+                  rows={3} // ← Change this number to increase/decrease height
+                  error={!!errors?.reason}
+                  helperText={errors?.reason?.message}
+                />
+              </>
+            )}
+          />
+
+          <div className="flex items-center justify-center gap-4">
+            <SecondaryButton
+              title={"Cancel"}
+              handleSubmit={() => setOpenModal(false)}
+            />
+            <PrimaryButton
+              title={"Submit"}
+              type={"submit"}
+              isLoading={correctionPending}
+              disabled={correctionPending}
+            />
+          </div>
+          {/* {Object.keys(errors).length > 0 && (
                   <pre className="text-red-500">
                     {JSON.stringify(errors, null, 2)}
                   </pre>
                 )} */}
-              </form>
-            </MuiModal>
+        </form>
+      </MuiModal>
     </div>
   );
 };
