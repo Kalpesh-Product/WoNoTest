@@ -55,7 +55,7 @@ const createTemplate = async (req, res, next) => {
       testimonialTitle: req.body.testimonialTitle,
       contactTitle: req.body.contactTitle,
       mapUrl: req.body.mapUrl,
-      email: req.body.email,
+      email: req.body.websiteEmail,
       phone: req.body.phone,
       address: req.body.address,
       registeredCompanyName: req.body.registeredCompanyName,
@@ -299,7 +299,7 @@ const editTemplate = async (req, res, next) => {
       testimonialTitle: req.body.testimonialTitle ?? template.testimonialTitle,
       contactTitle: req.body.contactTitle ?? template.contactTitle,
       mapUrl: req.body.mapUrl ?? template.mapUrl,
-      email: req.body.email ?? template.email,
+      email: req.body.websiteEmail ?? template.websiteEmail,
       phone: req.body.phone ?? template.phone,
       address: req.body.address ?? template.address,
       registeredCompanyName:
