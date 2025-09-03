@@ -7,9 +7,11 @@ import PageFrame from "../../../../components/Pages/PageFrame";
 import { toast } from "sonner";
 import ThreeDotMenu from "../../../../components/ThreeDotMenu";
 import { queryClient } from "../../../../main";
+import { useNavigate } from "react-router-dom";
 
 const InActiveWebsites = () => {
   const axios = useAxiosPrivate();
+  const navigate = useNavigate()
   const { data = [], isPending } = useQuery({
     queryKey: ["inactive-websites"],
     queryFn: async () => {
@@ -32,7 +34,7 @@ const InActiveWebsites = () => {
     },
     onSuccess: (data) => {
       toast.success(data.message || "UPDATED STATUS");
-      queryClient.invalidateQueries({queryKey:["inactive-websites"]})
+      queryClient.invalidateQueries({ queryKey: ["inactive-websites"] });
     },
     onError: (error) => {
       console.error(error);
@@ -71,14 +73,20 @@ const InActiveWebsites = () => {
                   markAsActive(params.data.searchKey);
                 },
               },
-              // {
-              //   label: "Mark As Inactive",
-              //   onClick: () => {
-              //     setModalType("delete");
-              //     setSelectedSop(params.data);
-              //     setOpenModal(true);
-              //   },
-              // },
+              {
+                label: "Edit",
+                onClick: () => {
+                  navigate(
+                      `/app/dashboard/frontend-dashboard/websites/inactive/${params?.data?.companyName}`,
+                      {
+                        state: {
+                          website: params.data,
+                          isLoading: isPending,
+                        },
+                      }
+                    )
+                },
+              },
             ]}
           />
         );
