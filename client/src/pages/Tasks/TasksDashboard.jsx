@@ -16,6 +16,7 @@ import { useEffect, useState } from "react";
 import YearlyGraph from "../../components/graphs/YearlyGraph";
 import { PERMISSIONS } from "../../constants/permissions";
 import useAuth from "../../hooks/useAuth";
+import { configYearlyGrpah, filterPermissions } from "../../utils/accessConfig";
 
 const TasksDashboard = () => {
   const axios = useAxiosPrivate();
@@ -601,52 +602,133 @@ const TasksDashboard = () => {
       ? rawCounts[selectedFY].reduce((sum, m) => sum + m.total, 0)
       : 0;
 
+  //---------------------------------------------
+  // 📌 TASKS Dashboard Widget Configs
+  //---------------------------------------------
+
+  const dataCardConfigs = [
+    {
+      key: "TASKS_TOTAL_TASKS",
+      title: "Total",
+      dataType: "all", // you can use this to switch logic when mapping
+      description: "Dept. Tasks",
+      route: "/app/tasks/department-tasks",
+    },
+    {
+      key: "TASKS_PENDING_TASKS",
+      title: "Total",
+      dataType: "pending",
+      description: "Dept. Pending Tasks",
+      route: "/app/tasks/department-tasks",
+    },
+    {
+      key: "TASKS_COMPLETED_TASKS",
+      title: "Total",
+      dataType: "completed",
+      description: "Dept. Completed Tasks",
+      route: "/app/tasks/department-tasks",
+    },
+  ];
+
+  const allowedDataCards = dataCardConfigs.filter(
+    (card) => !card.permission || userPermissions.includes(card.permission)
+  );
+
+  //---------------------------------------------
+  // ✅ 1. Yearly Graph Config
+  //---------------------------------------------
+
+   const taskGraphConfigs = [
+    {
+      key: PERMISSIONS.TASKS_OVERALL_AVERAGE_COMPLETION.value,
+      layout: 1,
+      data: series,
+      options:taskGraphOptions,
+      responsiveResize:true,
+      chartId:"bargraph-hr-expense",
+      title: "OVERALL AVERAGE TASKS COMPLETION",
+      titleAmountLabel:"Total Tasks", 
+      titleAmount:totalTasksForYear, 
+      onYearChange:{handleYearChange}
+    },
+  ];
+
+  const allowedGraph = filterPermissions(taskGraphConfigs,userPermissions)
+ 
+
+  //---------------------------------------------
+  // ✅ 2. Pie Charts Config
+  //---------------------------------------------
+  const pieChartConfigs = [
+    {
+      key: PERMISSIONS.TASKS_OVERALL_PENDING_VS_COMPLETED.value,
+      title: "Overall Pending v/s Completed Tasks",
+      dataKey: "dynamicTasksPieChartData",
+      optionsKey: "dynamicTasksPieChartOptions",
+    },
+    {
+      key: PERMISSIONS.TASKS_TOTAL_DEPARTMENT_PENDING_TASKS.value,
+      title: "Department-wise Pending Tasks",
+      dataKey: "departmentPendingStats",
+      optionsKey: "departmentPendingOptions",
+    },
+  ];
+    const allowedPieCharts = pieChartConfigs.filter(
+    (card) => !card.key || userPermissions.includes(card.key)
+  );
+
+  //---------------------------------------------
+  // ✅ 3. Priority + Meetings Tables
+  //---------------------------------------------
+  const tablePairConfigs = [
+    {
+      
+      priority: {
+        key: PERMISSIONS.TASKS_HIGH_PRIORITY_DUE.value,
+        title:"Top 10 High Priority Due Tasks"
+      },
+      meeting: {
+        key: PERMISSIONS.TASKS_MY_MEETINGS_TODAY.value,
+        title: "My Meetings Today"
+      },
+    },
+    
+  ];
+
+   const allowedTables = tablePairConfigs.filter(
+    (card) => !card.priority.key || userPermissions.includes(card.priority.key) || !card.meeting.key || userPermissions.includes(card.meeting.key)
+  );
+
+  //---------------------------------------------
+  // ✅ 4. Recently Added Table
+  //---------------------------------------------
+  const recentlyAddedConfigs = [
+    {
+      key: PERMISSIONS.TASKS_RECENTLY_ADDED.value,
+      title: "Recently Added tasks",
+    },
+  ];
+
+    const allowedRecentlyAdded = recentlyAddedConfigs.filter(
+    (card) => !card.key || userPermissions.includes(card.key)
+  ); 
+
   const meetingsWidgets = [
     {
-      layout: 1,
-      widgets: [
+      layout: allowedGraph.length,
+      widgets: allowedGraph.map((config) => (
         <YearlyGraph
+          key={config.key}
           data={series}
           responsiveResize
-          chartId={"bargraph-hr-expense"}
+          chartId={config.chartId}
           options={taskGraphOptions}
-          title={"OVERALL AVERAGE TASKS COMPLETION"}
-          titleAmount={`TOTAL TASKS : ${totalTasksForYear || 0}`}
+          title={config.title}
+          titleAmount={`${config.titleAmountLabel} : ${totalTasksForYear || 0}`}
           onYearChange={handleYearChange}
-        />,
-      ],
+        />
+      )),
     },
-    // {
-    //   layout: 5,
-    //   widgets: [
-    //     <Card
-    //       route={"/app/tasks/my-tasks"}
-    //       title={"My Tasks"}
-    //       icon={<RiPagesLine />}
-    //     />,
-    //     <Card
-    //       route={"/app/tasks/department-tasks"}
-    //       title={"Department Tasks"}
-    //       icon={<RiPagesLine />}
-    //     />,
-    //     <Card
-    //       route={"team-members"}
-    //       title={"Team Members"}
-    //       icon={<MdFormatListBulleted />}
-    //     />,
-    //     // <Card route={""} title={"Mix Bag"} icon={<MdFormatListBulleted />} />,
-    //     <Card
-    //       route={"/app/tasks/reports"}
-    //       title={"Reports"}
-    //       icon={<CgProfile />}
-    //     />,
-    //     <Card
-    //       route={""}
-    //       title={"Settings"}
-    //       icon={<MdMiscellaneousServices />}
-    //     />,
-    //   ],
-    // },
     {
       layout: allowedCards.length, // ✅ dynamic layout
       widgets: allowedCards.map((card) => (
@@ -658,83 +740,66 @@ const TasksDashboard = () => {
         />
       )),
     },
+    //---------------------------------------------
+    // All other widgets from config
+    //---------------------------------------------
     {
-      layout: 3,
-      widgets: [
-        <DataCard
-          title={"Total"}
-          // data={allTasksQuery.isLoading ? 0 : allTasksQuery.data.length}
-          data={allTasksQuery.isLoading ? 0 : allTasksQuery.data.length}
-          description={"Dept. Tasks"}
-          route={"/app/tasks/department-tasks"}
-        />,
-        <DataCard
-          title={"Total"}
-          data={
-            allTasksQuery.isLoading
-              ? 0
-              : allTasksQuery.data.filter((task) => task.status === "Pending")
-                  .length
-          }
-          description={"Dept. Pending Tasks "}
-          route={"/app/tasks/department-tasks"}
-        />,
-        <DataCard
-          title={"Total"}
-          data={
-            allTasksQuery.isLoading
-              ? 0
-              : allTasksQuery.data.filter((task) => task.status === "Completed")
-                  .length
-          }
-          description={"Dept. Completed Tasks"}
-          route={"/app/tasks/department-tasks"}
-        />,
-      ],
+      layout: allowedDataCards.length,
+      widgets: allowedDataCards.map((config) => {
+        let dataCount = 0;
+
+        if (config.dataType === "all") {
+          dataCount = allTasksQuery.isLoading ? 0 : allTasksQuery.data.length;
+        } else if (config.dataType === "pending") {
+          dataCount = allTasksQuery.isLoading
+            ? 0
+            : allTasksQuery.data.filter((task) => task.status === "Pending")
+                .length;
+        } else if (config.dataType === "completed") {
+          dataCount = allTasksQuery.isLoading
+            ? 0
+            : allTasksQuery.data.filter((task) => task.status === "Completed")
+                .length;
+        }
+
+        return (
+          <DataCard
+            key={config.key}
+            title={config.title}
+            data={dataCount}
+            description={config.description}
+            route={config.route}
+          />
+        );
+      }),
     },
     {
-      layout: 2,
-      widgets: [
-        <WidgetSection border title={"Overall Pending v/s Completed Tasks"}>
+      layout: allowedPieCharts.length,
+      widgets: allowedPieCharts.map((config) => (
+        <WidgetSection key={config.key} border title={config.title}>
           <PieChartMui
-            data={dynamicTasksPieChartData}
-            options={dynamicTasksPieChartOptions}
+            data={eval(config.dataKey)}
+            options={eval(config.optionsKey)}
             height={325}
           />
-        </WidgetSection>,
-        <WidgetSection border title={"Department-wise Pending Tasks"}>
-          <PieChartMui
-            data={departmentPendingStats}
-            options={departmentPendingOptions}
-            height={325}
-          />
-        </WidgetSection>,
-      ],
+        </WidgetSection>
+      )),
     },
     {
-      layout: 1,
-      widgets: [
-        <WidgetSection layout={2} padding>
-          {/* <MuiTable
-            Title="My Tasks Today"
-            columns={myTasksColumns}
-            rows={isTaskListLoading ? [] : taskList || []}
-            rowKey="id"
-            rowsToDisplay={10}
-            scroll={true}
-            className="h-full"
-          /> */}
+      layout: allowedTables.length,
+      widgets: allowedTables.map((config) => (
+        <WidgetSection key={config.key} layout={2} padding>
           <MuiTable
-            key={priorityTasks.length}
+            key={config.length}
             scroll
             rowsToDisplay={4}
-            Title={"Top 10 High Priority Due Tasks"}
+            Title={config.priority.title}
             rows={priorityTasks}
             columns={priorityTasksColumns}
           />
 
           <MuiTable
-            Title="My Meetings Today"
+            Title={config.meeting.title}
             columns={myTodayMeetingsColumns}
             rows={myTodayMeetingsData}
             rowKey="id"
@@ -742,15 +807,15 @@ const TasksDashboard = () => {
             scroll={true}
             className="h-full"
           />
-        </WidgetSection>,
-      ],
+        </WidgetSection>
+      )),
     },
     {
-      layout: 1,
-      widgets: [
-        <WidgetSection layout={1} padding>
+      layout: allowedRecentlyAdded.length,
+      widgets: allowedRecentlyAdded.map((config) => (
+        <WidgetSection key={config.key} layout={1} padding>
           <MuiTable
-            Title={"Recently Added tasks"}
+            Title={config.title}
             columns={recentlyAddedTasksCol}
             rows={recentlyAddedTasksData}
             rowKey="id"
@@ -758,8 +823,8 @@ const TasksDashboard = () => {
             scroll={true}
             className="h-full"
           />
-        </WidgetSection>,
-      ],
+        </WidgetSection>
+      )),
     },
   ];
   return (

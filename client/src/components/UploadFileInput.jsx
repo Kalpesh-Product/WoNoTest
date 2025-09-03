@@ -9,7 +9,7 @@ const UploadFileInput = ({
   onChange,
   disabled=false,
   label = "Upload File",
-  allowedExtensions = ["jpg", "jpeg", "png", "pdf"],
+  allowedExtensions = ["jpg", "jpeg", "png", "pdf","webp"],
   previewType = "auto", // "image", "pdf", "none", or "auto"
   id
 }) => {

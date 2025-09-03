@@ -894,7 +894,7 @@ const FinanceDashboard = () => {
     {
       layout: 1,
       key: "financePayouts",
-      title: "Payouts Mar-25 ",
+      Title: "Payouts Mar-25 ",
       columns: marchPaymentColumns,
       rows: march2025Payments.map((item, index) => ({
         srNo: index + 1,
@@ -1206,7 +1206,7 @@ const FinanceDashboard = () => {
         <MuiTable
           layout={item.layout}
           key={item.key}
-          title={item.title}
+          Title={item.Title}
           columns={item.columns}
           rows={item.rows}
           rowKey={item.rowKey}

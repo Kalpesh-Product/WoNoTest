@@ -40,6 +40,7 @@ const ManageMeetings = () => {
   const [selectedMeetingId, setSelectedMeetingId] = useState(null);
   const [checklists, setChecklists] = useState({});
   const department = usePageDepartment();
+  const isFinance = department?.name === "Finance";
   const [newItem, setNewItem] = useState("");
   const [modalMode, setModalMode] = useState("update"); // 'update', or 'view'
   const [selectedMeeting, setSelectedMeeting] = useState(null);
@@ -149,7 +150,7 @@ const ManageMeetings = () => {
       setDetailsModal(false);
     },
     onError: (error) => {
-      toast.error(error.message || "Failed to update meeting");
+      toast.error(error.response.data.message || "Failed to update meeting");
     },
   });
 
@@ -255,7 +256,7 @@ const ManageMeetings = () => {
       toast.success(data.message);
     },
     onError: (error) => {
-      toast.error(error.message);
+      toast.error(error.response.data.message);
     },
   });
 
@@ -271,7 +272,7 @@ const ManageMeetings = () => {
       resetExtendMeeting();
     },
     onError: (error) => {
-      toast.error(error.message);
+      toast.error(error.response.data.message);
     },
   });
   const { mutate: completeMeeting, isPending: isCompletePending } = useMutation(
@@ -288,7 +289,7 @@ const ManageMeetings = () => {
         toast.success(data.message);
       },
       onError: (error) => {
-        toast.error(error.message);
+        toast.error(error.response.data.message);
       },
     }
   );
@@ -583,7 +584,8 @@ const ManageMeetings = () => {
               </span>
             </div>
 
-            {!isCancelled && <ThreeDotMenu menuItems={menuItems} />}
+
+            {!isCancelled && !isFinance &&<ThreeDotMenu menuItems={menuItems} />}
           </div>
         );
       },
@@ -999,24 +1001,24 @@ const ManageMeetings = () => {
                       }
 
                       // Disable AM/PM
-                        //   const currentHour = time.$d.getHours();
-                        //    const selectedHour = field.value
-                        //   ? new Date(field.value).getHours()
-                        //   : null;
+                      //   const currentHour = time.$d.getHours();
+                      //    const selectedHour = field.value
+                      //   ? new Date(field.value).getHours()
+                      //   : null;
 
-                        //   console.log("curr")
+                      //   console.log("curr")
 
-                        // if (selectedHour !== null) {
-                  
-                        //   const isPMSelected = selectedHour >= 12;
-                        //   const isAMSelected = selectedHour < 12;
+                      // if (selectedHour !== null) {
 
-                        //   // Disable AM hours (0–11) if PM is selected
-                        //   if (isPMSelected && currentHour < 12) return true;
+                      //   const isPMSelected = selectedHour >= 12;
+                      //   const isAMSelected = selectedHour < 12;
 
-                        //   // Disable PM hours (12–23) if AM is selected
-                        //   if (isAMSelected && currentHour >= 12) return true;
-                        // }
+                      //   // Disable AM hours (0–11) if PM is selected
+                      //   if (isPMSelected && currentHour < 12) return true;
+
+                      //   // Disable PM hours (12–23) if AM is selected
+                      //   if (isAMSelected && currentHour >= 12) return true;
+                      // }
 
                       return false;
                     }}

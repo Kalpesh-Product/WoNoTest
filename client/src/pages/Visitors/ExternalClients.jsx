@@ -53,6 +53,8 @@ const ExternalClients = () => {
       paymentStatus: "",
       paymentAmount: 0,
       paymentMode: "",
+      brandName:"",
+      registeredClientCompany:""
     },
   });
   const handleEditToggle = () => {
@@ -184,6 +186,8 @@ const ExternalClients = () => {
         selectedVisitor.checkOutRaw ? dayjs(selectedVisitor.checkOutRaw) : null
       );
       setValue("paymentStatus", selectedVisitor.paymentStatus || "");
+      setValue("brandName", selectedVisitor.brandName || "");
+      setValue("registeredClientCompany", selectedVisitor.registeredClientCompany || "");
     }
   }, [selectedVisitor, setValue]);
 
@@ -213,6 +217,8 @@ const ExternalClients = () => {
         paymentStatus: data.paymentStatus,
         paymentAmount: data.paymentAmount,
         paymentMode: data.paymentMode,
+        brandName: data.brandName,
+        registeredClientCompany: data.registeredClientCompany
       };
 
       mutate(updatePayload);
@@ -229,7 +235,7 @@ const ExternalClients = () => {
       <PageFrame>
         <YearWiseTable
           search={true}
-          tableTitle={"Visitors Today"}
+          tableTitle={"External Clients"}
           dateColumn={"checkIn"}
           data={[
             ...visitorsData
@@ -257,6 +263,9 @@ const ExternalClients = () => {
                   : 0,
                 paymentMode: item?.meeting?.paymentMode || "N/A",
                 paymentDate: item?.meeting?.paymentDate || null,
+                registeredClientCompany:item?.registeredClientCompany || "N/A",
+                brandName:item?.brandName || "N/A",
+                visitorCompany:item.visitorCompany || "N/A"
               })),
           ]}
           columns={visitorsColumns}
@@ -376,6 +385,46 @@ const ExternalClients = () => {
                   <DetalisFormatted
                     title="Purpose of Visit"
                     detail={selectedVisitor.purposeOfVisit}
+                  />
+                )}
+                {/* Brand name */}
+                {isEditing ? (
+                  <Controller
+                    name="brandName"
+                    control={control}
+                    render={({ field }) => (
+                      <TextField
+                        {...field}
+                        size="small"
+                        label="Brand Name"
+                        fullWidth
+                      />
+                    )}
+                  />
+                ) : (
+                  <DetalisFormatted
+                    title="Brand Name"
+                    detail={selectedVisitor.brandName}
+                  />
+                )}
+                {/* Registered client company */}
+                {isEditing ? (
+                  <Controller
+                    name="registeredClientCompany"
+                    control={control}
+                    render={({ field }) => (
+                      <TextField
+                        {...field}
+                        size="small"
+                        label="Registered Company"
+                        fullWidth
+                      />
+                    )}
+                  />
+                ) : (
+                  <DetalisFormatted
+                    title="Registered Company"
+                    detail={selectedVisitor.registeredClientCompany}
                   />
                 )}
                 {/* Checkout time */}
