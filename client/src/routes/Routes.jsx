@@ -402,6 +402,8 @@ import CreateWebsite from "../pages/Dashboard/FrontendDashboard/WebsiteBuilder/C
 import EditWebsite from "../pages/Dashboard/FrontendDashboard/WebsiteBuilder/EditWebsite";
 import Websites from "../pages/Dashboard/FrontendDashboard/WebsiteBuilder/Websites";
 import WebsitesLayout from "../pages/Dashboard/FrontendDashboard/WebsiteBuilder/WebsitesLayout";
+import InActiveWebsites from "../pages/Dashboard/FrontendDashboard/WebsiteBuilder/InActiveWebsites";
+import EditWebsiteTemp from "../pages/Dashboard/FrontendDashboard/WebsiteBuilder/EditWebsiteTemp";
 
 export const routes = createBrowserRouter([
   {
@@ -458,10 +460,12 @@ export const routes = createBrowserRouter([
                       },
                       {
                         path: "websites",
-                        element: <WebsitesLayout />, 
+                        element: <WebsitesLayout />,
                         children: [
-                          { index: true, element: <Websites /> },  
-                          { path: ":website", element: <EditWebsite /> },  
+                          { path: "active", element: <Websites /> },
+                          { path: "inactive", element: <InActiveWebsites /> },
+                          { path: ":website", element: <EditWebsite /> },
+                          { path: "inactive/:website", element: <EditWebsiteTemp /> },
                         ],
                       },
 
