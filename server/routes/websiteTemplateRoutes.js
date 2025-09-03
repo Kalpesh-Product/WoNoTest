@@ -9,9 +9,11 @@ const {
   getInActiveTemplates,
   activateTemplate,
   getInActiveTemplate,
+  createWebsiteTemplate,
 } = require("../controllers/websiteControllers/websiteTemplateControllers");
 
 router.post("/create-website", upload.any(), createTemplate);
+router.post("/create-website-template", createWebsiteTemplate);
 router.patch("/edit-website", upload.any(), editTemplate);
 router.patch("/activate-website", activateTemplate);
 router.get("/get-website/:company", getTemplate);
