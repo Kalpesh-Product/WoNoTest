@@ -14,9 +14,9 @@ const {
 router.post("/create-website", upload.any(), createTemplate);
 router.patch("/edit-website", upload.any(), editTemplate);
 router.patch("/activate-website", activateTemplate);
-router.get("/get-template/:company", getTemplate);
-router.get("/get-templates", getTemplates);
-router.get("/get-inactive-template", getInActiveTemplate);
-router.get("/get-inactive-templates", getInActiveTemplates);
+router.get("/get-website/:company", getTemplate);
+router.get("/get-websites", getTemplates);
+router.get("/get-inactive-website", getInActiveTemplate);
+router.get("/get-inactive-websites", getInActiveTemplates);
 
 module.exports = router;
