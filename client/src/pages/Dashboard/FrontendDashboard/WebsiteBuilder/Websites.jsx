@@ -32,7 +32,7 @@ const Websites = () => {
 
   const fetchTemplates = async () => {
     try {
-      const response = await axios.get("/api/editor/get-templates");
+      const response = await axios.get("/api/editor/get-websites");
       return response.data;
     } catch (error) {
       console.error("Error fetching templates:", error);
