@@ -196,10 +196,12 @@ const createTemplate = async (req, res, next) => {
   }
 };
 
+//temporary controller
 const createWebsiteTemplate = async (req, res) => {
   try {
     const { companyName } = req.body;
 
+    console.log("comp", companyName);
     const foundTemplate = await WebsiteTemplate.findOne({ companyName });
 
     if (foundTemplate) {
@@ -211,8 +213,11 @@ const createWebsiteTemplate = async (req, res) => {
     const savedTemplate = template.save();
 
     if (!savedTemplate) {
-      return res.status(200).json([]);
+      return res.status(400).json();
     }
+    return res
+      .status(201)
+      .json({ message: "Website template created successfully" });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
