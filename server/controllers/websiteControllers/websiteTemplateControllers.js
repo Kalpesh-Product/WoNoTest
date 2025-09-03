@@ -189,7 +189,7 @@ const getTemplate = async (req, res) => {
     });
 
     if (!template) {
-      return res.status(400).json({ message: "No such website found" });
+      return res.status(200).json([]);
     }
     res.json(template);
   } catch (error) {
@@ -207,7 +207,7 @@ const getInActiveTemplate = async (req, res) => {
     });
 
     if (!template) {
-      return res.status(400).json({ message: "No such website found" });
+      return res.status(200).json([]);
     }
     res.json(template);
   } catch (error) {
@@ -220,7 +220,7 @@ const getTemplates = async (req, res) => {
     const templates = await WebsiteTemplate.find({ isActive: true });
 
     if (!templates.length) {
-      return res.status(400).json({ message: "No websites found" });
+      return res.status(200).json([]);
     }
 
     res.json(templates);
@@ -234,7 +234,7 @@ const getInActiveTemplates = async (req, res) => {
     const templates = await WebsiteTemplate.find({ isActive: false });
 
     if (!templates.length) {
-      return res.status(400).json({ message: "No websites found" });
+      return res.status(200).json([]);
     }
 
     res.json(templates);
@@ -252,7 +252,7 @@ const activateTemplate = async (req, res) => {
     });
 
     if (!template) {
-      return res.status(400).json({ message: "No website found" });
+      return res.status(400).json({ message: "Failed to activate website" });
     }
 
     res.json(template);
