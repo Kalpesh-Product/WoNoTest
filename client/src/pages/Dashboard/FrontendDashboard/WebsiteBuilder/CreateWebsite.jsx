@@ -57,7 +57,7 @@ const CreateWebsite = () => {
       // contact
       contactTitle: "",
       mapUrl: "",
-      email: "",
+      websiteEmail: "",
       phone: "",
       address: "",
       // footer
@@ -730,7 +730,7 @@ const CreateWebsite = () => {
                   )}
                 />
                 <Controller
-                  name="email"
+                  name="websiteEmail"
                   control={control}
                   rules={{ required: "Email is required" }}
                   render={({ field }) => (
@@ -739,8 +739,8 @@ const CreateWebsite = () => {
                       size="small"
                       label="Email"
                       fullWidth
-                      helperText={errors?.email?.message}
-                      error={!!errors.email}
+                      helperText={errors?.websiteEmail?.message}
+                      error={!!errors.websiteEmail}
                     />
                   )}
                 />
