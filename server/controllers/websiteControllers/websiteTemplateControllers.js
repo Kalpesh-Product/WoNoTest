@@ -16,7 +16,6 @@ const createTemplate = async (req, res, next) => {
     // `products` might arrive as a JSON string in multipart. Normalize it.
 
     let { products, testimonials, about } = req.body;
-    about = JSON.parse(about || "[]");
     products = JSON.parse(products || "[]");
     testimonials = JSON.parse(testimonials || "[]");
 
@@ -186,6 +185,25 @@ const getTemplate = async (req, res) => {
 
     const template = await WebsiteTemplate.findOne({
       searchKey: company,
+      isActive: true,
+    });
+
+    if (!template) {
+      return res.status(400).json({ message: "No such website found" });
+    }
+    res.json(template);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+const getInActiveTemplate = async (req, res) => {
+  try {
+    const { company } = req.params;
+
+    const template = await WebsiteTemplate.findOne({
+      searchKey: company,
+      isActive: false,
     });
 
     if (!template) {
@@ -199,13 +217,45 @@ const getTemplate = async (req, res) => {
 
 const getTemplates = async (req, res) => {
   try {
-    const templates = await WebsiteTemplate.find();
+    const templates = await WebsiteTemplate.find({ isActive: true });
 
     if (!templates.length) {
       return res.status(400).json({ message: "No websites found" });
     }
 
     res.json(templates);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+const getInActiveTemplates = async (req, res) => {
+  try {
+    const templates = await WebsiteTemplate.find({ isActive: false });
+
+    if (!templates.length) {
+      return res.status(400).json({ message: "No websites found" });
+    }
+
+    res.json(templates);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+const activateTemplate = async (req, res) => {
+  try {
+    const { searchKey } = req.query;
+    const template = await WebsiteTemplate.findOneAndUpdate({
+      searchKey,
+      isActive: true,
+    });
+
+    if (!template) {
+      return res.status(400).json({ message: "No website found" });
+    }
+
+    res.json(template);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -499,4 +549,7 @@ module.exports = {
   editTemplate,
   getTemplate,
   getTemplates,
+  getInActiveTemplates,
+  getInActiveTemplate,
+  activateTemplate,
 };

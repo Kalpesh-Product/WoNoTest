@@ -3,6 +3,10 @@ const mongoose = require("mongoose");
 const templateSchema = new mongoose.Schema(
   {
     searchKey: { type: String, required: true, index: true },
+    isActive: {
+      type: Boolean,
+      default: false,
+    },
     //hero
     companyLogo: {
       id: { type: String },
