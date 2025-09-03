@@ -6,6 +6,7 @@ const {
 } = require("../../config/cloudinaryConfig");
 const Company = require("../../models/hr/Company");
 const mongoose = require("mongoose");
+const axios = require("axios");
 
 const createTemplate = async (req, res, next) => {
   const session = await mongoose.startSession();
@@ -167,15 +168,58 @@ const createTemplate = async (req, res, next) => {
       rating: t.rating,
     }));
 
-    await template.save({ session });
+    const savedTemplate = await template.save({ session });
+
+    const updatedCompany = await axios.patch(
+      "https://wononomadsbe.vercel.app/api/company/update-company",
+      {
+        companyName: req.body.companyName,
+        link: `https://${savedTemplate.searchKey}.wono.co/`,
+      }
+    );
+
+    console.log("update", updatedCompany);
+    if (!updatedCompany) {
+      return res
+        .status(400)
+        .json({ message: "Failed to add website template link" });
+    }
+
     await session.commitTransaction();
     session.endSession();
 
-    res.status(201).json({ message: "Template created", template });
+    return res.status(201).json({ message: "Template created", template });
   } catch (error) {
     await session.abortTransaction();
     session.endSession();
     next(error);
+  }
+};
+
+//temporary controller
+const createWebsiteTemplate = async (req, res) => {
+  try {
+    const { companyName } = req.body;
+
+    console.log("comp", companyName);
+    const foundTemplate = await WebsiteTemplate.findOne({ companyName });
+
+    if (foundTemplate) {
+      res.status(400).json({ message: "Company already exists" });
+    }
+
+    const template = new WebsiteTemplate(req.body);
+
+    const savedTemplate = template.save();
+
+    if (!savedTemplate) {
+      return res.status(400).json();
+    }
+    return res
+      .status(201)
+      .json({ message: "Website template created successfully" });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 };
 
@@ -190,8 +234,11 @@ const getTemplate = async (req, res) => {
 
     if (!template) {
       return res.status(200).json([]);
+    } else {
+      if (template.searchKey === company && template.isActive) {
+        return res.json(template);
+      }
     }
-    res.json(template);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -550,6 +597,7 @@ const editTemplate = async (req, res, next) => {
 
 module.exports = {
   createTemplate,
+  createWebsiteTemplate,
   editTemplate,
   getTemplate,
   getTemplates,
