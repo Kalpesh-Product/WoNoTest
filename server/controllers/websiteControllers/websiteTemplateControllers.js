@@ -246,16 +246,20 @@ const getInActiveTemplates = async (req, res) => {
 const activateTemplate = async (req, res) => {
   try {
     const { searchKey } = req.query;
-    const template = await WebsiteTemplate.findOneAndUpdate({
-      searchKey,
-      isActive: true,
-    });
+    const template = await WebsiteTemplate.findOneAndUpdate(
+      {
+        searchKey,
+      },
+      {
+        isActive: true,
+      }
+    );
 
     if (!template) {
       return res.status(400).json({ message: "Failed to activate website" });
     }
 
-    res.json(template);
+    return res.status(400).json({ message: "Website activated successfully" });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
