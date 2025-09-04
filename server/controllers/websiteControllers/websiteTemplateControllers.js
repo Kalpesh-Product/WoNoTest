@@ -162,7 +162,7 @@ const createTemplate = async (req, res, next) => {
     }
 
     template.testimonials = (testimonials || []).map((t, i) => ({
-      image: tUploads[i], // may be undefined if fewer images
+      image: tUploads[i], // may be undefined if fewer images provided
       name: t.name,
       jobPosition: t.jobPosition,
       testimony: t.testimony,
