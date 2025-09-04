@@ -174,28 +174,21 @@ const createTemplate = async (req, res, next) => {
     await session.commitTransaction();
     session.endSession();
 
-    let fetchedCompany;
     try {
-      fetchedCompany = await axios.get(
-        `http://localhost:3000/api/company/get-single-company-data/${req.body.companyName}`
+      const updatedCompany = await axios.patch(
+        "https://wononomadsbe.vercel.app/api/company/update-company",
+        {
+          companyName: req.body.companyName,
+          link: `https://${savedTemplate.searchKey}.wono.co/`,
+        }
       );
 
-      if (fetchedCompany.data) {
-        console.log("company", fetchedCompany.data);
-        const updatedCompany = await axios.patch(
-          "https://wononomadsbe.vercel.app/api/company/update-company",
-          {
-            companyName: req.body.companyName,
-            link: `https://${savedTemplate.searchKey}.wono.co/`,
-          }
-        );
-
-        if (!updatedCompany) {
-          return res
-            .status(400)
-            .json({ message: "Failed to add website template link" });
-        }
+      if (!updatedCompany) {
+        return res
+          .status(400)
+          .json({ message: "Failed to add website template link" });
       }
+      // }
     } catch (error) {
       if (error.response?.status !== 200) {
         return res.status(201).json({
