@@ -33,7 +33,7 @@ const AddVisitor = () => {
     mode: "onChange",
     defaultValues: {
       firstName: "",
-      lastName:"",
+      lastName: "",
       email: "",
       gender: "",
       address: "",
@@ -118,11 +118,14 @@ const AddVisitor = () => {
   const { mutate: addVisitor, isPending: isMutateVisitor } = useMutation({
     mutationKey: ["addVisitor"],
     mutationFn: async (data) => {
+      const isBiznest = data.visitorCompany === "6799f0cd6a01edbe1bc3fcea";
       const response = await axios.post("/api/visitors/add-visitor", {
         ...data,
         department: selectedDepartment === "na" ? null : selectedDepartment,
-        toMeet: selectedDepartment === "na" ? null : data.toMeet,
+        toMeet: isBiznest ? data.toMeet || null : null, // only for BIZNest
+        clientToMeet: !isBiznest ? data.toMeet || null : null, // only for other companies
       });
+
       return response.data;
     },
     onSuccess: (data) => {

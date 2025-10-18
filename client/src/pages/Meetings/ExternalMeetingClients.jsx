@@ -180,7 +180,7 @@ const ExternalMeetingCLients = () => {
         paymentProofUrl: meeting?.paymentProof ?? "",
         paymentStatus: meeting.paymentStatus ?? false,
         paymentVerification: meeting.paymentVerification || "Under Review",
-        client: meeting.client || ""
+        client: meeting.client || "",
       };
     });
 
@@ -311,12 +311,12 @@ const ExternalMeetingCLients = () => {
     },
   });
 
-    const { mutate: verifyPayment, isPending: isVerifyPayment } = useMutation({
+  const { mutate: verifyPayment, isPending: isVerifyPayment } = useMutation({
     mutationFn: async (data) => {
       const respone = await axios.patch(
         `/api/meetings/update-meeting-payment-status`,
         {
-          status:data,
+          status: data,
           meetingId: selectedMeeting._id,
         }
       );
@@ -396,10 +396,10 @@ const ExternalMeetingCLients = () => {
     setDetailsModal(true);
   };
 
-  const handleVerifyPayment = (data,status) => {
-    setSelectedMeeting(data)
-    verifyPayment(status)
-  }
+  const handleVerifyPayment = (data, status) => {
+    setSelectedMeeting(data);
+    verifyPayment(status);
+  };
 
   const handleAddChecklistItem = () => {
     if (!newItem.trim() || !selectedMeetingId) return;
@@ -500,16 +500,39 @@ const ExternalMeetingCLients = () => {
   };
   useEffect(() => {
     if (!isRoomLoading && room?.perHourPrice) {
-      const finalAmount = room.perHourGstPrice;
-      setPaymentValue("amount", room.perHourPrice);
-      setPaymentValue("gstAmount", room.perHourGstPrice);
+      // Calculate actual duration
+
+      const start = new Date(paymentMeeting.startTime);
+      const end = new Date(paymentMeeting.endTime);
+      console.log("meeting info", start.getTime());
+      console.log("meeting info", end.getTime());
+
+      const durationInHours =
+        (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+
+      console.log("duration", durationInHours);
+
+      // Multiply rates by duration
+      const baseAmount = room.perHourPrice * durationInHours;
+      const gstAmount = room.perHourGstPrice * durationInHours;
+      const finalAmount = gstAmount;
+      setPaymentValue("amount", baseAmount);
+      setPaymentValue("gstAmount", gstAmount);
       setPaymentValue("finalAmount", finalAmount);
     }
-  }, [room, isRoomLoading]);
+  }, [room, isRoomLoading, setPaymentValue]);
 
   useEffect(() => {
-    if (!isRoomLoading) {
-      const calculatedAmount = room?.perHourGstPrice;
+    if (!isRoomLoading && paymentMeeting && room?.perHourGstPrice) {
+      const start = new Date(paymentMeeting.startTime);
+      const end = new Date(paymentMeeting.endTime);
+      const durationInHours =
+        (end.getTime() - start.getTime()) / (1000 * 60 * 60);
+
+      // Multiply rates by duration
+      const baseAmount = room.perHourPrice * durationInHours;
+      const gstAmount = room.perHourGstPrice * durationInHours;
+      const calculatedAmount = gstAmount;
       const discountPercentage = (
         (watchedDiscountAmount / calculatedAmount) *
         100
@@ -520,6 +543,10 @@ const ExternalMeetingCLients = () => {
       setPaymentValue("finalAmount", finalAmount);
     }
   }, [watchedDiscountAmount, room, isRoomLoading]);
+
+  useEffect(() => {
+    console.log("payment", paymentMeeting);
+  }, [paymentMeeting]);
 
   //---------------------------------Event handlers----------------------------------------//
 
@@ -615,22 +642,26 @@ const ExternalMeetingCLients = () => {
         const isCompleted = status === "Completed";
         const isHousekeepingPending = housekeepingStatus === "Pending";
         const isHousekeepingCompleted = housekeepingStatus === "Completed";
-        const isVerified = params.data.paymentVerification === "Verified"
-       
+        const isVerified = params.data.paymentVerification === "Verified";
+
         const menuItems = [
           {
             label: "View",
             onClick: () => handleSelectedMeeting("viewDetails", params.data),
           },
-            isPaid && isFinance && !isVerified && {
-            label: "Verify Payment",
-            onClick: () => handleVerifyPayment(params.data,"Verified")
-          },
-          isPaid && isFinance && isVerified && {
-            label: "Review Payment",
-            onClick: () => handleVerifyPayment(params.data,"Under Review"),
-          },
-        
+          isPaid &&
+            isFinance &&
+            !isVerified && {
+              label: "Verify Payment",
+              onClick: () => handleVerifyPayment(params.data, "Verified"),
+            },
+          isPaid &&
+            isFinance &&
+            isVerified && {
+              label: "Review Payment",
+              onClick: () => handleVerifyPayment(params.data, "Under Review"),
+            },
+
           // Show the following only when NOT finance
           ...(!isFinance
             ? [
@@ -942,12 +973,9 @@ const ExternalMeetingCLients = () => {
                 "Top Management"
               }
             />
-             <DetalisFormatted
+            <DetalisFormatted
               title="Client"
-              detail={
-                selectedMeeting.client ||
-                "Unknown"
-              }
+              detail={selectedMeeting.client || "Unknown"}
             />
 
             <br />
