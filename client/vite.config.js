@@ -6,6 +6,6 @@ import eslint from 'vite-plugin-eslint';
 export default defineConfig({
   plugins: [react(),eslint()],
   server:{
-    port:3000
+    port:3008
   }
 })
