@@ -17,6 +17,7 @@ const createTemplate = async (req, res, next) => {
     // `products` might arrive as a JSON string in multipart. Normalize it.
 
     let { products, testimonials, about } = req.body;
+    about = JSON.parse(about || "[]");
     products = JSON.parse(products || "[]");
     testimonials = JSON.parse(testimonials || "[]");
 
@@ -161,7 +162,7 @@ const createTemplate = async (req, res, next) => {
     }
 
     template.testimonials = (testimonials || []).map((t, i) => ({
-      image: tUploads[i], // may be undefined if fewer images
+      image: tUploads[i], // may be undefined if fewer images provided
       name: t.name,
       jobPosition: t.jobPosition,
       testimony: t.testimony,
@@ -170,23 +171,33 @@ const createTemplate = async (req, res, next) => {
 
     const savedTemplate = await template.save({ session });
 
-    const updatedCompany = await axios.patch(
-      "https://wononomadsbe.vercel.app/api/company/update-company",
-      {
-        companyName: req.body.companyName,
-        link: `https://${savedTemplate.searchKey}.wono.co/`,
-      }
-    );
-
-    console.log("update", updatedCompany);
-    if (!updatedCompany) {
-      return res
-        .status(400)
-        .json({ message: "Failed to add website template link" });
-    }
-
     await session.commitTransaction();
     session.endSession();
+
+    try {
+      const updatedCompany = await axios.patch(
+        "https://wononomadsbe.vercel.app/api/company/update-company",
+        {
+          companyName: req.body.companyName,
+          link: `https://${savedTemplate.searchKey}.wono.co/`,
+        }
+      );
+
+      if (!updatedCompany) {
+        return res
+          .status(400)
+          .json({ message: "Failed to add website template link" });
+      }
+      // }
+    } catch (error) {
+      if (error.response?.status !== 200) {
+        return res.status(201).json({
+          message:
+            "Website created but failed to add link.Check if the company is listed in Nomads.",
+          template,
+        });
+      }
+    }
 
     return res.status(201).json({ message: "Template created", template });
   } catch (error) {
@@ -201,7 +212,6 @@ const createWebsiteTemplate = async (req, res) => {
   try {
     const { companyName } = req.body;
 
-    console.log("comp", companyName);
     const foundTemplate = await WebsiteTemplate.findOne({ companyName });
 
     if (foundTemplate) {
