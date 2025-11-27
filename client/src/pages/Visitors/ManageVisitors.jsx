@@ -135,9 +135,7 @@ const ManageVisitors = () => {
               email: item.email,
               phoneNumber: item.phoneNumber,
               purposeOfVisit: item.purposeOfVisit,
-              toMeet: `${item?.toMeet?.firstName || ""} ${
-                item?.toMeet?.lastName || ""
-              }`,
+              toMeet: item.toMeet ? `${item.toMeet?.firstName} ${item.toMeet?.lastName}` : item.clientToMeet ? item?.clientToMeet?.employeeName : "",
               checkIn: item.checkIn,
               checkOut: item.checkOut ? humanTime(item.checkOut) : "",
               checkOutRaw: item.checkOut,

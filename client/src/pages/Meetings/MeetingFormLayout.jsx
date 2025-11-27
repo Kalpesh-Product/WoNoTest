@@ -645,7 +645,7 @@ const MeetingFormLayout = () => {
                           .filter((item) => item.visitorFlag === "Client")
                           .map((user) => (
                             <MenuItem key={user._id} value={user._id}>
-                              {user.clientCompany ?? ""}
+                              {user.registeredClientCompany ?? ""}
                             </MenuItem>
                           ))}
                       </TextField>

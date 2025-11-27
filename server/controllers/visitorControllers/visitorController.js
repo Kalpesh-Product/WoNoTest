@@ -176,7 +176,7 @@ const addVisitor = async (req, res, next) => {
         logSourceKey
       );
     }
-    if (toMeetCompany && !toMeet) {
+    if (toMeetCompany && !clientToMeet) {
       throw new CustomError(
         "Missing person to meet field",
         logPath,
@@ -187,6 +187,14 @@ const addVisitor = async (req, res, next) => {
     if (toMeet && !mongoose.Types.ObjectId.isValid(toMeet)) {
       throw new CustomError(
         "Invalid to meet ID provided",
+        logPath,
+        logAction,
+        logSourceKey
+      );
+    }
+    if (clientToMeet && !mongoose.Types.ObjectId.isValid(clientToMeet)) {
+      throw new CustomError(
+        "Invalid client to meet ID provided",
         logPath,
         logAction,
         logSourceKey
@@ -225,9 +233,8 @@ const addVisitor = async (req, res, next) => {
         !gender ||
         !purposeOfVisit ||
         !visitorCompany ||
-        !clientToMeet ||
         !toMeetCompany ||
-        !toMeet
+        (!toMeet && !clientToMeet)
       ) {
         return res
           .status(400)

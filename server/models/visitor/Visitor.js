@@ -40,7 +40,6 @@ const visitorSchema = new mongoose.Schema(
     },
     panNumber: {
       type: String,
-      required: true,
     },
     panFile: {
       link: {
@@ -77,7 +76,6 @@ const visitorSchema = new mongoose.Schema(
     gstNumber: {
       type: String,
       match: [/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/],
-      required: true,
     },
     meeting: {
       type: mongoose.Schema.Types.ObjectId,

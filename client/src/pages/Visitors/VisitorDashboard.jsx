@@ -678,7 +678,7 @@ const visitorsTodayTableConfigs = [
       phoneNumber: item.phoneNumber,
       email: item.email,
       purposeOfVisit: item.purposeOfVisit,
-      toMeet: item.toMeet?.firstName ? item.toMeet?.firstName : "Kalpesh Naik",
+      toMeet: item.toMeet ? `${item.toMeet?.firstName} ${item.toMeet?.lastName}` : item.clientToMeet ? item?.clientToMeet?.employeeName : "",
       checkIn: humanTime(item.checkIn),
       checkOut: humanTime(item.checkOut),
     })),

@@ -1580,6 +1580,12 @@ const updateMeetingDetails = async (req, res, next) => {
       return res.status(400).json({ message: "Invalid date/time format" });
     }
 
+    if (startTimeObj > endTimeObj) {
+      return res
+        .status(400)
+        .json({ message: "Start time is greater than end time" });
+    }
+
     const conflictingMeeting = await Meeting.findOne({
       _id: { $ne: meetingId },
       bookedRoom: meeting.bookedRoom._id,
