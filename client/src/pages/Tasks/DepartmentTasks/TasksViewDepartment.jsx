@@ -67,6 +67,7 @@ const TasksViewDepartment = () => {
     handleSubmit: submitDailyKra,
     control,
     formState: { errors },
+    reset,
   } = useForm({
     mode: "onChange",
     defaultValues: {
@@ -95,7 +96,7 @@ const TasksViewDepartment = () => {
         dueTime: data.dueTime,
         description: data.description,
         department: deptId,
-        taskType:"Department"
+        taskType: "Department",
       });
       return response.data;
     },
@@ -103,6 +104,7 @@ const TasksViewDepartment = () => {
       queryClient.invalidateQueries({ queryKey: ["fetchedTasks"] });
       toast.success(data.message || "KRA Added");
       setOpenModal(false);
+      reset(); // clear out old junk after closing
     },
     onError: (error) => {
       toast.error(error.message || "Error Adding KRA");
@@ -596,7 +598,7 @@ const TasksViewDepartment = () => {
               detail={selectedTask?.completedTime}
             />
             <DetalisFormatted
-              title={"Comleted By"}
+              title={"Completed By"}
               detail={selectedTask?.completedBy}
             />
             <DetalisFormatted
