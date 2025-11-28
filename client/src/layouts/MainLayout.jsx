@@ -49,43 +49,34 @@ const MainLayout = () => {
     console.log("🔍 Current pathname:", pathname);
 
     const rawPermissions = auth?.user?.permissions?.permissions || [];
-    console.log("🔑 Raw permissions from auth:", rawPermissions);
 
     const guardedRoutes = Object.values(PERMISSIONS).filter(
       (perm) => perm.route
     );
-    console.log(
-      "🎯 Guarded Routes:",
-      guardedRoutes.map((g) => g.route)
-    );
 
     const currentRoutePermission = guardedRoutes.find((perm) =>
       pathname.includes(perm.route)
-    );
-    console.log(
-      "🚦 Matched Permission Object:",
-      currentRoutePermission || "None (public route)"
     );
 
     if (currentRoutePermission) {
       const userHasPermission = rawPermissions.includes(
         currentRoutePermission.value
       );
-      console.log("🛡️ User permission check:", {
-        requiredPermission: currentRoutePermission.value,
-        userPermissions: rawPermissions,
-        isAllowed: userHasPermission,
-      });
+      // console.log("🛡️ User permission check:", {
+      //   requiredPermission: currentRoutePermission.value,
+      //   userPermissions: rawPermissions,
+      //   isAllowed: userHasPermission,
+      // });
 
       if (!userHasPermission) {
         console.warn("⛔ Unauthorized access detected, redirecting...");
         navigate("/unauthorized");
         return; // Stop here, don't set permissionChecked
       } else {
-        console.log("✅ User has permission for this route.");
+        // console.log("✅ User has permission for this route.");
       }
     } else {
-      console.log("✅ This route is public or not permission-controlled.");
+      // console.log("✅ This route is public or not permission-controlled.");
     }
 
     // ✅ Finally mark permission check as completed
