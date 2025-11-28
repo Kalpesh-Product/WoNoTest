@@ -404,6 +404,7 @@ import Websites from "../pages/Dashboard/FrontendDashboard/WebsiteBuilder/Websit
 import WebsitesLayout from "../pages/Dashboard/FrontendDashboard/WebsiteBuilder/WebsitesLayout";
 import InActiveWebsites from "../pages/Dashboard/FrontendDashboard/WebsiteBuilder/InActiveWebsites";
 import EditWebsiteTemp from "../pages/Dashboard/FrontendDashboard/WebsiteBuilder/EditWebsiteTemp";
+import ProtectedDepartmentRoute from "../components/ProtectedDepartmentRoute";
 
 export const routes = createBrowserRouter([
   {
@@ -465,7 +466,10 @@ export const routes = createBrowserRouter([
                           { path: "active", element: <Websites /> },
                           { path: "inactive", element: <InActiveWebsites /> },
                           { path: ":website", element: <EditWebsite /> },
-                          { path: "inactive/:website", element: <EditWebsiteTemp /> },
+                          {
+                            path: "inactive/:website",
+                            element: <EditWebsiteTemp />,
+                          },
                         ],
                       },
 
@@ -2219,7 +2223,11 @@ export const routes = createBrowserRouter([
                         children: [
                           {
                             path: "",
-                            element: <TasksViewDepartment />,
+                            element: (
+                              <ProtectedDepartmentRoute
+                                element={<TasksViewDepartment />}
+                              />
+                            ),
                             index: true,
                           },
                           {
