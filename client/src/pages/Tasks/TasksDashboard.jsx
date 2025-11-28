@@ -638,23 +638,22 @@ const TasksDashboard = () => {
   // ✅ 1. Yearly Graph Config
   //---------------------------------------------
 
-   const taskGraphConfigs = [
+  const taskGraphConfigs = [
     {
       key: PERMISSIONS.TASKS_OVERALL_AVERAGE_COMPLETION.value,
       layout: 1,
       data: series,
-      options:taskGraphOptions,
-      responsiveResize:true,
-      chartId:"bargraph-hr-expense",
+      options: taskGraphOptions,
+      responsiveResize: true,
+      chartId: "bargraph-hr-expense",
       title: "OVERALL AVERAGE TASKS COMPLETION",
-      titleAmountLabel:"Total Tasks", 
-      titleAmount:totalTasksForYear, 
-      onYearChange:{handleYearChange}
+      titleAmountLabel: "Total Tasks",
+      titleAmount: totalTasksForYear,
+      onYearChange: { handleYearChange },
     },
   ];
 
-  const allowedGraph = filterPermissions(taskGraphConfigs,userPermissions)
- 
+  const allowedGraph = filterPermissions(taskGraphConfigs, userPermissions);
 
   //---------------------------------------------
   // ✅ 2. Pie Charts Config
@@ -673,7 +672,7 @@ const TasksDashboard = () => {
       optionsKey: "departmentPendingOptions",
     },
   ];
-    const allowedPieCharts = pieChartConfigs.filter(
+  const allowedPieCharts = pieChartConfigs.filter(
     (card) => !card.key || userPermissions.includes(card.key)
   );
 
@@ -682,21 +681,23 @@ const TasksDashboard = () => {
   //---------------------------------------------
   const tablePairConfigs = [
     {
-      
       priority: {
         key: PERMISSIONS.TASKS_HIGH_PRIORITY_DUE.value,
-        title:"Top 10 High Priority Due Tasks"
+        title: "Top 10 High Priority Due Tasks",
       },
       meeting: {
         key: PERMISSIONS.TASKS_MY_MEETINGS_TODAY.value,
-        title: "My Meetings Today"
+        title: "My Meetings Today",
       },
     },
-    
   ];
 
-   const allowedTables = tablePairConfigs.filter(
-    (card) => !card.priority.key || userPermissions.includes(card.priority.key) || !card.meeting.key || userPermissions.includes(card.meeting.key)
+  const allowedTables = tablePairConfigs.filter(
+    (card) =>
+      !card.priority.key ||
+      userPermissions.includes(card.priority.key) ||
+      !card.meeting.key ||
+      userPermissions.includes(card.meeting.key)
   );
 
   //---------------------------------------------
@@ -709,9 +710,19 @@ const TasksDashboard = () => {
     },
   ];
 
-    const allowedRecentlyAdded = recentlyAddedConfigs.filter(
+  const allowedRecentlyAdded = recentlyAddedConfigs.filter(
     (card) => !card.key || userPermissions.includes(card.key)
-  ); 
+  );
+
+  const pieChartDataMap = {
+    dynamicTasksPieChartData,
+    departmentPendingStats,
+  };
+
+  const pieChartOptionsMap = {
+    dynamicTasksPieChartOptions,
+    departmentPendingOptions,
+  };
 
   const meetingsWidgets = [
     {
@@ -778,8 +789,8 @@ const TasksDashboard = () => {
       widgets: allowedPieCharts.map((config) => (
         <WidgetSection key={config.key} border title={config.title}>
           <PieChartMui
-            data={eval(config.dataKey)}
-            options={eval(config.optionsKey)}
+            data={pieChartDataMap[config.dataKey]}
+            options={pieChartOptionsMap[config.optionsKey]}
             height={325}
           />
         </WidgetSection>
@@ -827,6 +838,7 @@ const TasksDashboard = () => {
       )),
     },
   ];
+
   return (
     <div>
       <div className="flex flex-col p-4 gap-4">
