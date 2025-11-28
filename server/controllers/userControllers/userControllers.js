@@ -620,13 +620,13 @@ const bulkInsertUsers = async (req, res, next) => {
           rowPromises.push(
             (async () => {
               try {
-                console.log("Row keys:", Object.keys(row));
+                // console.log("Row keys:", Object.keys(row));
                 const departmentIds = row["Department (ID)"]
                   ? row["Department (ID)"].split("/").map((d) => d.trim())
                   : [];
 
-                // console.log("map:", departmentMap);
-                console.log("deptIdsss", departmentIds);
+                // // console.log("map:", departmentMap);
+                // console.log("deptIdsss", departmentIds);
                 const departmentObjectIds = departmentIds.map((id) => {
                   if (!departmentMap.has(id)) {
                     throw new Error(`Invalid department: ${id}`);
@@ -641,10 +641,13 @@ const bulkInsertUsers = async (req, res, next) => {
                   .map((id) => roleMap.get(id))
                   .filter(Boolean);
 
-                let reportsToId = row["Reports To (Emp ID)"]
-                  ? roleMap.get(row["Reports To (Emp ID)"].trim())
+                // console.log("role map", roleMap);
+                // console.log("roleObjectIds", roleObjectIds);
+                let reportsToId = row["Reports To (Role ID)"]
+                  ? roleMap.get(row["Reports To (Role ID)"].trim())
                   : null;
 
+                // console.log("reportsToId", reportsToId);
                 const hashedPassword = await bcrypt.hash(
                   `${row["First Name"]}@0625`,
                   10
@@ -670,9 +673,9 @@ const bulkInsertUsers = async (req, res, next) => {
                     leavesCount: [
                       {
                         leaveType: "Privileged",
-                        count: row["Privileged"] || "0",
+                        count: row["Privileged Leave"] || "0",
                       },
-                      { leaveType: "Sick", count: row["Sick"] || "0" },
+                      { leaveType: "Sick", count: row["Sick Leave"] || "0" },
                     ],
                   },
                   designation: row["Designation"],
@@ -721,16 +724,30 @@ const bulkInsertUsers = async (req, res, next) => {
                 newUsers.push(userObj);
 
                 //Agreements Bulk Insertion
-                let agreementObj = {
-                  name: row["Shift Policy"] || "",
-                  empId: row["Emp ID"] || "",
-                  url: row["Shift Policy"] || "",
-                  id: row["Shift Policy"] || "",
-                  isActive: true,
-                  isDeleted: false,
-                };
 
-                newAgreements.push(agreementObj);
+                const policies = [
+                  "Shift Policy",
+                  "Work Schedule Policy",
+                  "Leave Policy",
+                  "Holiday Policy",
+                ];
+
+                policies.forEach((p) => {
+                  if (row[p]) {
+                    newAgreements.push({
+                      empId: row["Emp ID"],
+                      name: p,
+                      url: row[p].startsWith("https") ? row[p] : undefined,
+                      type:
+                        p === "Work Schedule Policy" &&
+                        !row[p].startsWith("https")
+                          ? row[p]
+                          : undefined,
+                      isActive: true,
+                      isDeleted: false,
+                    });
+                  }
+                });
               } catch (error) {
                 reject(
                   new CustomError(
@@ -775,10 +792,8 @@ const bulkInsertUsers = async (req, res, next) => {
       });
     }
 
-    const uploadedUserData = await TestUserData.insertMany(newUsers);
+    const uploadedUserData = await UserData.insertMany(newUsers);
 
-    console.log("uploadedUserData", uploadedUserData[0]._id);
-    console.log("newAgreements", newAgreements);
     // const transformedAgreements = uploadedUserData.filter((user) => {
     //   const foundUsers = newAgreements.map((agreement) =>
     //     agreement.empId === user.empId
@@ -794,13 +809,11 @@ const bulkInsertUsers = async (req, res, next) => {
       const matchedUser = uploadedUserData.find(
         (user) => user.empId === agreement.empId
       );
-      console.log("matchedUser", matchedUser);
+
       return matchedUser ? { ...agreement, user: matchedUser._id } : agreement;
     });
 
-    console.log("transformedAgreements", transformedAgreements);
-
-    const uploadedAgreements = await TestAgreements.insertMany(
+    const uploadedAgreements = await Agreements.insertMany(
       transformedAgreements
     );
 
