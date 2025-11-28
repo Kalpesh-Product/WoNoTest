@@ -664,7 +664,7 @@ const bulkInsertUsers = async (req, res, next) => {
                   email: row["Company Email"],
                   company: new mongoose.Types.ObjectId(companyId),
                   password: hashedPassword,
-                  isActive: row["isActive"]?.toLowerCase() !== "no", // or true by default
+
                   departments: departmentObjectIds,
                   role: roleObjectIds,
                   reportsTo: reportsToId,
@@ -680,6 +680,8 @@ const bulkInsertUsers = async (req, res, next) => {
                   },
                   designation: row["Designation"],
                   startDate: new Date(row["Date Of Joining"]),
+                  dateOfExit: new Date(row["Date of Exit"]) || null,
+                  isActive: row["Date of Exit"] ? false : true,
                   workLocation: row["Work Building"],
                   shift: row["Shift Policy"] || "General",
                   homeAddress: {
@@ -743,8 +745,7 @@ const bulkInsertUsers = async (req, res, next) => {
                         !row[p].startsWith("https")
                           ? row[p]
                           : undefined,
-                      isActive: true,
-                      isDeleted: false,
+                      isActive: row["Date of Exit"] ? false : true,
                     });
                   }
                 });
