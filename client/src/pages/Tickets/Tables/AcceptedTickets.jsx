@@ -53,7 +53,7 @@ const AcceptedTickets = ({ title, departmentId }) => {
     formState: { errors: escalateTicketErrors },
   } = useForm({
     defaultValues: {
-      departmentIds: [],
+      departmentIds: "", // string, not array
       description: "",
     },
   });
@@ -68,15 +68,23 @@ const AcceptedTickets = ({ title, departmentId }) => {
     setOpenView(true);
   };
 
+  // const { data: departments = [], isPending: isDepartmentsPending } = useQuery({
+  //   queryKey: ["departments"],
+  //   queryFn: async () => {
+  //     try {
+  //       const response = await axios.get("api/departments/get-departments");
+  //       return response.data?.selectedDepartments;
+  //     } catch (error) {
+  //       console.error("Error fetching data:", error);
+  //     }
+  //   },
+  // });
+
   const { data: departments = [], isPending: isDepartmentsPending } = useQuery({
     queryKey: ["departments"],
     queryFn: async () => {
-      try {
-        const response = await axios.get("api/departments/get-departments");
-        return response.data?.selectedDepartments;
-      } catch (error) {
-        console.error("Error fetching data:", error);
-      }
+      const response = await axios.get("api/departments/get-departments");
+      return response.data; // because it's already an array
     },
   });
 
@@ -380,10 +388,12 @@ const AcceptedTickets = ({ title, departmentId }) => {
                   fullWidth
                   size="small"
                   label="Select Department"
+                  value={field.value || ""} // safeguard
                 >
                   <MenuItem value="" disabled>
                     Select a Department
                   </MenuItem>
+
                   {departments.map((item) => (
                     <MenuItem key={item._id} value={item._id}>
                       {item.name}
