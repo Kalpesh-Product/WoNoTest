@@ -24,7 +24,9 @@ import {
 import dayjs from "dayjs";
 import DetalisFormatted from "../../../components/DetalisFormatted";
 import PageFrame from "../../../components/Pages/PageFrame";
-import { isAlphanumeric, noOnlyWhitespace } from "../../../utils/validators";
+// import { isAlphanumeric, noOnlyWhitespace } from "../../../utils/validators";
+import { noOnlyWhitespace } from "../../../utils/validators";
+
 import YearWiseTable from "../../../components/Tables/YearWiseTable";
 
 const TasksViewDepartment = () => {
@@ -386,7 +388,7 @@ const TasksViewDepartment = () => {
               required: "Task Name is required",
               validate: {
                 noOnlyWhitespace,
-                isAlphanumeric,
+                // isAlphanumeric,
               },
             }}
             render={({ field }) => (
@@ -407,7 +409,7 @@ const TasksViewDepartment = () => {
               required: "Description is required",
               validate: {
                 noOnlyWhitespace,
-                isAlphanumeric,
+                // isAlphanumeric,
               },
             }}
             render={({ field }) => (

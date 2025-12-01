@@ -21,7 +21,8 @@ import { IoMdClose } from "react-icons/io";
 import DetalisFormatted from "../../../components/DetalisFormatted";
 import humanTime from "../../../utils/humanTime";
 import humanDate from "./../../../utils/humanDateForamt";
-import { isAlphanumeric, noOnlyWhitespace } from "../../../utils/validators";
+// import { isAlphanumeric, noOnlyWhitespace } from "../../../utils/validators";
+import { noOnlyWhitespace } from "../../../utils/validators";
 import { useTopDepartment } from "../../../hooks/useTopDepartment";
 import StatusChip from "../../../components/StatusChip";
 
@@ -345,7 +346,8 @@ const AcceptedTickets = ({ title, departmentId }) => {
             control={supportTicketControl}
             rules={{
               required: "Reason is required",
-              validate: { noOnlyWhitespace, isAlphanumeric },
+              // validate: { noOnlyWhitespace, isAlphanumeric },
+              validate: { noOnlyWhitespace },
             }}
             render={({ field }) => (
               <TextField
