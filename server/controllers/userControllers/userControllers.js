@@ -253,7 +253,7 @@ const fetchUser = async (req, res, next) => {
       return res.status(200).json(users);
     }
 
-    const users = await User.find({ company: company })
+    const users = await User.find({ company: company, isActive: true })
       .select("-password")
       .populate([
         { path: "reportsTo", select: "_id roleTitle" },

@@ -168,6 +168,31 @@ const addVisitor = async (req, res, next) => {
     const isScheduled = visitorType === "Scheduled";
 
     // === Validations ===
+
+    if (isNaN(clockIn.getTime())) {
+      return res.status(400).json({
+        message: "Invalid Check-in time",
+      });
+    }
+
+    if (isNaN(clockOut.getTime())) {
+      return res.status(400).json({
+        message: "Invalid Check-out time",
+      });
+    }
+
+    if (clockIn.getDate() !== clockOut.getDate()) {
+      return res.status(400).json({
+        message: "Check-in and Check-out date should be the same",
+      });
+    }
+
+    if (clockOut.getTime() < clockIn.getTime()) {
+      return res.status(400).json({
+        message: "Check-out time shouldn't be before Check-in time",
+      });
+    }
+
     if (toMeetCompany && !mongoose.Types.ObjectId.isValid(toMeetCompany)) {
       throw new CustomError(
         "Invalid to meet company's ID provided",
@@ -241,12 +266,15 @@ const addVisitor = async (req, res, next) => {
           .json({ message: "Missing required fields for scheduled visitor" });
       }
 
-      const overlappingVisitor = await Visitor.findOne({
-        toMeet,
-        visitorType: "Scheduled",
-        company,
-        scheduledDate,
-      });
+      let overlappingVisitor;
+      if (visitorType === "Scheduled") {
+        overlappingVisitor = await Visitor.findOne({
+          $or: [{ toMeet }, { clientToMeet }],
+          visitorType: "Scheduled",
+          company,
+          scheduledDate,
+        });
+      }
 
       if (overlappingVisitor) {
         throw new CustomError(
@@ -261,14 +289,6 @@ const addVisitor = async (req, res, next) => {
     // Client member validation
     let foundClientMember = null;
     if (clientToMeet) {
-      if (!mongoose.Types.ObjectId.isValid(clientToMeet)) {
-        throw new CustomError(
-          "Invalid client member Id",
-          logPath,
-          logAction,
-          logSourceKey
-        );
-      }
       foundClientMember = await CoworkingMember.findById(clientToMeet);
       if (!foundClientMember) {
         throw new CustomError(
@@ -449,6 +469,34 @@ const updateVisitor = async (req, res, next) => {
         logAction,
         logSourceKey
       );
+    }
+
+    const visitor = await Visitor.findOne({ _id: visitorId }).lean();
+
+    if (!visitor) {
+      return res.status(400).json({
+        message: "Visitor not found",
+      });
+    }
+    const parsedCheckout = new Date(updateData.checkOut);
+    const parsedCheckin = new Date(visitor.checkIn);
+
+    if (isNaN(parsedCheckout.getTime())) {
+      return res.status(400).json({
+        message: "Invalid checkout time",
+      });
+    }
+
+    if (parsedCheckout.getDate() !== parsedCheckin.getDate()) {
+      return res.status(400).json({
+        message: "Check-in and Check-out date should be the same",
+      });
+    }
+
+    if (parsedCheckout.getTime() < parsedCheckin.getTime()) {
+      return res.status(400).json({
+        message: "Check-out time should be after Check-in time",
+      });
     }
 
     const updatedVisitor = await Visitor.findByIdAndUpdate(

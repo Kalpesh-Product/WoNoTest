@@ -553,6 +553,31 @@ const AddVisitor = () => {
                           render={(params) => (
                             <TextField {...params} fullWidth />
                           )}
+                          shouldDisableTime={(time, view) => {
+                            const startTime = watch("checkIn");
+
+                            if (!startTime) return false;
+
+                            const startDate = dayjs(startTime).toDate(); // <-- the fix
+                            const current = time.$d;
+
+                            if (view === "hours") {
+                              return current.getHours() < startDate.getHours();
+                            }
+
+                            if (view === "minutes") {
+                              const selectedHour = dayjs(field.value).isValid()
+                                ? dayjs(field.value).hour()
+                                : null;
+
+                              return (
+                                selectedHour === startDate.getHours() &&
+                                current.getMinutes() < startDate.getMinutes()
+                              );
+                            }
+
+                            return false;
+                          }}
                         />
                       )}
                     />
