@@ -140,7 +140,8 @@ const ManageMeetings = () => {
     mutationFn: async (data) => {
       const response = await axios.patch(
         "/api/meetings/update-meeting-details",
-        { ...data, meetingId: selectedMeetingId, internalParticipants: [] }
+        // { ...data, meetingId: selectedMeetingId, internalParticipants: [] }
+        { ...data, meetingId: selectedMeetingId }
       );
       return response.data;
     },
@@ -447,6 +448,19 @@ const ManageMeetings = () => {
 
   //---------------------------------Event handlers----------------------------------------//
 
+  const getAvatarName = (participant) => {
+    if (participant.firstName && participant.lastName) {
+      return `${participant.firstName}+${participant.lastName}`;
+    }
+
+    // External participants (client side)
+    if (participant.employeeName) {
+      return participant.employeeName.replace(/\s+/g, "+");
+    }
+
+    return "User";
+  };
+
   const columns = [
     { field: "srNo", headerName: "Sr No", sort: "desc" },
     { field: "client", headerName: "Company" },
@@ -518,7 +532,10 @@ const ManageMeetings = () => {
                     key={index}
                     alt={participant.firstName}
                     // src={participant.avatar}
-                    src="https://ui-avatars.com/api/?name=Alice+Johnson&background=random"
+                    // src="https://ui-avatars.com/api/?name=Alice+Johnson&background=random"
+                    src={`https://ui-avatars.com/api/?name=${getAvatarName(
+                      participant
+                    )}&background=random`}
                     sx={{ width: 23, height: 23 }}
                   />
                 );
@@ -584,8 +601,9 @@ const ManageMeetings = () => {
               </span>
             </div>
 
-
-            {!isCancelled && !isFinance &&<ThreeDotMenu menuItems={menuItems} />}
+            {!isCancelled && !isFinance && (
+              <ThreeDotMenu menuItems={menuItems} />
+            )}
           </div>
         );
       },

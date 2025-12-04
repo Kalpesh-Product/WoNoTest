@@ -136,9 +136,11 @@ const MeetingFormLayout = () => {
     queryFn: async () => {
       if (company === "6799f0cd6a01edbe1bc3fcea") {
         const response = await axios.get("/api/users/fetch-users");
-        return response.data
-          .filter((user) => user._id !== auth.user?._id)
-          .filter((u) => u.isActive === true);
+        return (
+          response.data
+            // .filter((user) => user._id !== auth.user?._id)
+            .filter((u) => u.isActive === true)
+        );
       } else {
         const response = await axios.get("/api/sales/co-working-clients");
         const activeClients = response.data.filter((item) => item.isActive);
@@ -256,7 +258,7 @@ const MeetingFormLayout = () => {
     queryKey: ["visitors"],
     queryFn: async () => {
       const response = await axios.get("/api/visitors/fetch-visitors");
-    
+
       return response.data;
     },
   });
@@ -353,24 +355,24 @@ const MeetingFormLayout = () => {
             </div>
 
             <div className="w-full flex gap-8 items-center justify-start">
-             <div className="flex flex-col">
-               <span className="text-content">
-                Per Hour Credit : {perHourCredit}
-              </span>
-              <span className="text-content">
-                Per Half Hour Credit : {perHourCredit / 2}
-              </span>
-             </div>
+              <div className="flex flex-col">
+                <span className="text-content">
+                  Per Hour Credit : {perHourCredit}
+                </span>
+                <span className="text-content">
+                  Per Half Hour Credit : {perHourCredit / 2}
+                </span>
+              </div>
             </div>
             <div className="w-full flex gap-8 items-center justify-end">
-             <div className="flex flex-col">
-               <span className="text-content">
-                Per Hour Price : {`INR ${inrFormat(perHourPrice)}`}
-              </span>
-              <span className="text-content">
-                Per Half Hour Price : {`INR  ${inrFormat(perHourPrice / 2)}`}
-              </span>
-             </div>
+              <div className="flex flex-col">
+                <span className="text-content">
+                  Per Hour Price : {`INR ${inrFormat(perHourPrice)}`}
+                </span>
+                <span className="text-content">
+                  Per Half Hour Price : {`INR  ${inrFormat(perHourPrice / 2)}`}
+                </span>
+              </div>
             </div>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-2 gap-4 gap-y-6">
@@ -671,7 +673,9 @@ const MeetingFormLayout = () => {
                           `${user.firstName} ${user.lastName}`
                         } // Display names
                         onChange={(_, newValue) =>
-                          field.onChange(newValue.map((user) =>({ name:user.firstName})))
+                          field.onChange(
+                            newValue.map((user) => ({ name: user.firstName }))
+                          )
                         } // Sync selected users with form state
                         renderTags={(selected, getTagProps) =>
                           selected.map((user, index) => (
