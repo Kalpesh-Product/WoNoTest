@@ -52,6 +52,7 @@ const ticketsSchema = new mongoose.Schema(
     },
     closingRemark: {
       type: String,
+      maxlength: 250,
     },
     acceptedAt: Date,
     acceptedBy: {
