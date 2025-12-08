@@ -517,11 +517,11 @@ const SupportTickets = ({ title, departmentId }) => {
           <div className="grid grid-cols-1 lg:grid-cols-1 gap-4">
             <DetalisFormatted
               title="Ticket"
-              detail={selectedTicket.ticketTitle || "N/A"}
+              detail={selectedTicket?.ticket?.ticket || "N/A"}
             />
             <DetalisFormatted
               title="Description"
-              detail={selectedTicket.reason || "N/A"}
+              detail={selectedTicket?.ticket?.description || "N/A"}
             />
             <DetalisFormatted
               title="Raised By"
