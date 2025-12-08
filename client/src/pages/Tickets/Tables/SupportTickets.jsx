@@ -556,6 +556,10 @@ const SupportTickets = ({ title, departmentId }) => {
               title="Accepted at"
               detail={selectedTicket?.acceptedAt || "N/A"}
             />
+            <DetalisFormatted
+              title="Reason For Support"
+              detail={selectedTicket?.reason || "N/A"}
+            />
           </div>
         )}
       </MuiModal>
