@@ -1144,7 +1144,7 @@ const closeTicket = async (req, res, next) => {
   const { user, company, ip } = req;
 
   try {
-    const { ticketId, closingRemark } = req.body;
+    const { ticketId, closingRemark = "" } = req.body;
 
     if (!ticketId) {
       throw new CustomError(
@@ -1162,6 +1162,14 @@ const closeTicket = async (req, res, next) => {
         logAction,
         logSourceKey
       );
+    }
+
+    if (closingRemark.trim().length > 250) {
+      return res.status(400).json({
+        message: "Closing remark must not exceed 250 characters",
+        currentLength: closingRemark.trim().length,
+        maxLength: 250,
+      });
     }
 
     const foundUser = await User.findOne({ _id: user })
