@@ -4,7 +4,10 @@ import WidgetSection from "../../components/WidgetSection";
 import useAxiosPrivate from "../../hooks/useAxiosPrivate";
 import { useNavigate } from "react-router-dom";
 import { useDispatch } from "react-redux";
-import { setSelectedDepartment, setSelectedDepartmentName } from "../../redux/slices/performanceSlice";
+import {
+  setSelectedDepartment,
+  setSelectedDepartmentName,
+} from "../../redux/slices/performanceSlice";
 import { useTopDepartment } from "../../hooks/useTopDepartment";
 import useAuth from "../../hooks/useAuth";
 import PageFrame from "../../components/Pages/PageFrame";
@@ -19,7 +22,7 @@ const PerformanceHome = () => {
 
   useTopDepartment({
     additionalTopUserIds: [
-      // "67b83885daad0f7bab2f1888",
+      "67b83885daad0f7bab2f1888",
       "681a10b13fc9dc666ede401c",
       "67b83885daad0f7bab2f188b",
     ], //utkarsha //nigel //mac
@@ -59,7 +62,8 @@ const PerformanceHome = () => {
               dispatch(setSelectedDepartmentName(params.data.department));
               navigate(`${params.value}`);
             }}
-            className="text-primary font-pregular hover:underline cursor-pointer">
+            className="text-primary font-pregular hover:underline cursor-pointer"
+          >
             {params.value}
           </span>
         );
