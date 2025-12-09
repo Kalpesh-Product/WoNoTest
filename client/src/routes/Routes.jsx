@@ -2181,7 +2181,11 @@ export const routes = createBrowserRouter([
                   },
                   {
                     path: ":department",
-                    element: <DepartmentPerformanceLayout />,
+                    element: (
+                      <ProtectedDepartmentRoute
+                        element={<DepartmentPerformanceLayout />}
+                      />
+                    ),
                     children: [
                       {
                         path: "daily-KRA",
