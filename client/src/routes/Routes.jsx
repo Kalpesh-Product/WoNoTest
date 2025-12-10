@@ -1908,7 +1908,7 @@ export const routes = createBrowserRouter([
                 element: <Access />,
               },
               {
-                path: "access/permissions",
+                path: "access/permissions/",
                 element: <AccessProfile />,
               },
               {

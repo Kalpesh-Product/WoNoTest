@@ -381,6 +381,7 @@ const fetchWeeklyUnits = async (req, res, next) => {
 
     const foundUsers = await UserData.find({
       departments: { $in: [department] },
+      isActive: true,
     })
       .populate([
         {
@@ -417,8 +418,11 @@ const fetchWeeklyUnits = async (req, res, next) => {
       manager = `${foundManager.firstName} ${foundManager.lastName}`;
     }
 
-    const weeklySchedules = await WeeklySchedule.find({ company, department })
-      .populate("employee.id", "firstName lastName")
+    const weeklySchedules = await WeeklySchedule.find({
+      company,
+      department,
+    })
+      .populate("employee.id", "firstName lastName isActive")
       .populate("substitutions.substitute", "firstName lastName")
       .populate({
         path: "location",
@@ -443,10 +447,12 @@ const fetchWeeklyUnits = async (req, res, next) => {
         ],
       });
 
-    const transformedData = weeklySchedules.map((schedule) => ({
-      ...schedule._doc,
-      manager,
-    }));
+    const transformedData = weeklySchedules
+      .filter((schedule) => schedule.employee.isActive)
+      .map((schedule) => ({
+        ...schedule._doc,
+        manager,
+      }));
 
     res.status(200).json(transformedData);
   } catch (error) {
