@@ -684,7 +684,11 @@ const Reimbursement = () => {
         </div>
       </PageFrame>
 
-      <MuiModal open={openPreview} onClose={() => setOpenPreview(false)}>
+      <MuiModal
+        open={openPreview}
+        onClose={() => setOpenPreview(false)}
+        hideHeader
+      >
         <Box className="absolute top-1/2 left-1/2 bg-white p-4 rounded shadow max-h-screen overflow-y-auto w-[53%] -translate-x-1/2 -translate-y-1/2">
           <div className="flex justify-between items-center mb-2">
             <span className="text-title text-primary font-pbold uppercase">

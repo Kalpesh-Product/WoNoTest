@@ -747,13 +747,12 @@ const ItDashboard = () => {
       layout: 1,
       type: "BarGraph",
       title: "BIZ Nest IT DEPARTMENT EXPENSE",
-      responsiveResize:true,
-      chartId:"bargraph-hr-expense",
+      responsiveResize: true,
+      chartId: "bargraph-hr-expense",
       options: expenseOptions,
-      data:expenseRawSeries,
-       titleAmount:`INR ${Math.round(totalUtilised).toLocaleString("en-IN")}`,
-       onYearChange:setSelectedFiscalYear,
-          
+      data: expenseRawSeries,
+      titleAmount: `INR ${Math.round(totalUtilised).toLocaleString("en-IN")}`,
+      onYearChange: setSelectedFiscalYear,
     },
   ];
 
@@ -804,6 +803,7 @@ const ItDashboard = () => {
       title: "Total",
       data: departmentKra.length || 0,
       description: "Monthly KPA",
+      route: "/app/performance/IT/monthly-KPA",
     },
   ];
 
@@ -834,29 +834,29 @@ const ItDashboard = () => {
 
   const allowedTables = filterPermissions(tableWidgetConfigs, userPermissions);
 
-   const pieChartConfig = [
+  const pieChartConfig = [
     {
-      key:PERMISSIONS.IT_UNIT_WISE_IT_EXPENSES.value,
+      key: PERMISSIONS.IT_UNIT_WISE_IT_EXPENSES.value,
       type: "PieChartMui",
-      title:"Unit Wise IT Expenses",
+      title: "Unit Wise IT Expenses",
       border: true,
       data: [],
       options: [],
     },
     {
-      key:PERMISSIONS. IT_BIOMETRICS_GENDER_DATA.value,
+      key: PERMISSIONS.IT_BIOMETRICS_GENDER_DATA.value,
       type: "PieChartMui",
-      title:"Biometrics Gender Data",
+      title: "Biometrics Gender Data",
       border: true,
       data: [],
       options: [],
     },
-  ]
+  ];
   const allowedPieCharts = filterPermissions(pieChartConfig, userPermissions);
 
   const dueTasksConfigs = [
     {
-      key:PERMISSIONS.IT_UNIT_WISE_DUE_TASKS.value,
+      key: PERMISSIONS.IT_UNIT_WISE_DUE_TASKS.value,
       type: "PieChartMui",
       border: true,
       title: "Unit Wise Due Tasks",
@@ -864,7 +864,7 @@ const ItDashboard = () => {
       options: [],
     },
     {
-      key:PERMISSIONS.IT_EXECUTIVE_WISE_DUE_TASKS.value,
+      key: PERMISSIONS.IT_EXECUTIVE_WISE_DUE_TASKS.value,
       type: "DonutChart",
       border: true,
       title: "Executive Wise Due Tasks",
@@ -876,11 +876,11 @@ const ItDashboard = () => {
       width: 500,
     },
   ];
-    const allowedDueTasks = filterPermissions(dueTasksConfigs, userPermissions);
+  const allowedDueTasks = filterPermissions(dueTasksConfigs, userPermissions);
 
   const pieDonutConfig = [
     {
-      key:PERMISSIONS.  IT_CLIENT_WISE_COMPLAINTS.value,
+      key: PERMISSIONS.IT_CLIENT_WISE_COMPLAINTS.value,
       type: "PieChartMui",
       border: true,
       title: "Client-Wise Complaints",
@@ -888,7 +888,7 @@ const ItDashboard = () => {
       options: [],
     },
     {
-      key:PERMISSIONS. IT_TYPE_OF_IT_COMPLAINTS.value,
+      key: PERMISSIONS.IT_TYPE_OF_IT_COMPLAINTS.value,
       type: "DonutChart",
       border: true,
       title: "Type Of IT Complaints",
@@ -898,7 +898,7 @@ const ItDashboard = () => {
       tooltipValue: complaintCounts,
     },
   ];
-const allowedPieDonut = filterPermissions(pieDonutConfig, userPermissions);
+  const allowedPieDonut = filterPermissions(pieDonutConfig, userPermissions);
 
   //
   // ----------------------------------------------------------------------------------------------------------//
@@ -1088,116 +1088,140 @@ const allowedPieDonut = filterPermissions(pieDonutConfig, userPermissions);
   // ];
 
   const techWidgets = [
-  {
-    layout: 1,
-    widgets: allowedYearlyGraph.map((config) => (
-    <WidgetSection normalCase layout={config.layout} padding key={config.key}>
-      <YearlyGraph
-        chartId={config.chartId}
-        data={config.data}
-        options={config.options}
-        title={config.title}
-        titleAmount={config.titleAmount}
-        onYearChange={config.onYearChange}
-        responsiveResize
-
-      />
-    </WidgetSection>
-  )),
-  },
-  {
-    layout: allowedCards.length,
-    widgets: allowedCards.map((card) => (
-      <Card
-        key={card.title}
-        route={card.route}
-        title={card.title}
-        icon={card.icon}
-      />
-    )),
-  },
-  {
-    layout: 3,
-    widgets: allowedITDataCards.map((config) => (
-      <DataCard
-        key={config.key}
-        data={config.data}
-        title={config.title}
-        description={config.description}
-        route={config.route}
-      />
-    )),
-  },
-  {
-    layout: allowedTables.length,
-    widgets: allowedTables.map((config) => (
-      <MuiTable
-        key={config.key}
-        scroll={config.scroll}
-        rowsToDisplay={config.rowsToDisplay}
-        Title={config.title}
-        rows={config.rows}
-        columns={config.columns}
-      />
-    )),
-  },
-  {
-    layout: allowedDueTasks.length,
-    widgets: allowedDueTasks.map((config) => {
-      if (config.type === "PieChartMui") {
-        return (
-          <WidgetSection key={config.key} border={config.border} title={config.title}>
-            <PieChartMui data={config.data} options={config.options} />
-          </WidgetSection>
-        );
-      } else if (config.type === "DonutChart") {
-        return (
-          <WidgetSection key={config.key} border={config.border} title={config.title}>
-            <DonutChart
-              centerLabel={config.centerLabel}
-              labels={config.labels}
-              colors={config.colors}
-              series={config.series}
-              tooltipValue={config.tooltipValue}
-              width={config.width}
-            />
-          </WidgetSection>
-        );
-      }
-    }),
-  },
-  {
-    layout: allowedPieCharts.length,
-    widgets: allowedPieCharts.map((config) => (
-      <WidgetSection key={config.key} border={config.border} title={config.title}>
-        <PieChartMui data={config.data} options={config.options} />
-      </WidgetSection>
-    )),
-  },
-  {
-    layout: allowedPieDonut.length,
-    widgets: allowedPieDonut.map((config) => {
-      if (config.type === "PieChartMui") {
-        return (
-          <WidgetSection key={config.key} border={config.border} title={config.title}>
-            <PieChartMui data={config.data} options={config.options} />
-          </WidgetSection>
-        );
-      } else if (config.type === "DonutChart") {
-        return (
-          <WidgetSection key={config.key} border={config.border} title={config.title}>
-            <DonutChart
-              centerLabel={config.centerLabel}
-              labels={config.labels}
-              series={config.series}
-              tooltipValue={config.tooltipValue}
-            />
-          </WidgetSection>
-        );
-      }
-    }),
-  },
-];
+    {
+      layout: 1,
+      widgets: allowedYearlyGraph.map((config) => (
+        <WidgetSection
+          normalCase
+          layout={config.layout}
+          padding
+          key={config.key}
+        >
+          <YearlyGraph
+            chartId={config.chartId}
+            data={config.data}
+            options={config.options}
+            title={config.title}
+            titleAmount={config.titleAmount}
+            onYearChange={config.onYearChange}
+            responsiveResize
+          />
+        </WidgetSection>
+      )),
+    },
+    {
+      layout: allowedCards.length,
+      widgets: allowedCards.map((card) => (
+        <Card
+          key={card.title}
+          route={card.route}
+          title={card.title}
+          icon={card.icon}
+        />
+      )),
+    },
+    {
+      layout: 3,
+      widgets: allowedITDataCards.map((config) => (
+        <DataCard
+          key={config.key}
+          data={config.data}
+          title={config.title}
+          description={config.description}
+          route={config.route}
+        />
+      )),
+    },
+    {
+      layout: allowedTables.length,
+      widgets: allowedTables.map((config) => (
+        <MuiTable
+          key={config.key}
+          scroll={config.scroll}
+          rowsToDisplay={config.rowsToDisplay}
+          Title={config.title}
+          rows={config.rows}
+          columns={config.columns}
+        />
+      )),
+    },
+    {
+      layout: allowedDueTasks.length,
+      widgets: allowedDueTasks.map((config) => {
+        if (config.type === "PieChartMui") {
+          return (
+            <WidgetSection
+              key={config.key}
+              border={config.border}
+              title={config.title}
+            >
+              <PieChartMui data={config.data} options={config.options} />
+            </WidgetSection>
+          );
+        } else if (config.type === "DonutChart") {
+          return (
+            <WidgetSection
+              key={config.key}
+              border={config.border}
+              title={config.title}
+            >
+              <DonutChart
+                centerLabel={config.centerLabel}
+                labels={config.labels}
+                colors={config.colors}
+                series={config.series}
+                tooltipValue={config.tooltipValue}
+                width={config.width}
+              />
+            </WidgetSection>
+          );
+        }
+      }),
+    },
+    {
+      layout: allowedPieCharts.length,
+      widgets: allowedPieCharts.map((config) => (
+        <WidgetSection
+          key={config.key}
+          border={config.border}
+          title={config.title}
+        >
+          <PieChartMui data={config.data} options={config.options} />
+        </WidgetSection>
+      )),
+    },
+    {
+      layout: allowedPieDonut.length,
+      widgets: allowedPieDonut.map((config) => {
+        if (config.type === "PieChartMui") {
+          return (
+            <WidgetSection
+              key={config.key}
+              border={config.border}
+              title={config.title}
+            >
+              <PieChartMui data={config.data} options={config.options} />
+            </WidgetSection>
+          );
+        } else if (config.type === "DonutChart") {
+          return (
+            <WidgetSection
+              key={config.key}
+              border={config.border}
+              title={config.title}
+            >
+              <DonutChart
+                centerLabel={config.centerLabel}
+                labels={config.labels}
+                series={config.series}
+                tooltipValue={config.tooltipValue}
+              />
+            </WidgetSection>
+          );
+        }
+      }),
+    },
+  ];
 
   return (
     <div>
