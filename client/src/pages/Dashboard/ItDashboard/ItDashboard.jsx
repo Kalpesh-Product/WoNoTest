@@ -846,7 +846,7 @@ const ItDashboard = () => {
     {
       key: PERMISSIONS.IT_BIOMETRICS_GENDER_DATA.value,
       type: "PieChartMui",
-      title: "Biometrics Gender Data",
+      title: "Biometrics Activation Data",
       border: true,
       data: [],
       options: [],

@@ -121,8 +121,19 @@ const Reimbursement = () => {
         unit._id === selectedUnit &&
         unit.building.buildingName === selectedLocation
     );
-    return unit._id;
+
+    // Guard against undefined when the selected unit does not belong to the new
+    // location. This occurs when a user picks a unit and then changes the
+    // location dropdown, which previously caused an error while accessing
+    // unit._id.
+    return unit ? unit._id : null;
   }, [selectedUnit, selectedLocation, units]);
+
+  useEffect(() => {
+    // Reset unit selection whenever the location changes to avoid stale unit
+    // references when switching between buildings.
+    setValue("unitId", "");
+  }, [selectedLocation, setValue]);
 
   // const uniqueBuildings = Array.from(
   //   new Map(

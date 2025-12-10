@@ -27,7 +27,7 @@ const AccessProfile = () => {
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
   const { user } = location.state || {};
-  const navigate = useNavigate()
+  const navigate = useNavigate();
 
   const { register, setValue, handleSubmit, watch } = useForm({
     defaultValues: { permissions: [] },
@@ -93,7 +93,7 @@ const AccessProfile = () => {
         key,
         action: value,
         type,
-        access : access,
+        access: access,
         label: value
           .split("_")
           .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
@@ -185,7 +185,9 @@ const AccessProfile = () => {
       </div>
 
       {/* Permissions Table */}
-      <span className="text-title text-primary font-pmedium">Manage Access</span>
+      <span className="text-title text-primary font-pmedium">
+        Manage Access
+      </span>
       <div className="grid grid-cols-3 gap-4">
         {Object.entries(groupedPermissions).map(([module, permissions]) => (
           <div className="" key={module}>
