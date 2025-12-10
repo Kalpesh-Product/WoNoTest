@@ -863,72 +863,85 @@ const AdminDashboard = () => {
 
   const allowedTables = filterPermissions(muiTableConfigs, userPermissions);
 
-    const muiTableConfigs2 = [
+  const muiTableConfigs2 = [
     {
       key: PERMISSIONS.ADMIN_NEWLY_JOINED_HOUSE_KEEPING_MEMBERS.value,
       scroll: true,
       Title: "Newly Joined House Keeping Members",
       rowsToDisplay: 4,
-      rows:  [],
+      rows: [],
       columns: houseKeepingMemberColumns,
     },
-  ]
+  ];
   const allowedTables2 = filterPermissions(muiTableConfigs2, userPermissions);
 
-  //Unit wise 
-  const unitWiseDueTasksWidget = [{
-  key: PERMISSIONS.ADMIN_UNIT_WISE_DUE_TASKS.value,
-  layout: 2,
-  title: "Unit Wise Due Tasks",
-  chartType: "PieChartMui",
-  border: true,
-  data: [],
-  options: [],
-}];
+  //Unit wise
+  const unitWiseDueTasksWidget = [
+    {
+      key: PERMISSIONS.ADMIN_UNIT_WISE_DUE_TASKS.value,
+      layout: 2,
+      title: "Unit Wise Due Tasks",
+      chartType: "PieChartMui",
+      border: true,
+      data: [],
+      options: [],
+    },
+  ];
 
-const allowedUnitWise = filterPermissions(unitWiseDueTasksWidget, userPermissions);
+  const allowedUnitWise = filterPermissions(
+    unitWiseDueTasksWidget,
+    userPermissions
+  );
 
-//Executivve wise 
-const executiveWiseDueTasksWidget = [{
-  key: PERMISSIONS.ADMIN_EXECUTIVE_WISE_DUE_TASKS.value,
-  layout: 2,
-  title: "Executive Wise Due Tasks",
-  chartType: "DonutChart",
-  border: true,
-  centerLabel: "Tasks",
-  labels: [],
-  colors,
-  series: [],
-  tooltipValue: executiveTasksCount,
-}];
+  //Executivve wise
+  const executiveWiseDueTasksWidget = [
+    {
+      key: PERMISSIONS.ADMIN_EXECUTIVE_WISE_DUE_TASKS.value,
+      layout: 2,
+      title: "Executive Wise Due Tasks",
+      chartType: "DonutChart",
+      border: true,
+      centerLabel: "Tasks",
+      labels: [],
+      colors,
+      series: [],
+      tooltipValue: executiveTasksCount,
+    },
+  ];
 
-const allowedExecutiveWise = filterPermissions(executiveWiseDueTasksWidget, userPermissions);
+  const allowedExecutiveWise = filterPermissions(
+    executiveWiseDueTasksWidget,
+    userPermissions
+  );
 
-const piechartConfig2 = [
-  {
-    key: PERMISSIONS.ADMIN_TOTAL_DESKS_COMPANY_WISE.value,
-    layout: 2,
-    title: "Total Desks Company Wise",
-    chartType: "PieChartMui",
-    border: true,
-    data: totalDeskPercent,
-    options: clientsDesksPieOptions,
-    width: "100%",
-    isLoading: isClientsDataPending,
-    loadingFallback: <CircularProgress color="#1E3D73" />,
-  },
-  {
-    key: PERMISSIONS.ADMIN_BIOMETRICS_GENDER_DATA.value,
-    layout: 2,
-    title: "Biometrics Gender Data",
-    chartType: "PieChartMui",
-    border: true,
-    data: [],
-    options: [],
-  },
-];
+  const piechartConfig2 = [
+    {
+      key: PERMISSIONS.ADMIN_TOTAL_DESKS_COMPANY_WISE.value,
+      layout: 2,
+      title: "Total Desks Company Wise",
+      chartType: "PieChartMui",
+      border: true,
+      data: totalDeskPercent,
+      options: clientsDesksPieOptions,
+      width: "100%",
+      isLoading: isClientsDataPending,
+      loadingFallback: <CircularProgress color="#1E3D73" />,
+    },
+    {
+      key: PERMISSIONS.ADMIN_BIOMETRICS_GENDER_DATA.value,
+      layout: 2,
+      title: "Housekeeping Gender Data",
+      chartType: "PieChartMui",
+      border: true,
+      data: [],
+      options: [],
+    },
+  ];
 
-const allowedPiechartConfig2 = filterPermissions(piechartConfig2, userPermissions);
+  const allowedPiechartConfig2 = filterPermissions(
+    piechartConfig2,
+    userPermissions
+  );
   //-----------------------------------------------------------------------------------------------------------------//
   const techWidgets = [
     {
@@ -1011,32 +1024,32 @@ const allowedPiechartConfig2 = filterPermissions(piechartConfig2, userPermission
     {
       layout: 2,
       widgets: [
-        allowedUnitWise.map((config)=>(
+        allowedUnitWise.map((config) => (
           <WidgetSection border={config.border} title={config.title}>
-          <PieChartMui data={config.data} options={config.options} />
-        </WidgetSection>
+            <PieChartMui data={config.data} options={config.options} />
+          </WidgetSection>
         )),
-       allowedExecutiveWise.map((config)=>(
-         <WidgetSection border={config.border} title={config.title}>
-          <DonutChart
-            centerLabel={config.centerLabel}
-            labels={config.labels}
-            colors={config.colors}
-            series={config.series}
-            tooltipValue={config.tooltipValue}
-          />
-        </WidgetSection>
-       ))
+        allowedExecutiveWise.map((config) => (
+          <WidgetSection border={config.border} title={config.title}>
+            <DonutChart
+              centerLabel={config.centerLabel}
+              labels={config.labels}
+              colors={config.colors}
+              series={config.series}
+              tooltipValue={config.tooltipValue}
+            />
+          </WidgetSection>
+        )),
       ],
     },
     {
       layout: 2,
-      widgets:  allowedPiechartConfig2.map((config)=>(
-         <WidgetSection border={config.border} title={config.title}>
+      widgets: allowedPiechartConfig2.map((config) => (
+        <WidgetSection border={config.border} title={config.title}>
           {!isClientsDataPending ? (
             <PieChartMui
-              data={ config.data}
-              options={ config.options}
+              data={config.data}
+              options={config.options}
               width={config.width}
             />
           ) : (
@@ -1070,14 +1083,7 @@ const allowedPiechartConfig2 = filterPermissions(piechartConfig2, userPermission
     // },
     {
       layout: 1,
-      widgets: allowedTables2.map((config)=>(
-
-          <MuiTable
-          {...config}
-        />
-      ))
-      
-      
+      widgets: allowedTables2.map((config) => <MuiTable {...config} />),
     },
   ];
 

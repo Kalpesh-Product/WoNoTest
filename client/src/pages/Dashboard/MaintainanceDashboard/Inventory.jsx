@@ -40,7 +40,7 @@ const adminCategories = [
 
 const Inventory = () => {
   const department = usePageDepartment();
-  console.log("department : ", department)
+  console.log("department : ", department);
   const axios = useAxiosPrivate();
   const [modalMode, setModalMode] = useState("add");
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -254,6 +254,7 @@ const Inventory = () => {
     {
       field: "Category",
       headerName: "Category",
+      cellRenderer: (params) => params.data?.category || params.data?.Category,
     },
     {
       field: "date",
@@ -272,7 +273,7 @@ const Inventory = () => {
               onClick: () => {
                 setSelectedAsset(params.data);
                 setModalMode("edit");
-                setIsModalOpen(true)
+                setIsModalOpen(true);
               },
             },
           ]}
