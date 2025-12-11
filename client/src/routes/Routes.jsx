@@ -896,7 +896,7 @@ export const routes = createBrowserRouter([
                       },
 
                       {
-                        path: "holidays-events",
+                        path: "mix-bag/holidays-events",
                         element: <AdminHolidaysEvents />,
                       },
                       {
