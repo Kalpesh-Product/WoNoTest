@@ -40,7 +40,7 @@ const adminCategories = [
 
 const Inventory = () => {
   const department = usePageDepartment();
-  console.log("department : ", department)
+  console.log("department : ", department);
   const axios = useAxiosPrivate();
   const [modalMode, setModalMode] = useState("add");
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -108,6 +108,7 @@ const Inventory = () => {
         const response = await axios.get(
           `/api/inventory/get-inventories?department=${department._id}`
         );
+
         return response.data;
       } catch (error) {
         throw new Error(error);
@@ -258,7 +259,10 @@ const Inventory = () => {
     {
       field: "date",
       headerName: "Date",
-      valueGetter: (params) => humanDate(params.data?.date),
+      valueGetter: (params) => {
+        console.log("human date", params.data);
+        return params.data?.date;
+      },
     },
     {
       field: "actions",
@@ -272,7 +276,7 @@ const Inventory = () => {
               onClick: () => {
                 setSelectedAsset(params.data);
                 setModalMode("edit");
-                setIsModalOpen(true)
+                setIsModalOpen(true);
               },
             },
           ]}
