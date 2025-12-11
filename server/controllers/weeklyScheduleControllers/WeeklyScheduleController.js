@@ -257,6 +257,15 @@ const addSubstitute = async (req, res, next) => {
       return res.status(400).json({ message: "Missing substitution fields" });
     }
 
+    // const Model = flag === "HK" ? HouseKeepingSchedule : WeeklySchedule;
+    // console.log("model", Model);
+    // console.log("modelName:", HouseKeepingSchedule.modelName);
+
+    // const schedule = await Model.findOne({
+    //   _id: weeklyScheduleId,
+    //   company,
+    // });
+
     const schedule = await WeeklySchedule.findOne({
       _id: weeklyScheduleId,
       company,

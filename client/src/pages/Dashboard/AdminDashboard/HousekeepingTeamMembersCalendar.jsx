@@ -196,7 +196,10 @@ const HousekeepingTeamMembersCalendar = () => {
 
   const { mutate: assignSubstitute, isPending } = useMutation({
     mutationFn: async (data) => {
-      const res = await axios.patch("/api/weekly-unit/add-substitute", data);
+      const res = await axios.patch("/api/weekly-unit/add-substitute", {
+        ...data,
+        flag: "HK",
+      });
       return res.data;
     },
     onSuccess: (res) => {
