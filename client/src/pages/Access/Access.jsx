@@ -42,6 +42,7 @@ const Access = () => {
       profilePicture: emp.profilePicture?.url || "",
       status: emp.isActive ? "Active" : "Inactive",
     };
+    dispatch(setSelectedEmployee(userData));
     navigate("permissions", {
       state: {
         user: userData,

@@ -4,7 +4,14 @@ import { Modal, Box, IconButton } from "@mui/material";
 import { IoMdClose } from "react-icons/io";
 import { AnimatePresence, motion } from "motion/react";
 
-const MuiModal = ({ open, onClose, title, children, headerBackground }) => {
+const MuiModal = ({
+  open,
+  onClose,
+  title,
+  children,
+  headerBackground,
+  hideHeader = false,
+}) => {
   const modalRef = useRef(null);
   return (
     <AnimatePresence>
@@ -20,17 +27,19 @@ const MuiModal = ({ open, onClose, title, children, headerBackground }) => {
             className="w-2/5 bg-white shadow-xl rounded-lg outline-none max-h-[90vh] flex flex-col"
           >
             {/* Sticky Header */}
-            <div className="flex justify-between items-center px-4 py-2 rounded-t-md border-b border-borderGray sticky top-0 z-10 bg-white">
-              <div className="text-subtitle w-full text-center text-primary uppercase">
-                {title}
+            {!hideHeader && (
+              <div className="flex justify-between items-center px-4 py-2 rounded-t-md border-b border-borderGray sticky top-0 z-10 bg-white">
+                <div className="text-subtitle w-full text-center text-primary uppercase">
+                  {title}
+                </div>
+                <IconButton sx={{ p: 0 }} onClick={onClose}>
+                  <IoMdClose
+                    className="text-black text-subtitle"
+                    style={{ color: "black" }}
+                  />
+                </IconButton>
               </div>
-              <IconButton sx={{ p: 0 }} onClick={onClose}>
-                <IoMdClose
-                  className="text-black text-subtitle"
-                  style={{ color: "black" }}
-                />
-              </IconButton>
-            </div>
+            )}
 
             {/* Scrollable Content */}
             <div className="p-4 overflow-y-auto">{children}</div>

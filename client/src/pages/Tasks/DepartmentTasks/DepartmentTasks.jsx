@@ -19,10 +19,7 @@ const DepartmentTasks = () => {
   const currentDepartment = auth.user?.departments?.[0]?.name;
 
   useTopDepartment({
-    additionalTopUserIds: [
-      "67b83885daad0f7bab2f188b",
-      "681a10b13fc9dc666ede401c",
-    ], //mac //Nigel
+    additionalTopUserIds: ["67b83885daad0f7bab2f1888"], //utkarsha
     onNotTop: () => {
       dispatch(setSelectedDepartment(currentDepartmentId));
       navigate(`/app/tasks/department-tasks/${currentDepartment}`);
