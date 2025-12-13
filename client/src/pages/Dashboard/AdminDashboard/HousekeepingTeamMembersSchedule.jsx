@@ -370,9 +370,10 @@ const HousekeepingTeamMembersSchedule = () => {
   const handleViewUser = async (user) => {
     try {
       const response = await axios.get(
-        `/api/company/get-housekeeping-schedule?unitId=${user?._id}&`
+        `/api/weekly-unit/get-unit-schedule?unitId=${user?._id}&department=${department?._id}`
       );
-      const matchingSchedule = response.data.data?.[0]; // adjust as needed
+
+      const matchingSchedule = response.data?.[0];
       console.log("matching schedule : ", matchingSchedule);
 
       if (matchingSchedule) {
