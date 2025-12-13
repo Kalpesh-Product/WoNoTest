@@ -6,6 +6,7 @@ const { default: mongoose } = require("mongoose");
 const Unit = require("../../models/locations/Unit");
 const { Readable } = require("stream");
 const csvParser = require("csv-parser");
+const HouseKeepingSchedule = require("../../models/HousekeepingSchedule");
 
 const assignWeeklyUnit = async (req, res, next) => {
   const logPath = "administration/AdministrationLog";
@@ -250,26 +251,22 @@ const addSubstitute = async (req, res, next) => {
   const logSourceKey = "weeklySchedule";
 
   try {
-    const { weeklyScheduleId, substitute, fromDate, toDate } = req.body;
+    const { weeklyScheduleId, substitute, fromDate, toDate, flag } = req.body;
     const { company, user, ip } = req;
+
+    const isHousekeeping = flag === "HK";
+
+    const Model = isHousekeeping ? HouseKeepingSchedule : WeeklySchedule;
+    const query = isHousekeeping
+      ? { _id: weeklyScheduleId }
+      : { _id: weeklyScheduleId, company };
 
     if (!substitute || !fromDate || !toDate) {
       return res.status(400).json({ message: "Missing substitution fields" });
     }
 
-    // const Model = flag === "HK" ? HouseKeepingSchedule : WeeklySchedule;
-    // console.log("model", Model);
-    // console.log("modelName:", HouseKeepingSchedule.modelName);
+    const schedule = await Model.findOne(query);
 
-    // const schedule = await Model.findOne({
-    //   _id: weeklyScheduleId,
-    //   company,
-    // });
-
-    const schedule = await WeeklySchedule.findOne({
-      _id: weeklyScheduleId,
-      company,
-    });
     if (!schedule) {
       throw new CustomError(
         "Weekly unit not found",
@@ -279,7 +276,13 @@ const addSubstitute = async (req, res, next) => {
       );
     }
 
-    schedule.employee.isActive = false;
+    if (!isHousekeeping && schedule.employee) {
+      schedule.employee.isActive = false;
+    }
+
+    if (!Array.isArray(schedule.substitutions)) {
+      schedule.substitutions = [];
+    }
 
     const lastActiveIndex = schedule.substitutions.findLastIndex(
       (sub) => sub.isActive
