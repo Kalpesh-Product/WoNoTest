@@ -134,7 +134,7 @@ const addVisitor = async (req, res, next) => {
       sector,
       city,
       state,
-      checkIn,
+      checkIn = new Date(),
       checkOut,
       scheduledStartTime,
       scheduledEndTime,
@@ -175,19 +175,19 @@ const addVisitor = async (req, res, next) => {
       });
     }
 
-    if (isNaN(clockOut.getTime())) {
+    if (clockOut && isNaN(clockOut.getTime())) {
       return res.status(400).json({
         message: "Invalid Check-out time",
       });
     }
 
-    if (clockIn.getDate() !== clockOut.getDate()) {
+    if (clockOut && clockIn.getDate() !== clockOut.getDate()) {
       return res.status(400).json({
         message: "Check-in and Check-out date should be the same",
       });
     }
 
-    if (clockOut.getTime() < clockIn.getTime()) {
+    if (clockOut && clockOut.getTime() < clockIn.getTime()) {
       return res.status(400).json({
         message: "Check-out time shouldn't be before Check-in time",
       });
@@ -201,7 +201,7 @@ const addVisitor = async (req, res, next) => {
         logSourceKey
       );
     }
-    if (toMeetCompany && !clientToMeet) {
+    if (toMeetCompany && !toMeet && !clientToMeet) {
       throw new CustomError(
         "Missing person to meet field",
         logPath,

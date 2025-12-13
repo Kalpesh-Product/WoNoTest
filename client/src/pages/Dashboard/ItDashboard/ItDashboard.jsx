@@ -775,7 +775,7 @@ const ItDashboard = () => {
       title: "Total",
       data: tasks.length || 0,
       description: "Due Tasks This Month",
-      route: "/app/tasks",
+      route: "/app/tasks/department-tasks",
     },
     {
       key: PERMISSIONS.IT_INTERNET_EXPENSE_PER_SQFT.value,

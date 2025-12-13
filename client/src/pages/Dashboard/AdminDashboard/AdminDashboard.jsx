@@ -248,6 +248,8 @@ const AdminDashboard = () => {
           const response = await axios.get(
             `/api/weekly-unit/fetch-weekly-unit/${department._id}`
           );
+
+          console.log("weekly schedule", weeklySchedule.length);
           return response.data;
         } catch (error) {
           throw new Error("Error fetching data");
@@ -781,7 +783,7 @@ const AdminDashboard = () => {
       title: "Total",
       data: tasks.length || 0,
       description: "Monthly Due Tasks",
-      route: "/app/tasks",
+      route: "/app/tasks/department-tasks",
     },
     {
       key: PERMISSIONS.ADMIN_MONTHLY_EXPENSE.value,
@@ -930,7 +932,7 @@ const AdminDashboard = () => {
     {
       key: PERMISSIONS.ADMIN_BIOMETRICS_GENDER_DATA.value,
       layout: 2,
-      title: "Housekeeping Gender Data",
+      title: "Biometrics Gender Data",
       chartType: "PieChartMui",
       border: true,
       data: [],

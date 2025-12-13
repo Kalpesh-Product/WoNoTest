@@ -10,6 +10,7 @@ export default function ProtectedDepartmentRoute({ element }) {
 
   // Example: user.department = "HR"
   // URL = /department-tasks/IT → blocked
+  console.log("protection 🛡️");
   const userDepartments = user?.departments || [];
 
   if (isTop) {

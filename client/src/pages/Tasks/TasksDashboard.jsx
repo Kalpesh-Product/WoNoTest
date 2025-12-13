@@ -613,6 +613,7 @@ const TasksDashboard = () => {
       dataType: "all", // you can use this to switch logic when mapping
       description: "Dept. Tasks",
       route: "/app/tasks/department-tasks",
+      permission: PERMISSIONS.TASKS_TOTAL_DEPARTMENT_TASKS.value,
     },
     {
       key: "TASKS_PENDING_TASKS",
@@ -620,6 +621,7 @@ const TasksDashboard = () => {
       dataType: "pending",
       description: "Dept. Pending Tasks",
       route: "/app/tasks/department-tasks",
+      permission: PERMISSIONS.TASKS_TOTAL_DEPARTMENT_PENDING_TASKS.value,
     },
     {
       key: "TASKS_COMPLETED_TASKS",
@@ -627,6 +629,7 @@ const TasksDashboard = () => {
       dataType: "completed",
       description: "Dept. Completed Tasks",
       route: "/app/tasks/department-tasks",
+      permission: PERMISSIONS.TASKS_TOTAL_DEPARTMENT_COMPLETED_TASKS.value,
     },
   ];
 

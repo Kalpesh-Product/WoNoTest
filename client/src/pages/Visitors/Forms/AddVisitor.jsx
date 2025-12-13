@@ -118,12 +118,14 @@ const AddVisitor = () => {
   const { mutate: addVisitor, isPending: isMutateVisitor } = useMutation({
     mutationKey: ["addVisitor"],
     mutationFn: async (data) => {
-      const isBiznest = data.visitorCompany === "6799f0cd6a01edbe1bc3fcea";
+      const isBiznest = data.toMeetCompany === "6799f0cd6a01edbe1bc3fcea";
+      console.log("viz data", data.toMeet);
+      console.log("isBiznest", isBiznest);
       const response = await axios.post("/api/visitors/add-visitor", {
         ...data,
         department: selectedDepartment === "na" ? null : selectedDepartment,
-        toMeet: isBiznest ? data.toMeet || null : null, // only for BIZNest
-        clientToMeet: !isBiznest ? data.toMeet || null : null, // only for other companies
+        toMeet: isBiznest ? data.toMeet : null, // only for BIZNest
+        clientToMeet: !isBiznest ? data.toMeet : null, // only for other companies
       });
 
       return response.data;

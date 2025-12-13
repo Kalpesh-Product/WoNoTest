@@ -1908,7 +1908,7 @@ export const routes = createBrowserRouter([
                 element: <Access />,
               },
               {
-                path: "access/permissions",
+                path: "access/permissions/",
                 element: <AccessProfile />,
               },
               {
@@ -2181,7 +2181,11 @@ export const routes = createBrowserRouter([
                   },
                   {
                     path: ":department",
-                    element: <DepartmentPerformanceLayout />,
+                    element: (
+                      <ProtectedDepartmentRoute
+                        element={<DepartmentPerformanceLayout />}
+                      />
+                    ),
                     children: [
                       {
                         path: "daily-KRA",

@@ -67,6 +67,8 @@ const Reimbursement = () => {
     },
     mode: "onChange",
   });
+
+  console.log("voucher vouch vouch vouch");
   const { data: departmentBudget = [], isPending: isDepartmentLoading } =
     useQuery({
       queryKey: ["departmentBudget"],
@@ -260,30 +262,44 @@ const Reimbursement = () => {
     },
   });
 
-  const exportToPDF = () => {
+  // const exportToPDF = () => {
+  //   if (!formRef.current) return;
+
+  //   const options = {
+  //     margin: 0.2,
+  //     filename: "Voucher_Form.pdf",
+  //     image: { type: "jpeg", quality: 0.98 },
+  //     html2canvas: { scale: 1, useCORS: true },
+  //     jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+  //   };
+
+  //   // html2pdf().set(options).from(formRef.current).save();
+
+  //   html2pdf()
+  //     .set(options)
+  //     .from(formRef.current)
+  //     .outputPdf("blob")
+  //     .then((pdfBlob) => {
+  //       const file = new File([pdfBlob], "Voucher_Form.pdf", {
+  //         type: "application/pdf",
+  //       });
+
+  //       setValue("voucherFile", file);
+  //     });
+  // };
+
+  const exportToPDF = async () => {
     if (!formRef.current) return;
 
-    const options = {
+    const opt = {
       margin: 0.2,
       filename: "Voucher_Form.pdf",
       image: { type: "jpeg", quality: 0.98 },
-      html2canvas: { scale: 1, useCORS: true },
+      html2canvas: { scale: 2, useCORS: true },
       jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
     };
 
-    // html2pdf().set(options).from(formRef.current).save();
-
-    html2pdf()
-      .set(options)
-      .from(formRef.current)
-      .outputPdf("blob")
-      .then((pdfBlob) => {
-        const file = new File([pdfBlob], "Voucher_Form.pdf", {
-          type: "application/pdf",
-        });
-
-        setValue("voucherFile", file);
-      });
+    await html2pdf().set(opt).from(formRef.current).save();
   };
 
   return (

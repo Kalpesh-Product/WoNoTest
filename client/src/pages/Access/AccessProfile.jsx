@@ -20,18 +20,22 @@ import { PERMISSIONS } from "../../constants/permissions";
 import Abrar from "../../assets/abrar.jpeg";
 import PrimaryButton from "../../components/PrimaryButton";
 import { toast } from "sonner";
+import { setSelectedEmployeeMongoId } from "../../redux/slices/hrSlice";
+import { useSelector } from "react-redux";
 
 const AccessProfile = () => {
   const location = useLocation();
   const axios = useAxiosPrivate();
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
-  const { user } = location.state || {};
+  // const { user } = location.state || {};
   const navigate = useNavigate();
 
   const { register, setValue, handleSubmit, watch } = useForm({
     defaultValues: { permissions: [] },
   });
+
+  const user = useSelector((state) => state.hr.selectedEmployee);
 
   const fetchUserPermissions = async () => {
     if (!user?._id) return null;
