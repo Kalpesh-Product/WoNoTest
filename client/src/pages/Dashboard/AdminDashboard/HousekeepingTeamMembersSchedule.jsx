@@ -573,7 +573,7 @@ const HousekeepingTeamMembersSchedule = () => {
                                   {/* <div className="text-sm text-gray-700">
                                     <strong>Manager:</strong> {range.manager}
                                   </div> */}
-                                  {/* <div className="text-sm text-gray-700">
+                                  <div className="text-sm text-gray-700">
                                     <strong>Status:</strong>{" "}
                                     <span
                                       className={`font-semibold ${
@@ -584,7 +584,7 @@ const HousekeepingTeamMembersSchedule = () => {
                                     >
                                       {range.isActive}
                                     </span>
-                                  </div> */}
+                                  </div>
                                 </div>
                               ))}
                           </div>
