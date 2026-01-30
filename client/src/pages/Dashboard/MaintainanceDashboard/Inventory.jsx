@@ -95,7 +95,7 @@ const Inventory = () => {
     setValue("newPurchasePerUnitPrice", selectedAsset?.newPurchasePerUnitPrice);
     setValue(
       "newPurchaseInventoryValue",
-      selectedAsset?.newPurchaseInventoryValue
+      selectedAsset?.newPurchaseInventoryValue,
     );
     setValue("closingInventoryUnits", selectedAsset?.closingInventoryUnits);
     setValue("category", selectedAsset?.category || selectedAsset?.Category);
@@ -105,7 +105,7 @@ const Inventory = () => {
     queryKey: ["maintainance-inventory"],
     queryFn: async () => {
       const response = await axios.get(
-        `/api/inventory/get-inventories?department=${department._id}`
+        `/api/inventory/get-inventories?department=${department._id}`,
       );
 
       return response.data.map((item) => {
@@ -132,7 +132,7 @@ const Inventory = () => {
           headers: {
             "Content-Type": "application/json",
           },
-        }
+        },
       );
       return response.data;
     },
@@ -155,7 +155,7 @@ const Inventory = () => {
           headers: {
             "Content-Type": "application/json",
           },
-        }
+        },
       );
       return response.data;
     },
@@ -194,7 +194,7 @@ const Inventory = () => {
     formData.append("newPurchasePerUnitPrice", data.newPurchasePerUnitPrice);
     formData.append(
       "newPurchaseInventoryValue",
-      data.newPurchaseInventoryValue
+      data.newPurchaseInventoryValue,
     );
     formData.append("closingInventoryUnits", data.closingInventoryUnits);
     formData.append("category", data.category);
@@ -351,12 +351,12 @@ const Inventory = () => {
                           </MenuItem>
                         ))
                       : department.name === "Maintenance"
-                      ? maintainanceCategories.map((m) => (
-                          <MenuItem key={m.id} value={m.name}>
-                            {m.name}
-                          </MenuItem>
-                        ))
-                      : []}
+                        ? maintainanceCategories.map((m) => (
+                            <MenuItem key={m.id} value={m.name}>
+                              {m.name}
+                            </MenuItem>
+                          ))
+                        : []}
                   </TextField>
                 )}
               />
@@ -381,7 +381,6 @@ const Inventory = () => {
                   />
                 )}
               />
-
               <Controller
                 name="openingInventoryUnits"
                 control={control}
@@ -398,7 +397,6 @@ const Inventory = () => {
                   />
                 )}
               />
-
               <Controller
                 name="openingPerUnitPrice"
                 control={control}
@@ -415,7 +413,6 @@ const Inventory = () => {
                   />
                 )}
               />
-
               <Controller
                 name="openingInventoryValue"
                 control={control}
@@ -432,7 +429,6 @@ const Inventory = () => {
                   />
                 )}
               />
-
               <Controller
                 name="newPurchaseUnits"
                 control={control}
@@ -449,7 +445,6 @@ const Inventory = () => {
                   />
                 )}
               />
-
               <Controller
                 name="newPurchasePerUnitPrice"
                 control={control}
@@ -466,7 +461,6 @@ const Inventory = () => {
                   />
                 )}
               />
-
               <Controller
                 name="newPurchaseInventoryValue"
                 control={control}
@@ -483,7 +477,7 @@ const Inventory = () => {
                   />
                 )}
               />
-
+              <div>test Allan</div>
               <Controller
                 name="closingInventoryUnits"
                 control={control}
@@ -500,7 +494,6 @@ const Inventory = () => {
                   />
                 )}
               />
-
               <PrimaryButton
                 title="Add Inventory"
                 className="w-full col-span-2"
@@ -620,12 +613,12 @@ const Inventory = () => {
                           </MenuItem>
                         ))
                       : department.name === "Maintenance"
-                      ? maintainanceCategories.map((m) => (
-                          <MenuItem key={m.id} value={m.name}>
-                            {m.name}
-                          </MenuItem>
-                        ))
-                      : []}
+                        ? maintainanceCategories.map((m) => (
+                            <MenuItem key={m.id} value={m.name}>
+                              {m.name}
+                            </MenuItem>
+                          ))
+                        : []}
                   </TextField>
                 )}
               />
