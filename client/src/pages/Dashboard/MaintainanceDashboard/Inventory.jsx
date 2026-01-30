@@ -305,7 +305,7 @@ const Inventory = () => {
         <YearWiseTable
           key={isInventoryLoading ? 0 : inventoryData?.length}
           search={true}
-          tableTitle={"List Off Inventory"}
+          tableTitle={"List Offf Inventory"}
           hideTitle={true}
           buttonTitle={"Add Inventory"}
           data={inventoryData || []}
