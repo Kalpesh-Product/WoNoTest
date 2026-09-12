@@ -26,6 +26,8 @@ import {
   noOnlyWhitespace,
 } from "../utils/validators";
 
+const optionalValidation = (validator) => (value) => !value || validator(value);
+
 const Vendor = () => {
   const { auth } = useAuth();
   const navigate = useNavigate();
@@ -85,6 +87,7 @@ const Vendor = () => {
       queryClient.invalidateQueries({
         queryKey: ["vendors", department._id],
       });
+      navigate("..", { relative: "path" });
     },
     onError: function (data) {
       if (!department) {
@@ -103,18 +106,20 @@ const Vendor = () => {
   const handleReset = () => {
     reset();
   };
+   const validateOptional = (validator) => (value) =>
+    !value || validator(value);
 
   return (
     <div className="flex flex-col gap-8">
       <PageFrame>
-        <div className="h-[65vh] overflow-y-auto">
+        <div className="h-[65vh] overflow-y-auto pr-2 sm:pr-4">
           <div className="flex justify-between items-center">
             <span className="text-title text-primary font-pmedium">
               VENDOR ONBOARDING FORM
             </span>
           </div>
-          <form onSubmit={handleSubmit(onSubmit)} className="">
-            <div className="grid grid-cols-1 sm:grid-cols-1 md:grid-cols-1 gap-4">
+         <form onSubmit={handleSubmit(onSubmit)} className="pt-4 space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-1 md:grid-cols-1 gap-6">  
               <div>
                 {/* Section: Basic Information */}
                 <div className="py-4 border-b-default border-borderGray">
@@ -122,7 +127,7 @@ const Vendor = () => {
                     Basic Information
                   </span>
                 </div>
-                <div className="grid grid-cols sm:grid-cols-1 md:grid-cols-4 gap-4 p-4">
+                 <div className="grid grid-cols sm:grid-cols-1 md:grid-cols-4 gap-4 py-4">
                   <Controller
                     name="name"
                     control={control}
@@ -209,7 +214,7 @@ const Vendor = () => {
                       />
                     )}
                   />
-                  <Controller
+                  {/* <Controller
                     name="country"
                     control={control}
                     defaultValue=""
@@ -264,7 +269,68 @@ const Vendor = () => {
                         ))}
                       </Select>
                     )}
-                  />
+                  /> */}
+                  <Controller
+                  name="country"
+                  control={control}
+                  defaultValue=""
+                  rules={{ required: "Country is required" }}
+                  render={({ field, fieldState: { error } }) => (
+                    <Select
+                      {...field}
+                      fullWidth
+                      displayEmpty
+                      onChange={(e) => {
+                        const selectedCountryName = e.target.value;
+                        const matchedCountry = countries.find(
+                          (country) => country.name === selectedCountryName
+                        );
+                        field.onChange(selectedCountryName);
+                        handleCountryChange(matchedCountry?.isoCode || "");
+                      }}
+                      size="small"
+                      error={!!error}>
+                      <MenuItem value="">Select Country</MenuItem>
+                      {countries.map((country) => (
+                        <MenuItem
+                          key={country.isoCode}
+                          value={country.name}>
+                          {country.name}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  )}
+                />
+                <Controller
+                  name="state"
+                  control={control}
+                  defaultValue=""
+                  rules={{ required: "State is required" }}
+                  render={({ field, fieldState: { error } }) => (
+                    <Select
+                      {...field}
+                      fullWidth
+                      displayEmpty
+                      onChange={(e) => {
+                        const selectedStateName = e.target.value;
+                        const matchedState = states.find(
+                          (state) => state.name === selectedStateName
+                        );
+                        field.onChange(selectedStateName);
+                        handleStateChange(matchedState?.isoCode || "");
+                      }}
+                      size="small"
+                      disabled={!selectedCountry}
+                      error={!!error}>
+                      <MenuItem value="">Select State</MenuItem>
+                      {states.map((state) => (
+                        <MenuItem key={state.isoCode} value={state.name}>
+                          {state.name}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  )}
+                />
                   <Controller
                     name="city"
                     control={control}
@@ -297,10 +363,14 @@ const Vendor = () => {
                     name="pinCode"
                     control={control}
                     defaultValue=""
-                    rules={{
-                      required: "Pin Code is required",
+                    // rules={{
+                    //   required: "Pin Code is required",
+                    //   validate: {
+                    //     noOnlyWhitespace,
+                    //   },
+                   rules={{ 
                       validate: {
-                        noOnlyWhitespace,
+                        noOnlyWhitespace: validateOptional(noOnlyWhitespace),
                       },
                       pattern: {
                         value: /^[1-9][0-9]{5}$/,
@@ -327,7 +397,7 @@ const Vendor = () => {
                     Other Information
                   </span>
                 </div>
-                <div className="grid grid-cols sm:grid-cols-1 md:grid-cols-2 gap-4 p-4">
+               <div className="grid grid-cols sm:grid-cols-1 md:grid-cols-2 gap-4 py-4">
                   {/* <Controller
                   name="assesseeOfOtherTerritory"
                   control={control}
@@ -441,10 +511,16 @@ const Vendor = () => {
                     name="gstIn"
                     control={control}
                     defaultValue=""
-                    rules={{
+                    // rules={{
+                    //   validate: {
+                    //     noOnlyWhitespace,
+                    //     isValidGSTIN,
+                    //   },
+                    // }}
+                     rules={{
                       validate: {
-                        noOnlyWhitespace,
-                        isValidGSTIN,
+                        noOnlyWhitespace: validateOptional(noOnlyWhitespace),
+                        isValidGSTIN: validateOptional(isValidGSTIN),
                       },
                     }}
                     render={({ field, fieldState: { error } }) => (
@@ -462,9 +538,13 @@ const Vendor = () => {
                     name="panIdNo"
                     control={control}
                     defaultValue=""
-                    rules={{
+                    // rules={{
+                    //   validate: {
+                    //     noOnlyWhitespace,
+                    //   },
+                     rules={{
                       validate: {
-                        noOnlyWhitespace,
+                        noOnlyWhitespace: validateOptional(noOnlyWhitespace),
                       },
                       pattern: {
                         value: /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/,
@@ -489,18 +569,24 @@ const Vendor = () => {
                     Bank Information
                   </span>
                 </div>
-                <div className="grid grid-cols sm:grid-cols-1 md:grid-cols-3 gap-4 p-4">
+                 <div className="grid grid-cols sm:grid-cols-1 md:grid-cols-3 gap-4 py-4">
                   <Controller
                     name="ifscCode"
                     control={control}
                     defaultValue=""
-                    rules={{
-                      required: "IFSC Code is required",
+                    // rules={{
+                    //   required: "IFSC Code is required",
+                    //   validate: {
+                    //     noOnlyWhitespace,
+                    //     isValidIFSC,
+                    //   },
+                    // }}
+                     rules={{
                       validate: {
-                        noOnlyWhitespace,
-                        isValidIFSC,
+                        noOnlyWhitespace: validateOptional(noOnlyWhitespace),
+                        isValidIFSC: validateOptional(isValidIFSC),
                       },
-                    }}
+                    }} 
                     render={({ field, fieldState: { error } }) => (
                       <TextField
                         {...field}
@@ -516,11 +602,17 @@ const Vendor = () => {
                     name="bankName"
                     control={control}
                     defaultValue=""
+                    // rules={{
+                    //   required: "Bank Name is required",
+                    //   validate: {
+                    //     noOnlyWhitespace,
+                    //     isAlphanumeric,
+                    //   },
+                    // }}
                     rules={{
-                      required: "Bank Name is required",
                       validate: {
-                        noOnlyWhitespace,
-                        isAlphanumeric,
+                        noOnlyWhitespace: validateOptional(noOnlyWhitespace),
+                        isAlphanumeric: validateOptional(isAlphanumeric),
                       },
                     }}
                     render={({ field, fieldState: { error } }) => (
@@ -538,11 +630,17 @@ const Vendor = () => {
                     name="branchName"
                     control={control}
                     defaultValue=""
+                    // rules={{
+                    //   required: "Branch Name is required",
+                    //   validate: {
+                    //     noOnlyWhitespace,
+                    //     isAlphanumeric,
+                    //   },
+                    // }}
                     rules={{
-                      required: "Branch Name is required",
                       validate: {
-                        noOnlyWhitespace,
-                        isAlphanumeric,
+                        noOnlyWhitespace: validateOptional(noOnlyWhitespace),
+                        isAlphanumeric: validateOptional(isAlphanumeric),
                       },
                     }}
                     render={({ field, fieldState: { error } }) => (
@@ -561,11 +659,17 @@ const Vendor = () => {
                     name="nameOnAccount"
                     control={control}
                     defaultValue=""
-                    rules={{
-                      required: "Name On Account is required",
+                    // rules={{
+                    //   required: "Name On Account is required",
+                    //   validate: {
+                    //     noOnlyWhitespace,
+                    //     isAlphanumeric,
+                    //   },
+                    // }}
+                     rules={{
                       validate: {
-                        noOnlyWhitespace,
-                        isAlphanumeric,
+                        noOnlyWhitespace: validateOptional(noOnlyWhitespace),
+                        isAlphanumeric: validateOptional(isAlphanumeric),
                       },
                     }}
                     render={({ field, fieldState: { error } }) => (
@@ -583,11 +687,18 @@ const Vendor = () => {
                     name="accountNumber"
                     control={control}
                     defaultValue=""
-                    rules={{
-                      required: "Account Number is required",
+                    // rules={{
+                    //   required: "Account Number is required",
+                    //   validate: {
+                    //     noOnlyWhitespace,
+                    //     isValidBankAccount,
+                    //   },
+                    // }}
+                     rules={{
                       validate: {
-                        noOnlyWhitespace,
-                        isValidBankAccount,
+                        noOnlyWhitespace: validateOptional(noOnlyWhitespace),
+                        isValidBankAccount:
+                          validateOptional(isValidBankAccount),
                       },
                     }}
                     render={({ field, fieldState: { error } }) => (

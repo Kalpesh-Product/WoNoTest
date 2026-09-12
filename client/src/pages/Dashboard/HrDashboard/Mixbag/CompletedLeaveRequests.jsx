@@ -29,7 +29,7 @@ export default function CompletedLeaveRequests() {
       headerName: "Added By",
       field: "addedBy",
       valueGetter: (params) =>
-        params.data?.addedBy ? `${params.data?.addedBy?.firstName || ""} ${
+        params.data?.addedBy ?`${params.data?.addedBy?.firstName || ""} ${
           params.data?.addedBy?.lastName || ""
         }` : "—",
     },
@@ -96,7 +96,9 @@ export default function CompletedLeaveRequests() {
           data={leavesData}
           columns={leaveColumns}
           dateColumn="fromDate"
+          taskExportDateTimeFormatting
           tableTitle="Completed Leave Requests"
+          exportData
         />
       </PageFrame>
     </div>

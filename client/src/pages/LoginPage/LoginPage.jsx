@@ -17,7 +17,8 @@ import { Visibility, VisibilityOff } from "@mui/icons-material";
 import { Drawer, List, ListItem, ListItemText } from "@mui/material";
 import MenuIcon from "@mui/icons-material/Menu";
 import { IoCloseSharp } from "react-icons/io5";
-import logo from "../../assets/WONO_LOGO_Black_TP.png";
+// import logo from "../../assets/WONO_LOGO_Black_TP.png";
+import logo from "../../assets/biznestlogo.png";
 
 const LoginPage = () => {
   const { auth, setAuth } = useAuth();
@@ -86,6 +87,12 @@ const LoginPage = () => {
           codeName: "Cafe",
           route: "/app/dashboard",
         },
+          {
+          id: 10,
+          title: "Legal Dashboard",
+          codeName: "Legal",
+          route: "/app/dashboard/legal-dashboard",
+        },
       ],
     },
   ];
@@ -93,7 +100,7 @@ const LoginPage = () => {
 
   const filteredModules = defaultModules.map((module) => {
     const filteredSubmenus = module.submenus?.filter((submenu) =>
-      userDepartments?.includes(submenu.codeName)
+      userDepartments?.includes(submenu.codeName),
     );
 
     return {
@@ -103,7 +110,7 @@ const LoginPage = () => {
   });
 
   const hasAnySubmenus = filteredModules.some(
-    (module) => module.submenus.length > 0
+    (module) => module.submenus.length > 0,
   );
 
   // If there are matches, use first matched route. Else fallback to Finance Dashboard
@@ -130,7 +137,7 @@ const LoginPage = () => {
         { email, password },
         {
           withCredentials: true,
-        }
+        },
       );
       setAuth((prevState) => {
         return {
@@ -161,8 +168,8 @@ const LoginPage = () => {
         <div className="min-w-[75%] max-w-[80rem] lg:max-w-[80rem] mx-0 md:mx-auto px-6 sm:px-6 lg:px-0 ">
           <div className=" flex justify-between items-center py-3 ">
             {/* Logo */}
-            <a href="https://wono.co">
-              <img src={logo} alt="wono" className="w-36 h-10" />
+            <a href="https://biznest.co.in/index.html">
+              <img src={logo} alt="wono" className="w-40 h-18" />
             </a>
 
             {/* Desktop Nav */}
@@ -189,7 +196,7 @@ const LoginPage = () => {
         </div> */}
 
             {/* Mobile Menu Button */}
-            <div className="">
+            {/* <div className="">
               <div className="p-4 px-0 whitespace-nowrap">
                 <button
                   onClick={() =>
@@ -201,7 +208,7 @@ const LoginPage = () => {
                   <span className="absolute left-0 w-0 bottom-0 block h-[2px] bg-blue-500 transition-all duration-300 group-hover:w-full"></span>
                 </button>
               </div>
-            </div>
+            </div> */}
             {/* <div className="md:hidden">
           <div onClick={() => setDrawerOpen(true)} className="text-white">
             <MenuIcon />
@@ -264,16 +271,18 @@ const LoginPage = () => {
             <div>
               <a
                 href="https://wono.co/register"
-                className="block px-10 py-2 uppercase bg-[#0aa9ef] text-white mx-auto w-max rounded-full"
+                className="block px-10 py-10 uppercase bg-[#0aa9ef] text-white mx-auto w-max rounded-full"
               >
                 Sign Up
               </a>
             </div>
+            
           </div>
         </div>
       </Drawer>
       {/* Header */}
-      <div className="login-section loginTopPadding loginBottomPadding poppinsRegular heightPadding">
+      {/* <div className="login-section loginTopPadding loginBottomPadding poppinsRegular heightPadding"> */}
+      <div className="login-section loginTopPadding loginBottomPadding login-page-content-gap poppinsRegular heightPadding">
         <h1 className="text-center text-4xl font-bold">SIGN IN</h1>
         <div className="loginDividingContainer shrink-container">
           <div className="loginLeftContainer">
@@ -332,15 +341,15 @@ const LoginPage = () => {
                 </div>
 
                 <div className="mt-2 col-span-2 text-end">
-                  <Link
+                  {/* <Link
                     to="https://wono.co/forgot-password"
                     className="hover:underline text-black"
                   >
                     Forgot Password?
-                  </Link>
+                  </Link> */}
                 </div>
                 <div className="flex">
-                  <div className="flex flex-col justify-center w-full items-center gap-4 mt-4">
+                  <div className="flex flex-col justify-center w-full items-center gap-4 mt-8">
                     <Grid item xs={12}>
                       <div className="centerInPhone">
                         <button
@@ -356,7 +365,7 @@ const LoginPage = () => {
                         </button>
                       </div>
                     </Grid>
-                    <p className="text-[0.9rem]">
+                    {/* <p className="text-[0.9rem]">
                       Don't have an account?{" "}
                       <span
                         onClick={() =>
@@ -366,7 +375,7 @@ const LoginPage = () => {
                       >
                         Sign Up
                       </span>
-                    </p>
+                    </p> */}
                   </div>
                 </div>
               </Box>

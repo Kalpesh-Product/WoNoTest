@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useForm, Controller } from "react-hook-form";
 import {
   CircularProgress,
@@ -63,10 +63,10 @@ const AssetsSubCategories = () => {
   const { mutate: createSubCategory, isPending: pendingCreate } = useMutation({
     mutationFn: async (data) => {
       console.log("data", data);
-      const response = await axios.post(
-        "/api/assets/create-asset-subcategory",
-        { ...data, assetSubCategoryName: data.subCategoryName }
-      );
+      const response = await axios.post("/api/assets/create-subcategory", {
+        ...data,
+        assetSubCategoryName: data.subCategoryName,
+      });
       return response.data;
     },
     onSuccess: function (data) {
@@ -82,29 +82,31 @@ const AssetsSubCategories = () => {
 
   const { data: assetSubCategories = [], isPending: isSubCategoriesPending } =
     useQuery({
-      queryKey: ["assetSubCategories"],
+      queryKey: ["assetSubCategories", departmentId],
       queryFn: async () => {
         try {
           const response = await axios.get(
-            `/api/assets/get-subcategory?departmentId=${departmentId}`
+            `/api/assets/get-subcategory?departmentId=${departmentId}`,
           );
-          return response.data;
+          return Array.isArray(response.data) ? response.data : [];
         } catch (error) {
-          console.error(error.message);
+          console.error(error.response?.data?.message || error.message);
+          return [];
         }
       },
     });
 
-  const { data: assetCategories, isPending: isCategoriesPending } = useQuery({
-    queryKey: ["assetCategories"],
+  const { data: assetCategories = [], isPending: isCategoriesPending } = useQuery({
+   queryKey: ["assetCategories", departmentId],
     queryFn: async () => {
       try {
         const response = await axios.get(
-          `/api/assets/get-category?departmentId=${departmentId}`
+          `/api/category/get-category?departmentId=${departmentId}`,
         );
-        return response.data;
+        return Array.isArray(response.data) ? response.data : [];
       } catch (error) {
-        console.error(error.message);
+        console.error(error.response?.data?.message || error.message);
+        return [];
       }
     },
   });
@@ -112,8 +114,8 @@ const AssetsSubCategories = () => {
   const { mutate: editSubCategory, isPending: pendingEdit } = useMutation({
     mutationFn: async (data) => {
       const response = await axios.patch(
-        "/api/assets/update-asset-subcategory",
-        data
+        "/api/assets/update-subcategory",
+        data,
       );
       return response.data;
       // console.log("edit form : ", data);
@@ -153,16 +155,20 @@ const AssetsSubCategories = () => {
   useEffect(() => {
     setValue("subCategoryName", selectedAsset?.subCategoryName);
     setValue("status", selectedAsset?.isActive);
-  }, [selectedAsset]);
+  }, [selectedAsset, setValue]);
   //--------------------Event handlers------------------------------//
   //--------------------Table Data------------------------------//
   const categoriesColumn = [
-    { field: "srNo", headerName: "Sr No" },
-
+    { field: "srNo", headerName: "Sr No" ,width:200},
+    { field: "categoryName", headerName: "Category",flex:1 },
+    //   {
+    //   field: "subCategoriesCount",
+    //   headerName: "Sub Categories Count",
+    // },
     {
       field: "subCategoryName",
       headerName: "Sub Category Name",
-      flex: 3,
+      flex: 1,
       cellRenderer: (params) => (
         <span
           role="button"
@@ -177,16 +183,22 @@ const AssetsSubCategories = () => {
         </span>
       ),
     },
-    { field: "categoryName", headerName: "Category" },
+      {
+      field: "assetQuantity",
+      headerName: "No. of Assets",
+      flex:1 
+    },
     {
       field: "status",
       headerName: "Status",
+      flex:1 ,
+      sort: "desc",
       cellRenderer: (params) => <StatusChip status={params.value} />,
     },
     {
       field: "action",
       headerName: "Action",
-      flex: 1,
+      flex: 0.7 ,
       cellRenderer: (params) => {
         return (
           <ThreeDotMenu
@@ -206,18 +218,19 @@ const AssetsSubCategories = () => {
       },
     },
   ];
-  const tableData = isSubCategoriesPending
+  const tableData = isSubCategoriesPending || !Array.isArray(assetSubCategories)
     ? []
     : assetSubCategories.map((item, index) => {
-        const status = item.isActive ? "Active" : "Inactive";
-        return {
-          ...item,
-          _id: item._id,
-          srNo: index + 1,
-          status: status,
-          categoryName: item?.category?.categoryName,
-        };
-      });
+      const status = item.isActive ? "Active" : "Inactive";
+      return {
+        ...item,
+        _id: item._id,
+        srNo: index + 1,
+        status: status,
+        categoryName: item?.category?.categoryName || "N/A",
+         assetQuantity: item?.assetQuantity || 0,
+      };
+    });
   //--------------------Table Data------------------------------//
 
   return (
@@ -234,7 +247,7 @@ const AssetsSubCategories = () => {
         data={tableData}
         columns={categoriesColumn}
         tableHeight={350}
-        // getRowStyle={getRowStyle}
+      // getRowStyle={getRowStyle}
       />
 
       <MuiModal
@@ -244,8 +257,8 @@ const AssetsSubCategories = () => {
           modalMode === "add"
             ? "Add Sub Category"
             : modalMode === "view"
-            ? "View Sub Category"
-            : "Edit Sub Category"
+              ? "View Sub Category"
+              : "Edit Sub Category"
         }
       >
         {modalMode === "add" && (
@@ -254,23 +267,6 @@ const AssetsSubCategories = () => {
             className="grid grid-cols-1 gap-4 w-full"
           >
             {/* Category Name Input */}
-            <Controller
-              name="subCategoryName"
-              control={control}
-              defaultValue=""
-              rules={{ required: "Sub Category Name is required" }}
-              render={({ field }) => (
-                <TextField
-                  {...field}
-                  label="Sub-Category Name"
-                  fullWidth
-                  size="small"
-                  variant="outlined"
-                  error={!!errors.subCategoryName}
-                  helperText={errors.subCategoryName?.message}
-                />
-              )}
-            />
             <Controller
               name="assetCategoryId"
               control={control}
@@ -296,6 +292,24 @@ const AssetsSubCategories = () => {
                     ))
                   )}
                 </TextField>
+              )}
+            />
+
+            <Controller
+              name="subCategoryName"
+              control={control}
+              defaultValue=""
+              rules={{ required: "Sub Category Name is required" }}
+              render={({ field }) => (
+                <TextField
+                  {...field}
+                  label="Sub-Category Name"
+                  fullWidth
+                  size="small"
+                  variant="outlined"
+                  error={!!errors.subCategoryName}
+                  helperText={errors.subCategoryName?.message}
+                />
               )}
             />
 
@@ -367,12 +381,20 @@ const AssetsSubCategories = () => {
         {modalMode === "view" && (
           <div className="grid grid-cols-1 gap-4">
             <DetalisFormatted
+              title={"Category"}
+              detail={selectedAsset?.categoryName || "N/A"}
+            />
+            <DetalisFormatted
               title={"Sub Category"}
               detail={selectedAsset?.subCategoryName || "N/A"}
             />
-            <DetalisFormatted
-              title={"Category"}
-              detail={selectedAsset?.categoryName || "N/A"}
+            {/* <DetalisFormatted
+              title={"Sub Categories Count"}
+              detail={selectedAsset?.subCategoriesCount ?? 0}
+            /> */}
+             <DetalisFormatted
+              title={"No. of Assets"}
+              detail={selectedAsset?.assetQuantity ?? 0}
             />
           </div>
         )}

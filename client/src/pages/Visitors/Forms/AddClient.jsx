@@ -1,6 +1,16 @@
 import { useEffect, useState } from "react";
 import { useForm, Controller } from "react-hook-form";
-import { TextField, Select, MenuItem, CircularProgress } from "@mui/material";
+import {
+  Autocomplete,
+  TextField,
+  Select,
+  MenuItem,
+  CircularProgress,
+  Alert,
+  Button,
+  FormControl,
+  InputLabel,
+} from "@mui/material";
 import PrimaryButton from "../../../components/PrimaryButton";
 import SecondaryButton from "../../../components/SecondaryButton";
 import { State, City } from "country-state-city";
@@ -19,6 +29,7 @@ import {
 } from "../../../utils/validators";
 import dayjs from "dayjs";
 import UploadFileInput from "../../../components/UploadFileInput";
+import useAuth from "../../../hooks/useAuth";
 
 const AddClient = () => {
   const {
@@ -38,10 +49,14 @@ const AddClient = () => {
       address: "",
       phoneNumber: "",
       purposeOfVisit: "",
+      location: "",
+      unit: "",
       idProof: { idType: "", idNumber: "" },
       dateOfVisit: null,
       checkIn: null,
+      checkInBy: "",
       checkOut: null,
+      checkOutBy: "",
       toMeet: "",
       department: "",
       clientToMeet: "",
@@ -49,8 +64,8 @@ const AddClient = () => {
       registeredClientCompany: "",
       brandName: "",
       sector: "",
-      hoState: "",
-      hoCity: "",
+      state: "",
+      city: "",
       visitorType: "",
       visitorCompany: "",
       paymentAmount: "",
@@ -63,11 +78,18 @@ const AddClient = () => {
     },
   });
 
+  const { auth } = useAuth();
+
   const selectedCompany = watch("clientCompany");
+  const firstName = watch("firstName");
+  const lastName = watch("lastName");
+  const phoneNumber = watch("phoneNumber");
   const selectedIdType = watch("idProof.idType");
   const visitorType = watch("visitorType");
+  const watchLocation = watch("location");
 
   const [selectedDepartment, setSelectedDepartment] = useState("");
+  const [debouncedVisitorPhone, setDebouncedVisitorPhone] = useState("");
   const axios = useAxiosPrivate();
   const navigate = useNavigate();
   const [states, setStates] = useState([]);
@@ -77,10 +99,69 @@ const AddClient = () => {
   }, []);
   useEffect(() => {
     setValue("checkIn", dayjs(new Date()));
-  }, []);
+  }, [setValue]);
+
+  useEffect(() => {
+    setDebouncedVisitorPhone("");
+
+    const hasValidIdentity =
+      firstName?.trim() &&
+      lastName?.trim() &&
+      isValidPhoneNumber(String(phoneNumber || "")) === true;
+
+    if (!hasValidIdentity) return undefined;
+
+    const timeoutId = setTimeout(
+      () => setDebouncedVisitorPhone(String(phoneNumber).trim()),
+      400,
+    );
+
+    return () => clearTimeout(timeoutId);
+  }, [firstName, lastName, phoneNumber]);
+
+  const {
+    data: visitorCheck,
+    isFetching: isCheckingVisitor,
+    isError: isVisitorCheckError,
+  } = useQuery({
+    queryKey: ["visitor-exists", debouncedVisitorPhone],
+    queryFn: async () => {
+      const response = await axios.get("/api/visitors/check-existing", {
+        params: { phoneNumber: debouncedVisitorPhone },
+      });
+      return response.data;
+    },
+    enabled: Boolean(debouncedVisitorPhone),
+    retry: false,
+  });
+
+  const existingVisitor = visitorCheck?.exists
+    ? visitorCheck.visitor
+    : null;
+  const existingVisitorIsClient =
+    existingVisitor?.visitorFlag === "Client" ||
+    existingVisitor?.visitorRoles?.includes("Client");
+  const existingVisitorRoute = existingVisitorIsClient
+    ? "/app/visitors/mix-bag/repeat-day-pass/repeat-external-companies"
+    : "/app/visitors/mix-bag/visitors-to-client/convert-internal-visitors";
 
   const handleStateSelect = (stateCode) => {
     const city = City.getCitiesOfState("IN", stateCode);
+
+    if (
+      stateCode === "GA" &&
+      !city.some((item) => item.name?.toLowerCase() === "anjuna")
+    ) {
+      city.push({
+        name: "Anjuna",
+        countryCode: "IN",
+        stateCode: "GA",
+      });
+      city.sort((firstCity, secondCity) =>
+        (firstCity.name || "").localeCompare(secondCity.name || ""),
+      );
+    }
+
     setCities(city);
   };
   const { data: employees = [], isLoading } = useQuery({
@@ -95,35 +176,71 @@ const AddClient = () => {
     },
   });
 
+  const { data: unitsData = [], isPending: isUnitsPending } = useQuery({
+    queryKey: ["unitsData"],
+    queryFn: async () => {
+      try {
+        const response = await axios.get("/api/company/fetch-units");
+        return response.data;
+      } catch (error) {
+        console.error("Error fetching units data:", error);
+        return [];
+      }
+    },
+  });
+
+  const { data: existingClientCompanies = [], isLoading: isCompaniesLoading } =
+    useQuery({
+      queryKey: ["visitor-client-companies"],
+      queryFn: async () => {
+        const response = await axios.get("/api/visitors/fetch-visitors", {
+          params: {
+            visitorFlag: "Client",
+            searchContext: "external-meeting-booking",
+          },
+        });
+        return Array.isArray(response.data) ? response.data : [];
+      },
+    });
+
+  const uniqueCompanyNames = (fieldName) =>
+    Array.from(
+      new Set(
+        existingClientCompanies
+          .map((client) => String(client?.[fieldName] || "").trim())
+          .filter(Boolean),
+      ),
+    ).sort((first, second) => first.localeCompare(second));
+
+  const brandNameOptions = uniqueCompanyNames("brandName");
+  const registeredCompanyOptions = uniqueCompanyNames(
+    "registeredClientCompany",
+  );
+
   //---------------------------------------Data processing----------------------------------------------------//
+  const getEmployeeDepartments = (employee) =>
+    Array.isArray(employee?.departments) ? employee.departments : [];
+
   const departmentMap = new Map();
   employees.forEach((employee) => {
-    employee.departments?.forEach((department) => {
+    getEmployeeDepartments(employee).forEach((department) => {
       departmentMap.set(department._id, department);
     });
   });
   const uniqueDepartments = Array.from(departmentMap.values());
 
   const departmentEmployees = employees.filter((item) =>
-    item.departments?.some((dept) => dept._id === selectedDepartment)
+    getEmployeeDepartments(item).some((dept) => dept._id === selectedDepartment),
   );
   //---------------------------------------Data processing----------------------------------------------------//
   const { mutate: addVisitor, isPending: isMutateVisitor } = useMutation({
     mutationKey: ["addVisitor"],
     mutationFn: async (data) => {
-      const response = await axios.post(
-        "/api/visitors/add-visitor",
-        {
-          ...data,
-          department: selectedDepartment === "na" ? null : selectedDepartment,
-          toMeet: selectedDepartment === "na" ? null : data.toMeet,
+      const response = await axios.post("/api/visitors/add-visitor", data, {
+        headers: {
+          "Content-Type": "multipart/form-data",
         },
-        {
-          headers: {
-            "Content-Type": "multipart/form-data",
-          },
-        }
-      );
+      });
       return response.data;
     },
     onSuccess: (data) => {
@@ -137,19 +254,35 @@ const AddClient = () => {
       ));
     },
     onError: (error) => {
-      toast.error(error.message || "Error Adding Visitor");
+      toast.error(error.response.data.message || "Error Adding Visitor");
     },
   });
   const onSubmit = (data) => {
+    if (existingVisitor) {
+      toast.error(
+        existingVisitorIsClient
+          ? "Client already exists. Continue from Repeat Day Pass in Mix Bag."
+          : "Visitor already exists. Continue from Visitors to Client in Mix Bag.",
+      );
+      return;
+    }
+
     const isBiznest = data.clientCompany === "6799f0cd6a01edbe1bc3fcea";
 
     const payload = {
       ...data,
       visitorFlag: "Client", // Identify this as a client visitor
-      visitorType: "Meeting",
+      building: data.location || null,
+      visitorType:
+        data.purposeOfVisit === "Full-Day Pass" ||
+        data.purposeOfVisit === "Half-Day Pass"
+          ? data.purposeOfVisit
+          : "Meeting",
       sector: data.sector,
-      hoState: data.hoState,
-      hoCity: data.hoCity,
+      state: data.state,
+      city: data.city,
+      idType: data.idProof?.idType || "",
+      idNumber: data.idProof?.idNumber || "",
       department: isBiznest
         ? data.department === "na"
           ? null
@@ -163,19 +296,41 @@ const AddClient = () => {
       checkIn: data.checkIn?.toISOString() || null,
       checkOut: data.checkOut?.toISOString() || null,
       dateOfVisit: data.dateOfVisit?.toISOString() || null,
+      checkInBy: auth?.user
+        ? `${auth.user.firstName || ""} ${auth.user.lastName || ""}`.trim() ||
+          auth.user.name ||
+          auth.user.email ||
+          "Unknown User"
+        : "-",
     };
 
     const formData = new FormData();
     formData.append("panFile", data.panFile);
     formData.append("gstFile", data.gstFile);
     formData.append("otherFile", data.otherFile);
+    formData.append("idProof", JSON.stringify(data.idProof));
+    // formData.append("idType", data.idProof?.idType || "");
+    // formData.append("idNumber", data.idProof?.idNumber || "");
+    const fileFields = new Set(["panFile", "gstFile", "otherFile"]);
+
+    // for (const key in payload) {
+    //   if (fileFields.has(key)) continue;
+    //   if (payload[key] !== undefined && payload[key] !== null) {
+    //     formData.append(key, payload[key]);
+    //   }
+    // }
+
+    const skipFields = new Set(["idProof"]); // 👈 ADD THIS
+
     for (const key in payload) {
+      if (fileFields.has(key) || skipFields.has(key)) continue;
+
       if (payload[key] !== undefined && payload[key] !== null) {
         formData.append(key, payload[key]);
       }
     }
 
-    addVisitor(payload);
+    addVisitor(formData);
   };
 
   const handleReset = () => {
@@ -300,57 +455,177 @@ const AddClient = () => {
                     )}
                   />
                 </div>
-                <Controller
-                  name="email"
-                  control={control}
-                  rules={{
-                    required: "Email is required",
-                    validate: {
-                      isValidEmail,
-                      noOnlyWhitespace,
-                    },
-                  }}
-                  render={({ field }) => (
-                    <TextField
-                      {...field}
-                      size="small"
-                      error={!!errors.email}
-                      helperText={errors.email?.message}
-                      label="Email"
-                      fullWidth
-                    />
-                  )}
-                />
 
-                <Controller
-                  name="purposeOfVisit"
-                  control={control}
-                  rules={{
-                    required: "Purpose is required",
-                    validate: {
-                      noOnlyWhitespace,
-                      isAlphanumeric,
-                    },
-                  }}
-                  render={({ field }) => (
-                    <TextField
-                      {...field}
-                      size="small"
-                      label="Purpose of visit"
-                      error={!!errors.purposeOfVisit}
-                      helperText={errors.purposeOfVisit?.message}
-                      fullWidth
-                      select
-                    >
-                      <MenuItem value="" disabled>
-                        Select a Purpose of Visit
-                      </MenuItem>
-                      <MenuItem value="Meeting Room Booking">
-                        Meeting Room Booking
-                      </MenuItem>
-                    </TextField>
-                  )}
-                />
+                {debouncedVisitorPhone && (
+                  <div>
+                    {isCheckingVisitor ? (
+                      <div className="flex items-center gap-2 text-sm text-gray-600">
+                        <CircularProgress size={16} />
+                        <span>Checking for an existing visitor…</span>
+                      </div>
+                    ) : existingVisitor ? (
+                      <Alert
+                        severity="warning"
+                        action={
+                          <Button
+                            color="inherit"
+                            size="small"
+                            onClick={() => navigate(existingVisitorRoute)}
+                          >
+                            {existingVisitorIsClient
+                              ? "Repeat Client"
+                              : "Convert to Client"}
+                          </Button>
+                        }
+                      >
+                        {[
+                          existingVisitor.firstName,
+                          existingVisitor.lastName,
+                        ]
+                          .filter(Boolean)
+                          .join(" ") || "This visitor"}{" "}
+                        already exists with this phone number.
+                        {existingVisitor.lastVisitedAt && (
+                          <span className="block mt-1">
+                            Last visited: {" "}
+                            {dayjs(existingVisitor.lastVisitedAt).format(
+                              "DD MMM YYYY, hh:mm A",
+                            )}
+                          </span>
+                        )}
+                      </Alert>
+                    ) : isVisitorCheckError ? (
+                      <Alert severity="info">
+                        Visitor availability could not be checked. The phone
+                        number will still be verified on submit.
+                      </Alert>
+                    ) : (
+                      <span className="text-sm text-green-700">
+                        No existing visitor found.
+                      </span>
+                    )}
+                  </div>
+                )}
+                <div className="flex gap-4 items-center">
+                  <Controller
+                    name="email"
+                    control={control}
+                    rules={{
+                      required: "Email is required",
+                      validate: {
+                        isValidEmail,
+                        noOnlyWhitespace,
+                      },
+                    }}
+                    render={({ field }) => (
+                      <TextField
+                        {...field}
+                        size="small"
+                        error={!!errors.email}
+                        helperText={errors.email?.message}
+                        label="Email"
+                        fullWidth
+                      />
+                    )}
+                  />
+
+                  <Controller
+                    name="purposeOfVisit"
+                    control={control}
+                    rules={{
+                      required: "Purpose is required",
+                      validate: {
+                        noOnlyWhitespace,
+                        isAlphanumeric,
+                      },
+                    }}
+                    render={({ field }) => (
+                      <TextField
+                        {...field}
+                        size="small"
+                        label="Purpose of visit"
+                        error={!!errors.purposeOfVisit}
+                        helperText={errors.purposeOfVisit?.message}
+                        fullWidth
+                        select
+                      >
+                        <MenuItem value="" disabled>
+                          Select a Purpose of Visit
+                        </MenuItem>
+                        <MenuItem value="Meeting Room Booking">
+                          Meeting Room Booking
+                        </MenuItem>
+                        <MenuItem value="Full-Day Pass">Full Day Pass</MenuItem>
+                        <MenuItem value="Half-Day Pass">Half Day Pass</MenuItem>
+                      </TextField>
+                    )}
+                  />
+                </div>
+                <div className="flex gap-4">
+                  <div className="flex-1">
+                    <Controller
+                      name="location"
+                      control={control}
+                      rules={{ required: "Location is required" }}
+                      render={({ field }) => (
+                        <FormControl size="small" fullWidth>
+                          <InputLabel>Location</InputLabel>
+                          <Select {...field} label="Work Location">
+                            <MenuItem value="">Select Location</MenuItem>
+                            {auth.user.company.workLocations.length > 0 ? (
+                              auth.user.company.workLocations.map((loc) => (
+                                <MenuItem key={loc._id} value={loc._id}>
+                                  {loc.buildingName}
+                                </MenuItem>
+                              ))
+                            ) : (
+                              <MenuItem disabled>
+                                No Locations Available
+                              </MenuItem>
+                            )}
+                          </Select>
+                        </FormControl>
+                      )}
+                    />
+                  </div>
+
+                  <div className="flex-1">
+                    <Controller
+                      name="unit"
+                      control={control}
+                      rules={{ required: "Unit is required" }}
+                      render={({ field }) => (
+                        <TextField
+                          {...field}
+                          select
+                          size="small"
+                          label="Select Unit"
+                          placeholder="ST 701 A"
+                          fullWidth
+                        >
+                          <MenuItem value="" disabled>
+                            Select Unit
+                          </MenuItem>
+                          {isUnitsPending ? (
+                            <MenuItem disabled>
+                              <CircularProgress size={20} />
+                            </MenuItem>
+                          ) : (
+                            unitsData
+                              .filter(
+                                (item) => item.building?._id === watchLocation,
+                              )
+                              .map((item) => (
+                                <MenuItem key={item._id} value={item._id}>
+                                  {item.unitNo}
+                                </MenuItem>
+                              ))
+                          )}
+                        </TextField>
+                      )}
+                    />
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -393,14 +668,30 @@ const AddClient = () => {
                         isAlphanumeric,
                       },
                     }}
-                    render={({ field }) => (
-                      <TextField
+                    render={({ field: { onChange, value, ...field } }) => (
+                      <Autocomplete
                         {...field}
-                        size="small"
-                        label="Brand Name"
                         fullWidth
-                        error={!!errors.brandName}
-                        helperText={errors.brandName?.message}
+                        freeSolo
+                        autoSelect
+                        selectOnFocus
+                        options={brandNameOptions}
+                        value={value || null}
+                        loading={isCompaniesLoading}
+                        noOptionsText="No options — type to add"
+                        onChange={(_, selectedValue) => {
+                          onChange(selectedValue || "");
+                        }}
+                        renderInput={(params) => (
+                          <TextField
+                            {...params}
+                            size="small"
+                            label="Brand Name"
+                            fullWidth
+                            error={!!errors.brandName}
+                            helperText={errors.brandName?.message}
+                          />
+                        )}
                       />
                     )}
                   />
@@ -409,19 +700,31 @@ const AddClient = () => {
                     control={control}
                     rules={{
                       required: "Registered Client Company is required",
-                      validate: {
-                        noOnlyWhitespace,
-                        isAlphanumeric,
-                      },
                     }}
-                    render={({ field }) => (
-                      <TextField
+                    render={({ field: { onChange, value, ...field } }) => (
+                      <Autocomplete
                         {...field}
-                        size="small"
-                        label="Registered Client Company"
                         fullWidth
-                        error={!!errors.registeredClientCompany}
-                        helperText={errors.registeredClientCompany?.message}
+                        freeSolo
+                        autoSelect
+                        selectOnFocus
+                        options={registeredCompanyOptions}
+                        value={value || null}
+                        loading={isCompaniesLoading}
+                        noOptionsText="No options — type to add"
+                        onChange={(_, selectedValue) => {
+                          onChange(selectedValue || "");
+                        }}
+                        renderInput={(params) => (
+                          <TextField
+                            {...params}
+                            size="small"
+                            label="Registered Client Company"
+                            fullWidth
+                            error={!!errors.registeredClientCompany}
+                            helperText={errors.registeredClientCompany?.message}
+                          />
+                        )}
                       />
                     )}
                   />
@@ -429,7 +732,7 @@ const AddClient = () => {
 
                 <div className="flex gap-4 items-center">
                   <Controller
-                    name="hoState"
+                    name="state"
                     control={control}
                     render={({ field }) => (
                       <TextField
@@ -453,7 +756,7 @@ const AddClient = () => {
                     )}
                   />
                   <Controller
-                    name="hoCity"
+                    name="city"
                     control={control}
                     render={({ field }) => (
                       <TextField
@@ -842,7 +1145,9 @@ const AddClient = () => {
               type="submit"
               title={"Submit"}
               isLoading={isMutateVisitor}
-              disabled={isMutateVisitor}
+              disabled={
+                isMutateVisitor || isCheckingVisitor || Boolean(existingVisitor)
+              }
             />
             <SecondaryButton handleSubmit={handleReset} title={"Reset"} />
           </div>
@@ -851,5 +1156,4 @@ const AddClient = () => {
     </div>
   );
 };
-
 export default AddClient;

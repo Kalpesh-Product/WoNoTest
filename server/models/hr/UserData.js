@@ -7,12 +7,14 @@ const userDataSchema = new mongoose.Schema(
 
       unique: true,
       trim: true,
+      required: true,
     },
     firstName: {
       type: String,
 
       trim: true,
       minlength: 2,
+      required: true,
     },
     middleName: {
       type: String,
@@ -20,21 +22,24 @@ const userDataSchema = new mongoose.Schema(
     },
     lastName: {
       type: String,
-
       trim: true,
       minlength: 2,
+      required: true,
     },
     gender: {
       type: String,
       enum: ["Male", "Female", "Other"],
+      required: true,
     },
     dateOfBirth: {
       type: Date,
+      required: true,
     },
     phone: {
       type: String,
       minlength: 7,
       maxlength: 20,
+      required: true,
     },
     email: {
       type: String,
@@ -43,15 +48,18 @@ const userDataSchema = new mongoose.Schema(
       trim: true,
       lowercase: true,
       match: [/^\S+@\S+\.\S+$/, "Invalid email format"],
+      required: true,
     },
     company: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Company",
+      required: true,
     },
     departments: [
       {
         type: mongoose.Schema.Types.ObjectId,
         ref: "Department",
+        // required: true,
       },
     ],
     password: {
@@ -67,6 +75,7 @@ const userDataSchema = new mongoose.Schema(
       {
         type: mongoose.Schema.Types.ObjectId,
         ref: "Role",
+        // required: true,
       },
     ],
     permissions: {
@@ -83,11 +92,15 @@ const userDataSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    attendanceSource: {
+      type: String,
+      trim: true,
+    },
     employeeType: {
-      name: { type: String, required: true },
+      name: { type: String, trim: true },
       leavesCount: [
         {
-          leaveType: { type: String, required: true },
+          leaveType: { type: String, trim: true },
           count: { type: Number, default: 0, min: 0 },
         },
       ],
@@ -95,6 +108,11 @@ const userDataSchema = new mongoose.Schema(
     designation: {
       type: String,
 
+      trim: true,
+      // required: true,
+    },
+    jobDescription: {
+      type: String,
       trim: true,
     },
     clockInDetails: {
@@ -123,13 +141,14 @@ const userDataSchema = new mongoose.Schema(
     },
     startDate: {
       type: Date,
+      // required: true,
     },
     endDate: {
       type: Date,
     },
     workLocation: {
       type: String,
-
+      // required: true,
       trim: true,
       // type: mongoose.Schema.Types.ObjectId,
       // ref: "Unit",
@@ -137,45 +156,98 @@ const userDataSchema = new mongoose.Schema(
     reportsTo: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Role",
+      // required: true,
     },
     refreshToken: { type: String },
-    dateOfExit: { type: Date },
-    shift: { type: String, required: true },
-    // policies: {
-    //   // shift: { type: String, required: true },
-    //   workSchedulePolicy: { type: String, required: true },
-    //   attendanceSource: { type: String },
-    //   leavePolicy: { type: String },
-    //   holidayPolicy: { type: String },
+    dateOfExit: { type: Date, default: null },
+    shift: { type: String },
+
+    // homeAddress: {
+    //   addressLine1: { type: String, required: true },
+    //   addressLine2: { type: String },
+    //   city: { type: String, required: true },
+    //   country: { type: String, required: true },
+    //   state: { type: String, required: true },
+    //   pinCode: { type: String, required: true },
+    //   notes: { type: String },
     // },
+    // bankInformation: {
+    //   bankIFSC: { type: String, required: true },
+    //   bankName: { type: String, required: true },
+    //   branchName: { type: String, required: true },
+    //   nameOnAccount: { type: String, required: true },
+    //   accountNumber: {
+    //     type: String,
+    //     required: true,
+    //   },
+    // },
+    // panAadhaarDetails: {
+    //   aadhaarId: {
+    //     type: String,
+    //     required: true,
+    //   },
+    //   pan: {
+    //     type: String,
+    //     required: true,
+    //   },
+    //   pfAccountNumber: { type: String, required: true },
+    //   pfUAN: { type: String, required: true },
+    //   esiAccountNumber: { type: String, required: true },
+    // },
+    // payrollInformation: {
+    //   includeInPayroll: { type: Boolean, required: true },
+    //   payrollBatch: { type: String, required: true },
+    //   professionTaxExemption: { type: Boolean, required: true },
+    //   includePF: { type: Boolean, required: true },
+    //   pfContributionRate: { type: String, required: true },
+    //   employeePF: { type: String, required: true },
+    //   employerPf: { type: String, required: true },
+    //   includeEsi: { type: Boolean, required: true },
+    //   esiContribution: { type: String, required: true },
+    //   hraType: { type: String, required: true },
+    //   tdsCalculationBasedOn: { type: String, required: true },
+    //   incomeTaxRegime: { type: String, required: true },
+    // },
+    // familyInformation: {
+    //   fatherName: { type: String, required: true },
+    //   motherName: { type: String, required: true },
+    //   maritalStatus: {
+    //     type: String,
+    //     required: true,
+    //   },
+    //   emergencyPhone: {
+    //     type: String,
+    //     minlength: 7,
+    //     maxlength: 20,
+    //   },
+    // },
+
     homeAddress: {
       addressLine1: { type: String },
       addressLine2: { type: String },
       city: { type: String },
+      country: { type: String },
       state: { type: String },
       pinCode: { type: String },
       notes: { type: String },
     },
+
     bankInformation: {
       bankIFSC: { type: String },
       bankName: { type: String },
       branchName: { type: String },
       nameOnAccount: { type: String },
-      accountNumber: {
-        type: String,
-      },
+      accountNumber: { type: String },
     },
+
     panAadhaarDetails: {
-      aadhaarId: {
-        type: String,
-      },
-      pan: {
-        type: String,
-      },
+      aadhaarId: { type: String },
+      pan: { type: String },
       pfAccountNumber: { type: String },
       pfUAN: { type: String },
       esiAccountNumber: { type: String },
     },
+
     payrollInformation: {
       includeInPayroll: { type: Boolean },
       payrollBatch: { type: String },
@@ -183,12 +255,69 @@ const userDataSchema = new mongoose.Schema(
       includePF: { type: Boolean },
       pfContributionRate: { type: String },
       employeePF: { type: String },
+      employerPf: { type: String },
+      includeEsi: { type: Boolean },
+      esiContribution: { type: String },
+      hraType: { type: String },
+      hraPercentage: { type: String },
+      tdsCalculationBasedOn: { type: String },
+      taxPercentage: { type: String },
+      incomeTaxRegime: { type: String },
     },
+
+    salaryPackage: {
+      amount: { type: Number, min: 0, default: 0 },
+      grossAnnual: { type: Number, min: 0, default: 0 },
+      currency: { type: String, default: "INR" },
+      payFrequency: {
+        type: String,
+        enum: ["monthly", "weekly", "biweekly", "annual"],
+        default: "annual",
+      },
+      allowances: { type: Number, min: 0, default: 0 },
+      deductions: { type: Number, min: 0, default: 0 },
+    },
+    payrollCompensation: {
+      grossPay: { type: Number, min: 0, default: 0 },
+      basicPay: { type: Number, min: 0, default: 0 },
+      variablePay: { type: Number, min: 0, default: 0 },
+      gratuity: { type: Number, min: 0, default: 0 },
+      appraisalDate: { type: Date, default: null },
+      effectivePayPeriod: { type: String, default: "" },
+      paymentMethod: {
+        type: String,
+        enum: ["", "Cash Only", "Bank Deposit"],
+        default: "",
+      },
+      allowances: [
+        {
+          _id: false,
+          label: { type: String, required: true },
+          amount: { type: Number, min: 0, default: 0 },
+        },
+      ],
+      deductions: [
+        {
+          _id: false,
+          label: { type: String, required: true },
+          amount: { type: Number, min: 0, default: 0 },
+        },
+      ],
+      totalAllowances: { type: Number, min: 0, default: 0 },
+      totalDeductions: { type: Number, min: 0, default: 0 },
+      netPay: { type: Number, min: 0, default: 0 },
+      updatedAt: { type: Date, default: null },
+    },
+    internshipIsUnpaid: { type: Boolean, default: false },
+
     familyInformation: {
       fatherName: { type: String },
       motherName: { type: String },
-      maritalStatus: {
+      maritalStatus: { type: String },
+      emergencyPhone: {
         type: String,
+        // minlength: 7,
+        // maxlength: 20,
       },
     },
     isActive: {
@@ -202,8 +331,18 @@ const userDataSchema = new mongoose.Schema(
   },
   {
     timestamps: true,
-  }
+  },
+  {
+    toJSON: { virtuals: true },
+    toObject: { virtuals: true },
+  },
 );
+
+userDataSchema.virtual("agreements", {
+  ref: "agreements",
+  localField: "_id",
+  foreignField: "user",
+});
 
 const UserData = mongoose.model("UserData", userDataSchema);
 module.exports = UserData;

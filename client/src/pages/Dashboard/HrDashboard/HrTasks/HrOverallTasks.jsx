@@ -1,7 +1,5 @@
 import React, { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useDispatch, useSelector } from "react-redux";
-import { setSelectedMonth } from "../../../../redux/slices/hrSlice";
 import NormalBarGraph from "../../../../components/graphs/NormalBarGraph";
 import AgTable from "../../../../components/AgTable";
 import WidgetSection from "../../../../components/WidgetSection";
@@ -9,7 +7,7 @@ import SecondaryButton from "../../../../components/SecondaryButton";
 import { MdNavigateBefore, MdNavigateNext } from "react-icons/md";
 import { useQuery } from "@tanstack/react-query";
 import useAxiosPrivate from "../../../../hooks/useAxiosPrivate";
-import humanDate from "../../../../utils/humanDateForamt";
+//import humanDate from "../../../../utils/humanDateForamt";
 import dateToHyphen from "../../../../utils/dateToHyphen";
 
 const calendarMonths = [
@@ -27,14 +25,31 @@ const calendarMonths = [
   "March",
 ];
 
+const getDefaultFiscalMonth = () =>
+  calendarMonths[(new Date().getMonth() + 9) % 12];
+
+const getCurrentFiscalStartYear = () => {
+  const now = new Date();
+  const currentMonth = now.getMonth();
+  return currentMonth >= 3 ? now.getFullYear() : now.getFullYear() - 1;
+};
+
+const getYearFromTaskDate = (assignedDate) => {
+  const [, , year] = (assignedDate || "").split("-").map(Number);
+  return year || null;
+};
+
 const HrOverallTasks = () => {
-  const dispatch = useDispatch();
   const navigate = useNavigate();
-  const selectedMonth = useSelector((state) => state.hr.selectedMonth);
+  const [selectedMonth, setSelectedMonth] = useState(getDefaultFiscalMonth());
+  const [selectedYear, setSelectedYear] = useState(getCurrentFiscalStartYear());
+  const activeMonth = selectedMonth;
+  const activeYear = selectedYear;
+  const activeMonthYear = `${activeMonth} ${activeYear}`;
   const axios = useAxiosPrivate();
   // const tasksRawData = useSelector((state) => state.hr.tasksRawData);
 
-  const { data: tasksRawData = [], isLoading: isTasksLoading } = useQuery({
+  const { data: tasksRawData = [] } = useQuery({
     queryKey: ["tasksRawData"],
     queryFn: async () => {
       const response = await axios.get("api/tasks/get-tasks-summary");
@@ -64,39 +79,54 @@ const HrOverallTasks = () => {
   //       ...item,
   //     }));
 
-  const yearArray = tasksRawData.map(
-    (item) => item.tasks?.map((task) => task.assignedDate)[0]
-  );
+  // const yearArray = tasksRawData.map(
+  //   (item) => item.tasks?.map((task) => task.assignedDate)[0]
+  // );
 
   const currentMonthIndex = calendarMonths.findIndex(
-    (m) => m.toLowerCase() === selectedMonth?.toLowerCase()
+     (m) => m.toLowerCase() === activeMonth.toLowerCase()
   );
 
-  const handlePrevMonth = () => {
-    if (currentMonthIndex > 0) {
-      dispatch(setSelectedMonth(calendarMonths[currentMonthIndex - 1]));
+   const handlePrevMonth = () => {
+    if (currentMonthIndex === 0) {
+      setSelectedMonth(calendarMonths[calendarMonths.length - 1]);
+      setSelectedYear((prev) => prev - 1);
+      return;
     }
+
+    setSelectedMonth(calendarMonths[currentMonthIndex - 1]);
   };
 
   const handleNextMonth = () => {
-    if (currentMonthIndex < calendarMonths.length - 1) {
-      dispatch(setSelectedMonth(calendarMonths[currentMonthIndex + 1]));
+    if (currentMonthIndex === calendarMonths.length - 1) {
+      setSelectedMonth(calendarMonths[0]);
+      setSelectedYear((prev) => prev + 1);
+      return;
     }
+
+    setSelectedMonth(calendarMonths[currentMonthIndex + 1]);
   };
 
   const filteredTasks = useMemo(() => {
     return tasksRawData.flatMap((dept) =>
       dept.tasks
         .filter((task) => {
+          if (task.taskType !== "Department") return false;
+
           const [day, m, y] = task.assignedDate.split("-").map(Number);
           const taskMonth =
             calendarMonths[(new Date(y, m - 1, day).getMonth() + 9) % 12];
 
-          return taskMonth?.toLowerCase() === selectedMonth.toLowerCase();
+            const taskYear = getYearFromTaskDate(task.assignedDate);
+
+            return (
+              taskMonth?.toLowerCase() === activeMonth.toLowerCase() &&
+              taskYear === activeYear
+            );
         })
         .map((task) => ({ department: dept.department, ...task }))
     );
-  }, [tasksRawData, selectedMonth]);
+  }, [tasksRawData, activeMonth, activeYear]);
 
   const totalCompleted = filteredTasks.filter(
     (t) => t.status === "Completed"
@@ -137,7 +167,7 @@ const HrOverallTasks = () => {
   const graphData = [
     {
       name: "Completed Tasks",
-      group: `Tasks - ${selectedMonth}`,
+          group: `Tasks - ${activeMonthYear}`,
       data: allDepartments.map((dept) => {
         const { total, achieved } = departmentMap[dept] || {
           total: 0,
@@ -148,8 +178,8 @@ const HrOverallTasks = () => {
       }),
     },
     {
-      name: "Remaining Tasks",
-      group: `Tasks - ${selectedMonth}`,
+      name: "Pending Tasks",
+       group: `Tasks - ${activeMonthYear}`,
       data: allDepartments.map((dept) => {
         const { total, achieved } = departmentMap[dept] || {
           total: 0,
@@ -175,12 +205,12 @@ const HrOverallTasks = () => {
           // Fetch all tasks for the clicked department for the selected month
           const departmentTasks = groupedTasks[clickedDept] || [];
 
-          navigate("department-tasks", {
+            navigate(`${clickedDept}`, {
             state: {
-              month: selectedMonth,
+               month: activeMonth,
               department: clickedDept,
               tasks: departmentTasks,
-              year: yearArray[0].split("-")[2],
+                year: activeYear,
             },
           });
         },
@@ -228,7 +258,7 @@ const HrOverallTasks = () => {
             </div>
             <hr style="margin: 6px 0; border-top: 1px solid #ddd"/>
              <div style="display:flex ; justify-content:space-between ; width:"100%" ">
-              <div>Remaining Tasks</div> 
+              <div>Pending Tasks</div> 
               <div>${remaining}</div>
             </div>
           </div>
@@ -279,18 +309,19 @@ const HrOverallTasks = () => {
           role="button"
           onClick={() =>
             navigate(
-              `/app/dashboard/HR-dashboard/overall-KPA/department-tasks/${params.value}`,
+             // `/app/dashboard/HR-dashboard/overall-KPA/department-tasks/${params.value}`,
+              `${params.value}`,
               {
                 state: {
-                  month: selectedMonth,
+                    month: activeMonth,
                   department: params.value,
                   tasks: groupedTasks[params.value],
-                  year: yearArray[0].split("-")[2],
+                  year: activeYear,
                 },
               }
             )
           }
-          className="text-primary underline cursor-pointer"
+          className="text-primary cursor-pointer"
         >
           {params.value}
         </span>
@@ -305,14 +336,12 @@ const HrOverallTasks = () => {
   return (
     <div className="flex flex-col gap-4">
       <WidgetSection
-        title={`Tasks overview - ${selectedMonth} ${
-          yearArray[0]?.split("-")[2]
-        }`}
+        title={`Tasks overview - ${activeMonthYear}`}
         border
         padding
         greenTitle={"completed"}
         TitleAmountGreen={totalCompleted || 0}
-        redTitle={"remaining"}
+        redTitle={"pending"}
         TitleAmountRed={totalRemaining || 0}
       >
         <NormalBarGraph
@@ -326,14 +355,16 @@ const HrOverallTasks = () => {
             <SecondaryButton
               title={<MdNavigateBefore />}
               handleSubmit={handlePrevMonth}
+             // externalStyles="min-w-20 px-6 py-2 !bg-gray-400 !text-black font-semibold rounded-lg"
               // disabled={!isPrevAvailable}
             />
-            <div className="text-sm min-w-[120px] text-center">
-              {selectedMonth}
+            <div className="text-sm min-w-[120px] text-center text-primary font-semibold">
+                   {activeMonthYear}
             </div>
             <SecondaryButton
               title={<MdNavigateNext />}
               handleSubmit={handleNextMonth}
+              externalStyles="min-w-20 px-6 py-2 !bg-gray-400 !text-black font-semibold rounded-lg"
               // disabled={!isNextAvailable}
             />
           </div>
@@ -352,7 +383,9 @@ const HrOverallTasks = () => {
           columns={tasksColumns}
           data={tableData}
           tableHeight={300}
-          hideFilter
+          // hideFilter
+          search={true}
+          exportData
         />
       </WidgetSection>
     </div>

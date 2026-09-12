@@ -21,7 +21,7 @@ const ManageTickets = () => {
 
   const userPermissions = auth?.user?.permissions?.permissions || [];
   const selectedDepartment = useSelector(
-    (state) => state.performance.selectedDepartment
+    (state) => state.performance.selectedDepartment,
   );
 
   const ticketLabel =
@@ -31,18 +31,53 @@ const ManageTickets = () => {
       : "Personal";
 
   const isAdmin = auth.user?.role?.some((item) =>
-    item.roleTitle.includes("Admin")
+     item.roleTitle?.trim().endsWith("Admin"),
   );
+
+  const canViewEscalatedTickets = userPermissions.includes(
+    PERMISSIONS.TICKETS_ESCALATED_TICKETS.value,
+  );
+  const canViewSupportTickets = userPermissions.includes(
+    PERMISSIONS.TICKETS_SUPPORT_TICKETS.value,
+  );
+
+   const { data: companyDepartments = [] } = useQuery({
+    queryKey: ["ticket-company-departments"],
+    queryFn: async () => {
+      const response = await axios.get(
+        "api/company/get-company-data?field=selectedDepartments",
+      );
+      return response.data?.selectedDepartments || [];
+    },
+  });
+  const selectedDepartmentDetails = companyDepartments.find(
+    (item) => String(item?.department?._id) === String(selectedDepartment),
+  )?.department;
+  const isItTicketDepartment =
+    selectedDepartmentDetails?.name?.trim().toLowerCase() === "it";
+  const isTechTicketDepartment =
+    selectedDepartmentDetails?.name?.trim().toLowerCase() === "tech";
 
   const { data: ticketsData = [], isLoading } = useQuery({
     queryKey: ["tickets-data"],
     queryFn: async () => {
       const response = await axios.get(
-        `/api/tickets/department-tickets/${selectedDepartment}`
+        `/api/tickets/department-tickets/${selectedDepartment}`,
       );
       return response.data;
     },
   });
+
+  const { data: supportTicketsData = [], isLoading: isSupportLoading } =
+    useQuery({
+      queryKey: ["supported-tickets", selectedDepartment],
+      queryFn: async () => {
+        const response = await axios.get(
+          `/api/tickets/ticket-filter/support/${selectedDepartment}`,
+        );
+        return response.data;
+      },
+    });
 
   const ticketsFilteredData = {
     openTickets: ticketsData.filter((item) => item.status === "Open").length,
@@ -56,12 +91,21 @@ const ManageTickets = () => {
       .filter((item) => item.acceptedBy?._id === auth.user?._id)
       .filter((item) => item.status === "In Progress").length,
     inProgressTickets: ticketsData.filter(
-      (item) => item.status === "In Progress"
+      (item) => item.status === "In Progress" || item.status === "Escalated",
     ).length,
-    assignedTickets: ticketsData.filter((item) => item.assignees?.length > 0)
-      .length,
+    assignedTickets: ticketsData
+      .filter((item) => item.assignees?.length > 0)
+      .filter((item) => item.status === "In Progress")
+      .filter((item) => {
+        if (isAdmin) return true;
+
+        return item.assignees.some(
+          (assignee) => assignee?._id === auth.user?._id,
+        );
+      }).length,
     escalatedTickets: ticketsData.filter((item) => item.status === "Escalated")
       .length,
+    supportTickets: supportTicketsData.length,
   };
 
   const widgets = [
@@ -76,8 +120,9 @@ const ManageTickets = () => {
           titleDataColor={"red"}
           TitleAmount={String(ticketsFilteredData.recievedTickets).padStart(
             2,
-            "0"
-          )}>
+            "0",
+          )}
+        >
           <TicketCard
             title={"Open"}
             titleColor={"#1E3D73"}
@@ -108,8 +153,9 @@ const ManageTickets = () => {
           titleDataColor={"black"}
           TitleAmount={String(ticketsFilteredData.acceptedTickets).padStart(
             2,
-            "0"
-          )}>
+            "0",
+          )}
+        >
           <TicketCard
             title={"Accepted Tickets"}
             data={ticketsFilteredData.acceptedTickets}
@@ -124,13 +170,25 @@ const ManageTickets = () => {
             fontFamily={"Poppins-Bold"}
             titleColor={"#1E3D73"}
           />
-          <TicketCard
-            title={"Escalated Tickets"}
-            data={ticketsFilteredData.escalatedTickets}
-            fontColor={"#1E3D73"}
-            fontFamily={"Poppins-Bold"}
-            titleColor={"#1E3D73"}
-          />
+          {canViewEscalatedTickets ? (
+            <TicketCard
+              title={"Escalated Tickets"}
+              data={ticketsFilteredData.escalatedTickets}
+              fontColor={"#1E3D73"}
+              fontFamily={"Poppins-Bold"}
+              titleColor={"#1E3D73"}
+            />
+          ) : (
+            canViewSupportTickets && (
+              <TicketCard
+                title={"Support Tickets"}
+                data={ticketsFilteredData.supportTickets}
+                fontColor={"#1E3D73"}
+                fontFamily={"Poppins-Bold"}
+                titleColor={"#1E3D73"}
+              />
+            )
+          )}
         </WidgetSection>,
       ],
     },
@@ -156,7 +214,9 @@ const ManageTickets = () => {
       component: (
         <AcceptedTickets
           departmentId={selectedDepartment}
-          title="Accepted & Assigned Tickets"
+          isItDepartment={isItTicketDepartment}
+          isTechDepartment={isTechTicketDepartment}
+          title="Accepted Tickets"
         />
       ),
     },
@@ -167,6 +227,8 @@ const ManageTickets = () => {
       component: (
         <AssignedTickets
           departmentId={selectedDepartment}
+          isItDepartment={isItTicketDepartment}
+          isTechDepartment={isTechTicketDepartment}
           title="Assigned Tickets"
         />
       ),
@@ -178,6 +240,8 @@ const ManageTickets = () => {
       component: (
         <SupportTickets
           departmentId={selectedDepartment}
+          isItDepartment={isItTicketDepartment}
+          isTechDepartment={isTechTicketDepartment}
           title="Support Tickets"
         />
       ),
@@ -189,6 +253,8 @@ const ManageTickets = () => {
       component: (
         <EscalatedTickets
           departmentId={selectedDepartment}
+          isItDepartment={isItTicketDepartment}
+          isTechDepartment={isTechTicketDepartment}
           title="Escalated Tickets"
         />
       ),
@@ -200,7 +266,9 @@ const ManageTickets = () => {
       component: (
         <ClosedTickets
           departmentId={selectedDepartment}
-          title="Closed / Resolved Tickets"
+          isItDepartment={isItTicketDepartment}
+          isTechDepartment={isTechTicketDepartment}
+          title="Closed Tickets"
         />
       ),
     },
@@ -212,11 +280,10 @@ const ManageTickets = () => {
     return userPermissions.includes(tab.permission);
   });
 
-
   return (
     <div>
       {/* Widgets */}
-      {!isLoading ? (
+      {!isLoading && !isSupportLoading ? (
         <div>
           {widgets.map((widget, index) => (
             <div key={index}>
@@ -264,7 +331,7 @@ const ManageTickets = () => {
                   label={
                     <div className="flex flex-col gap-2 text-center">
                       <span className="text-content">{tab.label}</span>
-                      <span className="text-small">{tab.subLabel}</span>
+                      {/* <span className="text-small">{tab.subLabel}</span> */}
                     </div>
                   }
                 />

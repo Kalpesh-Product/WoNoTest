@@ -32,16 +32,24 @@ const alternateRevenueSchema = new mongoose.Schema(
     },
     invoicePaidDate: {
       type: Date,
-      required: true,
+      // required: true,
+    },
+    status: {
+      type: String,
+      default: "Unpaid",
+      enum: ["Paid", "Unpaid"],
     },
   },
   {
-    timestamps: true, // Optional: Adds createdAt and updatedAt fields
-  }
+    timestamps: true,
+  },
 );
+
+alternateRevenueSchema.index({ company: 1 });
+// alternateRevenueSchema.index({ company: 1, invoiceCreationDate: 1 });
 
 const AlternateRevenue = mongoose.model(
   "AlternateRevenue",
-  alternateRevenueSchema
+  alternateRevenueSchema,
 );
 module.exports = AlternateRevenue;

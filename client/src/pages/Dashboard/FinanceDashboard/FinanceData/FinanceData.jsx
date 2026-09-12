@@ -8,6 +8,11 @@ const FinanceData = () => {
       path: "asset-list",
       permission: PERMISSIONS.FINANCE_DATA_ASSET_LIST.value,
     },
+     {
+      label: "Monthly Budget Reports",
+      path: "monthly-budget-report",
+      permission: PERMISSIONS.FINANCE_DATA_MONTHLY_BUDGET_REPORT.value,
+    },
     {
       label: "Monthly Invoice Reports",
       path: "monthly-invoice-reports",
@@ -31,6 +36,7 @@ const FinanceData = () => {
         defaultTabPath={"asset-list"}
         tabs={tabs}
         hideTabsCondition={(pathname) => pathname.includes("asset-list/")}
+        hideTabsOnPaths={["vendor/"]}
       />
     </div>
   );

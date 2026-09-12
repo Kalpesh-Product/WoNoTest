@@ -15,6 +15,7 @@ import { useQuery } from "@tanstack/react-query";
 import useAxiosPrivate from "../hooks/useAxiosPrivate";
 import useAuth from "../hooks/useAuth";
 import { PERMISSIONS } from "../constants/permissions";
+import { CurrencyProvider } from "../context/CurrencyContext";
 
 const MainLayout = () => {
   const { auth } = useAuth();
@@ -34,12 +35,7 @@ const MainLayout = () => {
     queryKey: ["notifications"],
     queryFn: async () => {
       const res = await axios.get("/api/notifications/get-my-notifications");
-
-      const filtered = res.data.filter(
-        (n) => n.initiatorData?._id !== auth?.user?._id
-      );
-
-      return filtered;
+      return res.data;
     },
     refetchInterval: 15000,
   });
@@ -54,16 +50,21 @@ const MainLayout = () => {
       (perm) => perm.route
     );
 
-    const currentRoutePermission = guardedRoutes.find((perm) =>
+    // const currentRoutePermission = guardedRoutes.find((perm) =>
+    const currentRoutePermissions = guardedRoutes.filter((perm) =>
       pathname.includes(perm.route)
     );
 
-    if (currentRoutePermission) {
-      const userHasPermission = rawPermissions.includes(
-        currentRoutePermission.value
+    // if (currentRoutePermission) {
+    //   const userHasPermission = rawPermissions.includes(
+    //     currentRoutePermission.value
+    //   );
+     if (currentRoutePermissions.length > 0) {
+      const userHasPermission = currentRoutePermissions.some((perm) =>
+        rawPermissions.includes(perm.value)
       );
       // console.log("🛡️ User permission check:", {
-      //   requiredPermission: currentRoutePermission.value,
+      //     requiredPermissions: currentRoutePermissions.map((perm) => perm.value),
       //   userPermissions: rawPermissions,
       //   isAllowed: userHasPermission,
       // });
@@ -87,7 +88,8 @@ const MainLayout = () => {
     const count = notification.users.filter(
       (user) =>
         user.userActions?.hasRead === false &&
-        user.userActions?.whichUser?._id === auth.user._id
+        String(user.userActions?.whichUser?._id || user.userActions?.whichUser) ===
+          String(auth?.user?._id)
     ).length;
     return total + count;
   }, 0);
@@ -113,6 +115,7 @@ const MainLayout = () => {
   }, []);
 
   return (
+    <CurrencyProvider>
     <div className="w-full flex flex-col justify-between h-screen overflow-y-auto">
       <header className="flex w-full shadow-md items-center px-4">
         {isMobile && (
@@ -184,6 +187,7 @@ const MainLayout = () => {
         </footer>
       )}
     </div>
+    </CurrencyProvider>
   );
 };
 

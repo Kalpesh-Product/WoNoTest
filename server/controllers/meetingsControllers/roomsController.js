@@ -3,13 +3,19 @@ const idGenerator = require("../../utils/idGenerator");
 const User = require("../../models/hr/UserData");
 const sharp = require("sharp");
 const mongoose = require("mongoose");
-const {
-  handleFileUpload,
-  handleFileDelete,
-} = require("../../config/cloudinaryConfig");
+const { handleFileUpload, handleFileDelete } = require("../../config/s3Config");
 const { createLog } = require("../../utils/moduleLogs");
 const CustomError = require("../../utils/customErrorlogs");
 const Unit = require("../../models/locations/Unit");
+
+const parseOptionalNumber = (value) => {
+  if (value === undefined || value === null || value === "") {
+    return undefined;
+  }
+
+  const parsedValue = Number(value);
+  return Number.isFinite(parsedValue) ? parsedValue : undefined;
+};
 
 const addRoom = async (req, res, next) => {
   const { user, ip, company } = req;
@@ -18,14 +24,25 @@ const addRoom = async (req, res, next) => {
   const logSourceKey = "room";
 
   try {
-    const { name, seats, description, location } = req.body;
+    const {
+      name,
+      seats,
+      description,
+      location,
+      perHourCredit,
+      perHourPrice,
+      dailyHours,
+      monthlyHours,
+      perSeatPrice,
+      perHourGstPrice,
+    } = req.body;
 
     if (!name || !seats || !description || !location) {
       throw new CustomError(
         "All required fields must be provided",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
 
@@ -37,13 +54,14 @@ const addRoom = async (req, res, next) => {
       })
       .lean()
       .exec();
+    console.log("Found user with company:", foundUser.company);
 
     if (!foundUser || !foundUser.company) {
       throw new CustomError(
         "Unauthorized or company not found",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
 
@@ -56,7 +74,7 @@ const addRoom = async (req, res, next) => {
         "Invalid location. Must be a valid company work location.",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
 
@@ -70,16 +88,23 @@ const addRoom = async (req, res, next) => {
       const buffer = await sharp(file.buffer).webp({ quality: 80 }).toBuffer();
 
       const base64Image = `data:irmage/webp;base64,${buffer.toString(
-        "base64"
+        "base64",
       )}`;
       const uploadResult = await handleFileUpload(
         base64Image,
-        `${foundUser.company.companyName}/rooms`
+        `${foundUser.company.companyName}/rooms`,
       );
 
       imageId = uploadResult.public_id;
       imageUrl = uploadResult.secure_url;
     }
+
+    const parsedPerHourCredit = parseOptionalNumber(perHourCredit);
+    const parsedPerHourPrice = parseOptionalNumber(perHourPrice);
+    const parsedDailyHours = parseOptionalNumber(dailyHours);
+    const parsedMonthlyHours = parseOptionalNumber(monthlyHours);
+    const parsedPerSeatPrice = parseOptionalNumber(perSeatPrice);
+    const parsedPerHourGstPrice = parseOptionalNumber(perHourGstPrice);
 
     const room = new Room({
       roomId,
@@ -87,6 +112,12 @@ const addRoom = async (req, res, next) => {
       seats,
       description,
       location,
+      perHourCredit: parsedPerHourCredit,
+      perHourPrice: parsedPerHourPrice,
+      dailyHours: parsedDailyHours,
+      monthlyHours: parsedMonthlyHours,
+      perSeatPrice: parsedPerSeatPrice,
+      perHourGstPrice: parsedPerHourGstPrice,
       assignedAssets: [],
       company: company._id,
       image: {
@@ -119,7 +150,7 @@ const addRoom = async (req, res, next) => {
       next(error);
     } else {
       next(
-        new CustomError(error.message, logPath, logAction, logSourceKey, 500)
+        new CustomError(error.message, logPath, logAction, logSourceKey, 500),
       );
     }
   }
@@ -168,14 +199,26 @@ const updateRoom = async (req, res, next) => {
 
   try {
     const { id: roomId } = req.params;
-    const { name, description, seats, location, isActive } = req.body;
+    const {
+      name,
+      description,
+      seats,
+      location,
+      isActive,
+      perHourCredit,
+      perHourPrice,
+      dailyHours,
+      monthlyHours,
+      perSeatPrice,
+      perHourGstPrice,
+    } = req.body;
 
     if (!roomId || !mongoose.Types.ObjectId.isValid(roomId)) {
       throw new CustomError(
         "Invalid Room ID",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
 
@@ -191,7 +234,7 @@ const updateRoom = async (req, res, next) => {
           "Invalid location. Must be a valid company work location.",
           logPath,
           logAction,
-          logSourceKey
+          logSourceKey,
         );
       }
     }
@@ -200,6 +243,16 @@ const updateRoom = async (req, res, next) => {
 
     // Handle individual field updates
     if (Object.hasOwn(req.body, "name") && req.body.name !== room.name) {
+      const nameExists = await Room.findOne({
+        name: req.body.name,
+        _id: { $ne: roomId },
+      });
+
+      if (nameExists) {
+        return res
+          .status(400)
+          .json({ message: "The name is already owned by a different room" });
+      }
       updatedFields.name = req.body.name;
     }
 
@@ -223,10 +276,68 @@ const updateRoom = async (req, res, next) => {
 
     if (Object.hasOwn(req.body, "isActive")) {
       updatedFields.isActive =
-        req.body.isActive === true || req.body.isActive === "true"
-          ? true
-          : false;
+        req.body.isActive === true || req.body.isActive === "true";
     }
+
+    const parsedPerHourCredit = parseOptionalNumber(req.body.perHourCredit);
+
+    if (
+      Object.hasOwn(req.body, "perHourCredit") &&
+      parsedPerHourCredit !== undefined &&
+      parsedPerHourCredit !== room.perHourCredit
+    ) {
+      updatedFields.perHourCredit = parsedPerHourCredit;
+    }
+    const parsedPerHourPrice = parseOptionalNumber(req.body.perHourPrice);
+    if (
+      Object.hasOwn(req.body, "perHourPrice") &&
+      parsedPerHourPrice !== undefined &&
+      parsedPerHourPrice !== room.perHourPrice
+    ) {
+      updatedFields.perHourPrice = parsedPerHourPrice;
+    }
+
+    const parsedDailyHours = parseOptionalNumber(req.body.dailyHours);
+    if (
+      Object.hasOwn(req.body, "dailyHours") &&
+      parsedDailyHours !== undefined &&
+      parsedDailyHours !== room.dailyHours
+    ) {
+      updatedFields.dailyHours = parsedDailyHours;
+    }
+
+    const parsedMonthlyHours = parseOptionalNumber(req.body.monthlyHours);
+    if (
+      Object.hasOwn(req.body, "monthlyHours") &&
+      parsedMonthlyHours !== undefined &&
+      parsedMonthlyHours !== room.monthlyHours
+    ) {
+      updatedFields.monthlyHours = parsedMonthlyHours;
+    }
+    const parsedPerSeatPrice = parseOptionalNumber(req.body.perSeatPrice);
+    if (
+      Object.hasOwn(req.body, "perSeatPrice") &&
+      parsedPerSeatPrice !== undefined &&
+      parsedPerSeatPrice !== room.perSeatPrice
+    ) {
+      updatedFields.perSeatPrice = parsedPerSeatPrice;
+    }
+
+    const parsedPerHourGstPrice = parseOptionalNumber(req.body.perHourGstPrice);
+
+    if (
+      Object.hasOwn(req.body, "perHourGstPrice") &&
+      parsedPerHourGstPrice !== undefined &&
+      parsedPerHourGstPrice !== room.perHourGstPrice
+    ) {
+      updatedFields.perHourGstPrice = parsedPerHourGstPrice;
+    }
+
+    const foundUser = await User.findById(user)
+      .select("company")
+      .populate({ path: "company", select: "companyName workLocations" })
+      .lean()
+      .exec();
 
     // Handle image update
     if (req.file) {
@@ -242,7 +353,10 @@ const updateRoom = async (req, res, next) => {
         await handleFileDelete(room.image.id);
       }
 
-      const uploadResult = await handleFileUpload(base64Image, "rooms");
+      const uploadResult = await handleFileUpload(
+        base64Image,
+        `${foundUser.company.companyName}/rooms`,
+      );
       updatedFields.image = {
         id: uploadResult.public_id,
         url: uploadResult.secure_url,
@@ -278,7 +392,7 @@ const updateRoom = async (req, res, next) => {
     next(
       error instanceof CustomError
         ? error
-        : new CustomError(error.message, logPath, logAction, logSourceKey, 500)
+        : new CustomError(error.message, logPath, logAction, logSourceKey, 500),
     );
   }
 };

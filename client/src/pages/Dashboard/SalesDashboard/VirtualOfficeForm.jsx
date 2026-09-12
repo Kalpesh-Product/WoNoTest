@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useForm, Controller, useWatch } from "react-hook-form";
-import { TextField, Select, MenuItem, CircularProgress } from "@mui/material";
+import { TextField, MenuItem, CircularProgress } from "@mui/material";
 import PrimaryButton from "../../../components/PrimaryButton";
 import SecondaryButton from "../../../components/SecondaryButton";
 import { State, City } from "country-state-city";
@@ -9,10 +9,9 @@ import useAxiosPrivate from "../../../hooks/useAxiosPrivate";
 import { DatePicker, LocalizationProvider } from "@mui/x-date-pickers";
 import dayjs from "dayjs";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
-import DetalisFormatted from "../../../components/DetalisFormatted";
-import { useSelector } from "react-redux";
 import { toast } from "sonner";
 import PageFrame from "../../../components/Pages/PageFrame";
+import useAuth from "../../../hooks/useAuth";
 
 const VirtualOfficeForm = () => {
   const {
@@ -26,12 +25,15 @@ const VirtualOfficeForm = () => {
       clientName: "",
       email: "",
       phone: "",
+      brandName: "",
       service: "",
       sector: "",
       hoCity: "",
       hoState: "",
+      building: "",
       unit: "",
       cabinDesks: "",
+      securityDeposit: "",
       ratePerCabinDesk: "10000",
       openDesks: "",
       ratePerOpenDesk: "8000",
@@ -51,8 +53,9 @@ const VirtualOfficeForm = () => {
       hOPocPhone: "",
     },
   });
-  const clientsData = useSelector((state) => state.sales.clientsData);
-  const [selectedUnit, setSelectedUnit] = useState("");
+  const { auth } = useAuth();
+  // const clientsData = useSelector((state) => state.sales.clientsData);
+  // const [selectedUnit, setSelectedUnit] = useState("");
 
   //-----------------------------------------------------Calculation------------------------------------------------//
   const cabinDesks = useWatch({ control, name: "cabinDesks" });
@@ -62,6 +65,7 @@ const VirtualOfficeForm = () => {
 
   const openDesks = useWatch({ control, name: "openDesks" });
   const openDesksRate = useWatch({ control, name: "ratePerOpenDesk" });
+  const selectedBuilding = useWatch({ control, name: "building" });
   const totalOpenDeskCost =
     (parseFloat(openDesks) || 0) * (parseFloat(openDesksRate) || 0);
 
@@ -88,32 +92,52 @@ const VirtualOfficeForm = () => {
   }, []);
   const handleStateSelect = (stateCode) => {
     const city = City.getCitiesOfState("IN", stateCode);
+
+    if (
+      stateCode === "GA" &&
+      !city.some((item) => item.name?.toLowerCase() === "anjuna")
+    ) {
+      city.push({
+        name: "Anjuna",
+        countryCode: "IN",
+        stateCode: "GA",
+      });
+      city.sort((firstCity, secondCity) =>
+        (firstCity.name || "").localeCompare(secondCity.name || ""),
+      );
+    }
+
     setCities(city);
   };
   const {
     data: units = [],
     isLoading: isUnitsPending,
-    error: isUnitsError,
+    // error: isUnitsError,
     refetch: fetchUnits,
   } = useQuery({
     queryKey: ["units"],
     queryFn: async () => {
       const response = await axios.get(
-        `/api/company/fetch-units?deskCalculated=true`
+        `/api/company/fetch-units?deskCalculated=true`,
       );
       return response.data;
     },
   });
 
-  const availableCabinDesks = units.filter(
-    (item) => item._id?.trim() === selectedUnit.trim()
-  );
-  const {
-    data: services = [],
-    isLoading: isServicesPending,
-    error: isServicesError,
-    refetch: fetchServices,
-  } = useQuery({
+  const availableBuildings = auth?.user?.company?.workLocations || [];
+  const filteredUnits = useMemo(() => {
+    if (!selectedBuilding) {
+      return [];
+    }
+
+    return units.filter((item) => item.building?._id === selectedBuilding);
+  }, [selectedBuilding, units]);
+
+  useEffect(() => {
+    setValue("unit", "");
+  }, [selectedBuilding, setValue]);
+
+  const { data: services = [], isLoading: isServicesPending } = useQuery({
     queryKey: ["services"],
     queryFn: async () => {
       const response = await axios.get("/api/sales/services");
@@ -127,8 +151,8 @@ const VirtualOfficeForm = () => {
       mutationKey: "clientData",
       mutationFn: async (data) => {
         const response = await axios.post(
-          `/api/sales/onboard-co-working-client`,
-          data
+          "/api/sales/onboard-virtual-office-client",
+          data,
         );
         return response.data;
       },
@@ -137,23 +161,65 @@ const VirtualOfficeForm = () => {
         reset();
       },
       onError: (error) => {
-        toast.error(error.message);
-      },
+              toast.error(
+                error?.response?.data?.message ||
+                  error?.message || "Failed to onboard client"
+              );
+            },
     });
 
   const onSubmit = (data) => {
-    mutateClientData(data);
+    const payload = {
+      clientName: data.clientName,
+      email: data.email,
+      phone: data.phone,
+      brandName: data.brandName,
+      sector: data.sector,
+      state:
+        states.find((item) => item.isoCode === data.hoState)?.name ||
+        data.hoState,
+      city: data.hoCity,
+      building: data.building,
+      unit: data.unit,
+      termStartDate: data.startDate
+        ? dayjs(data.startDate).format("YYYY-MM-DD")
+        : null,
+      termEnd: data.endDate ? dayjs(data.endDate).format("YYYY-MM-DD") : null,
+      lockInPeriodMonths: Number(data.lockinPeriod),
+      rentDate: data.rentDate
+        ? dayjs(data.rentDate).format("YYYY-MM-DD")
+        : null,
+      cabinDesks: Number(data.cabinDesks) || 0,
+      securityDeposit: Number(data.securityDeposit) || 0,
+      cabinDeskRate: Number(data.ratePerCabinDesk) || 0,
+      openDesks: Number(data.openDesks) || 0,
+      openDeskRate: Number(data.ratePerOpenDesk) || 0,
+      perDeskMeetingCredits: Number(data.perDeskMeetingCredits) || 0,
+      annualIncrement: Number(data.annualIncrement) || 0,
+      localPoc: {
+        name: data.localPocName,
+        email: data.localPocEmail,
+        phone: data.localPocPhone,
+      },
+      hoPoc: {
+        name: data.hOPocName,
+        email: data.hOPocEmail,
+        phone: data.hOPocPhone,
+      },
+    };
+
+    mutateClientData(payload);
   };
 
   const handleReset = () => {
     reset();
   };
 
-  const [selectedValue, setSelectedValue] = useState("Coworking");
+  // const [selectedValue, setSelectedValue] = useState("Coworking");
 
-  const handleChange = (event) => {
-    setSelectedValue(event.target.value);
-  };
+  // const handleChange = (event) => {
+  //   setSelectedValue(event.target.value);
+  // };
 
   return (
     <div className="p-4">
@@ -220,58 +286,80 @@ const VirtualOfficeForm = () => {
                       />
                     )}
                   />
-
                   <Controller
-                    name="service"
+                    name="brandName"
                     control={control}
-                    rules={{ required: "Service is required" }}
                     render={({ field }) => (
                       <TextField
                         {...field}
                         size="small"
-                        select
-                        label="Service"
-                        error={!!errors.service}
-                        helperText={errors.service?.message}
+                        label="Brand Name"
                         fullWidth
-                      >
-                        <MenuItem value="" disabled>
-                          Select a Service
-                        </MenuItem>
-                        {!isServicesPending ? (
-                          services.map((item) => (
-                            <MenuItem key={item._id} value={item._id}>
-                              {item.serviceName}
-                            </MenuItem>
-                          ))
-                        ) : (
-                          <CircularProgress color="#1E3D73" />
-                        )}
-                      </TextField>
+                      />
                     )}
                   />
-                  <Controller
-                    name="sector"
-                    control={control}
-                    rules={{ required: "Sector is required" }}
-                    render={({ field }) => (
-                      <TextField
-                        {...field}
-                        size="small"
-                        label="Sector"
-                        fullWidth
-                        error={!!errors.sector}
-                        helperText={errors.sector?.message}
-                      >
-                        <MenuItem value="" disabled>
-                          Select a Sector
-                        </MenuItem>
-                        <MenuItem value="IT & Consulting">
-                          IT & Consulting
-                        </MenuItem>
-                      </TextField>
-                    )}
-                  />
+                  <div className="grid grid-cols-1 md:grid-cols-1 lg:grid-cols-2 gap-4">
+                    <Controller
+                      name="service"
+                      control={control}
+                      rules={{ required: "Service is required" }}
+                      render={({ field }) => (
+                        <TextField
+                          {...field}
+                          size="small"
+                          select
+                          label="Service"
+                          error={!!errors.service}
+                          helperText={errors.service?.message}
+                          fullWidth
+                        >
+                          <MenuItem value="" disabled>
+                            Select a Service
+                          </MenuItem>
+                          {!isServicesPending ? (
+                            services
+                              .filter((item) =>
+                                [
+                                  // "coworking",
+                                  "virtual office",
+                                ].some((s) =>
+                                  item.serviceName.toLowerCase().includes(s)
+                                )
+                              )
+                              .map((item) => (
+                                <MenuItem key={item._id} value={item._id}>
+                                  {item.serviceName}
+                                </MenuItem>
+                              ))
+                          ) : (
+                            <CircularProgress color="#1E3D73" />
+                          )}
+                        </TextField>
+                      )}
+                    />
+                    <Controller
+                      name="sector"
+                      control={control}
+                      rules={{ required: "Sector is required" }}
+                      render={({ field }) => (
+                        <TextField
+                          {...field}
+                          size="small"
+                          label="Sector"
+                          fullWidth
+                          error={!!errors.sector}
+                          helperText={errors.sector?.message}
+                        >
+                          <MenuItem value="" disabled>
+                            Select a Sector
+                          </MenuItem>
+                          <MenuItem value="IT & Consulting">
+                            IT & Consulting
+                          </MenuItem>
+                        </TextField>
+                      )}
+                    />
+                  </div>
                   <div className="grid grid-cols-1 md:grid-cols-1 lg:grid-cols-2 gap-4">
                     <Controller
                       name="hoState"
@@ -283,7 +371,7 @@ const VirtualOfficeForm = () => {
                           select
                           label="State"
                           onChange={(e) => {
-                            field.onChange(e);
+                            field.onChange(e.target.value);
                             handleStateSelect(e.target.value);
                           }}
                           fullWidth
@@ -331,41 +419,78 @@ const VirtualOfficeForm = () => {
                   </span>
                 </div>
                 <div className="grid grid-cols sm:grid-cols-1 md:grid-cols-1 gap-4 p-4">
-                  <Controller
-                    name="unit"
-                    control={control}
-                    rules={{ required: "Unit is required" }}
-                    render={({ field }) => (
-                      <TextField
-                        {...field}
-                        onClick={fetchUnits}
-                        onChange={(e) => {
-                          field.onChange(e);
-                          setSelectedUnit(e.target.value);
-                          fetchUnits();
-                        }}
-                        size="small"
-                        select
-                        label="Unit"
-                        fullWidth
-                      >
-                        <MenuItem value="">Select a Unit</MenuItem>
-                        {!isUnitsPending ? (
-                          units.map((item) => (
-                            <MenuItem key={item._id} value={item._id}>
-                              {item.unitNo}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <Controller
+                      name="building"
+                      control={control}
+                      rules={{ required: "Building is required" }}
+                      render={({ field }) => (
+                        <TextField
+                          {...field}
+                          size="small"
+                          select
+                          label="Building"
+                          error={!!errors.building}
+                          helperText={errors.building?.message}
+                          fullWidth
+                        >
+                          <MenuItem value="">Select a Building</MenuItem>
+                          {availableBuildings.length > 0 ? (
+                            availableBuildings.map((item) => (
+                              <MenuItem key={item._id} value={item._id}>
+                                {item.buildingName}
+                              </MenuItem>
+                            ))
+                          ) : (
+                            <MenuItem disabled>No Buildings Available</MenuItem>
+                          )}
+                        </TextField>
+                      )}
+                    />
+                    <Controller
+                      name="unit"
+                      control={control}
+                      rules={{ required: "Unit is required" }}
+                      render={({ field }) => (
+                        <TextField
+                          {...field}
+                          onClick={fetchUnits}
+                          onChange={(e) => {
+                            field.onChange(e.target.value);
+                            fetchUnits();
+                          }}
+                          size="small"
+                          select
+                          label="Unit"
+                          error={!!errors.unit}
+                          helperText={errors.unit?.message}
+                          fullWidth
+                        >
+                          <MenuItem value="">Select a Unit</MenuItem>
+                          {isUnitsPending ? (
+                            <MenuItem disabled>
+                              <CircularProgress size={20} color="inherit" />
                             </MenuItem>
-                          ))
-                        ) : (
-                          <>
-                            <CircularProgress color="#1E3D73" />
-                          </>
-                        )}
-                      </TextField>
-                    )}
-                  />
+                          ) : filteredUnits.length > 0 ? (
+                            filteredUnits.map((item) => (
+                              <MenuItem key={item._id} value={item._id}>
+                                {item.unitNo}
+                              </MenuItem>
+                            ))
+                          ) : (
+                            <MenuItem disabled>
+                              {selectedBuilding
+                                ? "No units available"
+                                : "Select a building first"}
+                            </MenuItem>
+                          )}
+                        </TextField>
+                      )}
+                    />
+                  </div>
 
-                  <div className="flex gap-2">
+
+                  {/* <div className="flex gap-2">
                     <div className="w-1/2">
                       <Controller
                         name="cabinDesks"
@@ -380,8 +505,29 @@ const VirtualOfficeForm = () => {
                           />
                         )}
                       />
-                    </div>
-                    <div className="w-1/2">
+                    </div> */}
+                  <div>
+                    <Controller
+                      name="securityDeposit"
+                      control={control}
+                      rules={{ required: "Security Deposit is required" }}
+                      render={({ field }) => (
+                        <TextField
+                          {...field}
+                          size="small"
+                          type="number"
+                          label="Security Deposit"
+                          error={!!errors.securityDeposit}
+                          helperText={errors.securityDeposit?.message}
+                          fullWidth
+                        />
+                      )}
+                    />
+                  </div>
+                  {/* </div>
+
+                  <div className="flex gap-2">  */}
+                  {/* <div className="w-1/2">
                       <Controller
                         name="ratePerCabinDesk"
                         control={control}
@@ -406,7 +552,7 @@ const VirtualOfficeForm = () => {
                         fullWidth
                       />
                     </div>
-                  </div>
+                  </div> */}
 
                   <div className="flex gap-2">
                     <div className="w-1/2">
@@ -670,7 +816,7 @@ const VirtualOfficeForm = () => {
                       <TextField
                         {...field}
                         size="small"
-                        type="number"
+                        type="text"
                         label="Local POC Phone"
                         error={!!errors.localPocPhone}
                         helperText={errors.localPocPhone?.message}
@@ -719,7 +865,7 @@ const VirtualOfficeForm = () => {
                           {...field}
                           size="small"
                           label="HO POC Phone"
-                          type="number"
+                          type="text"
                           error={!!errors.hOPocPhone}
                           helperText={errors.hOPocPhone?.message}
                           fullWidth
@@ -732,7 +878,7 @@ const VirtualOfficeForm = () => {
             </div>
 
             {/* Submit Button */}
-            {/* <div className="flex items-center justify-center gap-4 mt-4">
+            <div className="flex items-center justify-center gap-4 mt-4">
               <PrimaryButton
                 type="submit"
                 title={"Submit"}
@@ -740,7 +886,7 @@ const VirtualOfficeForm = () => {
                 disabled={isMutateClientPending}
               />
               <SecondaryButton handleSubmit={handleReset} title={"Reset"} />
-            </div> */}
+            </div>
           </form>
         </div>
       </PageFrame>

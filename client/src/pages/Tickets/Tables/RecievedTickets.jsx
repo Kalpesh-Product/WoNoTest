@@ -12,9 +12,11 @@ import { Controller, useForm } from "react-hook-form";
 import useAuth from "../../../hooks/useAuth";
 import { MdOutlineRemoveRedEye } from "react-icons/md";
 import DetalisFormatted from "../../../components/DetalisFormatted";
+import TicketAttachments from "../../../components/TicketAttachments";
 import humanDate from "../../../utils/humanDateForamt";
 import { useTopDepartment } from "../../../hooks/useTopDepartment";
 import StatusChip from "../../../components/StatusChip";
+import formatDateTime from "../../../utils/formatDateTime";
 
 const RecievedTickets = ({ title, departmentId }) => {
   const [open, setOpen] = useState(false);
@@ -38,12 +40,16 @@ const RecievedTickets = ({ title, departmentId }) => {
     setOpenView(true);
   };
 
+  const handleCloseTicketView = () => {
+    setOpenView(false);
+  };
+
   const { data: tickets = [], isLoading } = useQuery({
     queryKey: ["tickets"],
     queryFn: async () => {
       try {
         const response = await axios.get(
-          `/api/tickets/get-tickets/${departmentId}`
+          `/api/tickets/get-tickets/${departmentId}`,
         );
 
         return response.data;
@@ -57,7 +63,7 @@ const RecievedTickets = ({ title, departmentId }) => {
     mutationKey: ["accept-ticket"],
     mutationFn: async (ticket) => {
       const response = await axios.patch(
-        `/api/tickets/accept-ticket/${ticket.id}`
+        `/api/tickets/accept-ticket/${ticket.id}`,
       );
 
       return response.data.message;
@@ -76,7 +82,7 @@ const RecievedTickets = ({ title, departmentId }) => {
     mutationFn: async (ticket) => {
       const response = await axios.patch(
         `/api/tickets/reject-ticket/${ticket.id}`,
-        { reason: ticket.specifiedReason }
+        { reason: ticket.specifiedReason },
       );
 
       return response.data.message;
@@ -98,7 +104,7 @@ const RecievedTickets = ({ title, departmentId }) => {
         `/api/tickets/assign-ticket/${data.ticketId}`,
         {
           assignees: data.assignedEmployees,
-        }
+        },
       );
 
       return response.data.message;
@@ -117,7 +123,7 @@ const RecievedTickets = ({ title, departmentId }) => {
   const fetchSubOrdinates = async () => {
     try {
       const response = await axios.get(
-        `/api/users/assignees?deptId=${departmentId}`
+        `/api/users/assignees?deptId=${departmentId}`,
       );
 
       return response.data;
@@ -139,7 +145,7 @@ const RecievedTickets = ({ title, departmentId }) => {
 
   const onSubmit = (formData) => {
     const assignedEmployeeIds = Object.keys(formData.selectedEmployees).filter(
-      (id) => formData.selectedEmployees[id]
+      (id) => formData.selectedEmployees[id],
     ); // ✅ Keep only selected IDs
 
     if (assignedEmployeeIds.length === 0) {
@@ -170,9 +176,9 @@ const RecievedTickets = ({ title, departmentId }) => {
       raisedDate: ticket.createdAt,
       priority: ticket.priority || "Low",
       image: ticket.image?.url,
+      attachments: ticket.attachments || [],
     }));
   };
-  
 
   const handleRejectSubmit = () => {
     if (!rejectionReason.trim()) {
@@ -191,13 +197,12 @@ const RecievedTickets = ({ title, departmentId }) => {
           setRejectionReason("");
           setSelectedTicket(null);
         },
-      }
+      },
     );
   };
 
   // Example usage
   const rows = isLoading ? [] : transformTicketsData(tickets);
-
 
   const handleOpenAssignModal = (ticketId) => {
     setSelectedTicketId(ticketId);
@@ -210,14 +215,16 @@ const RecievedTickets = ({ title, departmentId }) => {
   };
 
   const recievedTicketsColumns = [
-    { field: "srNo", headerName: "Sr No" },
-    { field: "raisedBy", headerName: "Raised By" },
-    { field: "fromDepartment", headerName: "From Department" },
-    { field: "ticketTitle", headerName: "Ticket Title", flex: 1 },
+    { field: "srNo", headerName: "Sr No", width: 200, minWidth: 190, maxWidth: 220 },
+    { field: "ticketTitle", headerName: "Ticket Title", flex: 1, minWidth: 220, wrapText: true },
+    { field: "fromDepartment", headerName: "From Department", flex: 1.2, minWidth: 210, wrapText: true },
+    { field: "raisedBy", headerName: "Raised By", flex: 1, minWidth: 180, wrapText: true },
 
     {
       field: "status",
       headerName: "Status",
+      width: 150,
+      minWidth: 140,
       cellRenderer: (params) => {
         return (
           <>
@@ -230,6 +237,9 @@ const RecievedTickets = ({ title, departmentId }) => {
       field: "actions",
       headerName: "Actions",
       pinned: "right",
+      // width: 120,
+      // minWidth: 120,
+      // maxWidth: 140,
       cellRenderer: (params) => (
         <div className="flex items-center gap-2">
           <div
@@ -239,50 +249,49 @@ const RecievedTickets = ({ title, departmentId }) => {
           >
             <MdOutlineRemoveRedEye />
           </div>
-          {(!isTop || (isTop && departmentId === topManagementDepartment)) && (
-            <ThreeDotMenu
-              rowId={params.data.id}
-              menuItems={[
-                // Conditionally add "Accept"
-                ...(auth.user.role.length > 0 &&
+
+          <ThreeDotMenu
+            rowId={params.data.id}
+            menuItems={[
+              // Conditionally add "Accept"
+              ...(auth.user.role.length > 0 &&
                 // Case 1: If user is in Top Management & ticket is for Top Management
                 ((auth.user.role[0].roleTitle === "Top Management" &&
                   params.data.raisedToDepartment === "Top Management") ||
                   // Case 2: If user is not Top Management
                   auth.user.role[0].roleTitle !== "Top Management")
-                  ? [
-                      {
-                        label: "Accept",
-                        onClick: () => acceptMutate(params.data),
-                        isLoading: isLoading,
-                      },
-                    ]
-                  : []),
+                ? [
+                  {
+                    label: "Accept",
+                    onClick: () => acceptMutate(params.data),
+                    isLoading: isLoading,
+                  },
+                ]
+                : []),
 
-                // {
-                //   label: "Accept",
-                //   onClick: () => acceptMutate(params.data),
-                //   isLoading: isLoading,
-                // },
-                // Conditionally add "Assign"
-                ...(auth.user.role.length > 0 &&
+              // {
+              //   label: "Accept",
+              //   onClick: () => acceptMutate(params.data),
+              //   isLoading: isLoading,
+              // },
+              // Conditionally add "Assign"
+              ...(auth.user.role.length > 0 &&
                 (auth.user.role[0].roleTitle === "Master Admin" ||
                   auth.user.role[0].roleTitle === "Super Admin" ||
                   auth.user.role[0].roleTitle.endsWith("Admin"))
-                  ? [
-                      {
-                        label: "Assign",
-                        onClick: () => handleOpenAssignModal(params.data.id),
-                      },
-                      {
-                        label: "Reject",
-                        onClick: () => handleRejectClick(params.data), // ✅ open modal
-                      },
-                    ]
-                  : []),
-              ]}
-            />
-          )}
+                ? [
+                  {
+                    label: "Assign",
+                    onClick: () => handleOpenAssignModal(params.data.id),
+                  },
+                  {
+                    label: "Reject",
+                    onClick: () => handleRejectClick(params.data), // ✅ open modal
+                  },
+                ]
+                : []),
+            ]}
+          />
         </div>
       ),
     },
@@ -291,7 +300,10 @@ const RecievedTickets = ({ title, departmentId }) => {
   return (
     <div className="p-4 border-default border-borderGray rounded-md">
       <div className="pb-4">
-        <span className="text-subtitle">{title}</span>
+        {/* <span className="text-subtitle">{title}</span> */}
+        <span className="text-mobileTitle lg:text-widgetTitle text-primary font-pmedium uppercase">
+          {title}
+        </span>
       </div>
       <div className="w-full">
         {isLoading ? (
@@ -311,13 +323,13 @@ const RecievedTickets = ({ title, departmentId }) => {
       </div>
       <MuiModal
         open={openView}
-        onClose={() => setOpenView(false)}
+        onClose={handleCloseTicketView}
         title={"View Ticket"}
       >
         {selectedTicket && (
           <div className="grid grid-cols-1 lg:grid-cols-1 gap-4">
             <DetalisFormatted
-              title="Ticket"
+              title="Ticket Title"
               detail={selectedTicket.ticketTitle}
             />
             <DetalisFormatted
@@ -325,36 +337,31 @@ const RecievedTickets = ({ title, departmentId }) => {
               detail={selectedTicket.description}
             />
             <DetalisFormatted
+              title="From Department"
+              detail={selectedTicket.fromDepartment || "N/A"}
+            />
+            <DetalisFormatted
               title="Raised By"
               detail={`${selectedTicket.raisedBy}`}
             />
             <DetalisFormatted
               title="Raised At"
-              detail={humanDate(new Date(selectedTicket.raisedDate))}
-            />
-            <DetalisFormatted
-              title="From Department"
-              detail={selectedTicket.fromDepartment || "N/A"}
+              detail={formatDateTime(selectedTicket.raisedDate)}
             />
             <DetalisFormatted
               title="Raised To Department"
               detail={selectedTicket.raisedToDepartment || "N/A"}
             />
-            <DetalisFormatted title="Status" detail={selectedTicket.status} />
             <DetalisFormatted
               title="Priority"
               detail={selectedTicket.priority}
             />
+            <DetalisFormatted title="Status" detail={selectedTicket.status} />
 
-            {selectedTicket.image && (
-              <div className="lg:col-span-2">
-                <img
-                  src={selectedTicket.image}
-                  alt="Ticket Attachment"
-                  className="max-w-full max-h-96 rounded border"
-                />
-              </div>
-            )}
+            <TicketAttachments
+              attachments={selectedTicket?.attachments}
+              legacyImage={selectedTicket?.image}
+            />
           </div>
         )}
       </MuiModal>
@@ -406,11 +413,10 @@ const RecievedTickets = ({ title, departmentId }) => {
           <button
             disabled={!rejectionReason.trim() || rejectPending}
             onClick={handleRejectSubmit}
-            className={`${
-              !rejectionReason.trim() || rejectPending
-                ? "bg-gray-400 cursor-not-allowed"
-                : "bg-red-600 hover:bg-red-700"
-            } text-white px-4 py-2 rounded transition`}
+            className={`${!rejectionReason.trim() || rejectPending
+              ? "bg-gray-400 cursor-not-allowed"
+              : "bg-red-600 hover:bg-red-700"
+              } text-white px-4 py-2 rounded transition`}
           >
             {rejectPending ? "Submitting..." : "Submit Rejection"}
           </button>

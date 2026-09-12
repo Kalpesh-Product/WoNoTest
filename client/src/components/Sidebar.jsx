@@ -25,11 +25,16 @@ import { FaUserTie } from "react-icons/fa6";
 import { MdMeetingRoom } from "react-icons/md";
 import { GiAutoRepair } from "react-icons/gi";
 import { GrCafeteria } from "react-icons/gr";
+import { MdGavel } from "react-icons/md";
 import { TiTicket } from "react-icons/ti";
 import SeperatorUnderline from "./SeperatorUnderline";
 import { VscPersonAdd } from "react-icons/vsc";
 import { GrDocumentPerformance } from "react-icons/gr";
+import { FaClipboardUser } from "react-icons/fa6";
+import { IoPrintOutline } from "react-icons/io5";
+import { RiStockLine } from "react-icons/ri";
 import useAuth from "../hooks/useAuth";
+import { PERMISSIONS } from "../constants/permissions";
 
 const Sidebar = ({ drawerOpen, onCloseDrawer }) => {
   const { isSidebarOpen, setIsSidebarOpen } = useSidebar();
@@ -39,84 +44,128 @@ const Sidebar = ({ drawerOpen, onCloseDrawer }) => {
   const [expandedModule, setExpandedModule] = useState(0);
   const { auth } = useAuth();
 
-  const allowedVisitorDeptIds = [
-    "6798bae6e469e809084e24a4",
-    "67b2cf85b9b6ed5cedeb9a2e",
-    "6798ba9de469e809084e2494",
-  ];
+  // const allowedVisitorDeptIds = [
+  //   "6798bae6e469e809084e24a4",
+  //   "67b2cf85b9b6ed5cedeb9a2e",
+  //   "6798ba9de469e809084e2494",
+  // ];
 
   useEffect(() => {
     setMobileOpen(drawerOpen);
   }, [drawerOpen]);
 
-  const userDeptIds = auth?.user?.departments?.map((d) => d._id) || [];
+  const userPermissions = auth?.user?.permissions?.permissions || [];
+  const canAccessSidebarItem = (permission) =>
+    !permission || userPermissions.includes(permission);
 
-  const canAccessVisitors = userDeptIds.some((id) =>
-    allowedVisitorDeptIds.includes(id)
-  );
+  // const userDeptIds = auth?.user?.departments?.map((d) => d._id) || [];
+
+  // const canAccessVisitorsByDepartment = userDeptIds.some((id) =>
+  //   allowedVisitorDeptIds.includes(id),
+  // );
 
   // Menu items array (without DASHBOARD)
   const menuItems = [
     {
+      name: "Assets",
+      icon: <FaBoxesStacked />,
+      route: "assets",
+      permission: PERMISSIONS.SIDEBAR_ASSETS.value,
+    },
+    {
       name: "Tickets",
       icon: <TiTicket />,
       route: "tickets",
+      permission: PERMISSIONS.SIDEBAR_TICKETS.value,
     },
     {
       name: "Meetings",
       icon: <MdMeetingRoom />,
       route: "meetings",
+      permission: PERMISSIONS.SIDEBAR_MEETINGS.value,
     },
     {
       name: "Tasks",
       icon: <FaTasks />,
       route: "tasks",
+      permission: PERMISSIONS.SIDEBAR_TASKS.value,
     },
 
     {
       name: "Performance",
       icon: <GrDocumentPerformance />,
       route: "performance",
+      permission: PERMISSIONS.SIDEBAR_PERFORMANCE.value,
     },
 
-    ...(canAccessVisitors
-      ? [
-          {
-            name: "Visitors",
-            icon: <VscPersonAdd />,
-            route: "visitors",
-          },
-        ]
-      : []),
-  ];
+    {
+      name: "Visitors",
+      icon: <VscPersonAdd />,
+      route: "visitors",
+      permission: PERMISSIONS.SIDEBAR_VISITORS.value,
+    },
+    {
+     name: "Reports",
+      icon: <TbReportSearch />,
+      route: "reports",
+      permission: PERMISSIONS.SIDEBAR_REPORTS.value,
+    },
+     {
+     name: "Printout",
+      icon: <IoPrintOutline />,
+      route: "printouts",
+      permission: PERMISSIONS.SIDEBAR_PRINTOUTS.value,
+    },
+     ].filter((item) => canAccessSidebarItem(item.permission));
+  // ].filter(
+  //   (item) =>
+  //     canAccessSidebarItem(item.permission) &&
+  //     (item.route !== "visitors" || canAccessVisitorsByDepartment),
+  // );
+
+
 
   const generalItems = [
-    { name: "Calendar", icon: <FaRegCalendarAlt />, route: "calendar" },
-    { name: "Access", icon: <SiAuthelia />, route: "access" },
+    {
+      name: "Calendar",
+      icon: <FaRegCalendarAlt />,
+      route: "calendar",
+      permission: PERMISSIONS.SIDEBAR_CALENDAR.value,
+    },
+    {
+      name: "Access",
+      icon: <SiAuthelia />,
+      route: "access",
+      permission: PERMISSIONS.SIDEBAR_ACCESS.value,
+    },
     {
       name: "Notifications",
       icon: <IoMdNotifications />,
       route: "notifications",
+      permission: PERMISSIONS.SIDEBAR_NOTIFICATIONS.value,
     },
     {
       name: "Profile",
       icon: <FaUserTie />,
       route: "profile",
+      permission: PERMISSIONS.SIDEBAR_PROFILE.value,
     },
-  ];
+  ].filter((item) => canAccessSidebarItem(item.permission));
+
   const upcomingItems = [
     {
-      name: "Reports",
-      icon: <TbReportSearch />,
+      name: "Chat",
+      icon: <HiOutlineChatAlt2 />,
       route: "#",
+      permission: PERMISSIONS.SIDEBAR_CHAT.value,
     },
-    {
-      name: "Assets",
-      icon: <FaBoxesStacked />,
-      route: "#",
+     {
+      name: "Logs",
+      icon: <FaClipboardUser />,
+      route: "secret-logs",
+      permission: PERMISSIONS.SIDEBAR_LOGS.value,
     },
-    { name: "Chat", icon: <HiOutlineChatAlt2 />, route: "#" },
-  ];
+  ].filter((item) => canAccessSidebarItem(item.permission));
 
   const defaultModules = [
     {
@@ -124,13 +173,23 @@ const Sidebar = ({ drawerOpen, onCloseDrawer }) => {
       icon: <MdHome />,
       title: "Dashboard",
       route: "/app/dashboard",
+      permission: PERMISSIONS.SIDEBAR_DASHBOARD.value,
       submenus: [
+         {
+          id: 11,
+          title: "Investor Dashboard",
+          codeName: "Investor",
+          route: "/app/dashboard/investor-dashboard",
+          icon: <RiStockLine />,
+          permission: PERMISSIONS.SIDEBAR_INVESTOR_DASHBOARD.value,
+        },
         {
           id: 4,
           title: "Finance Dashboard",
           codeName: "Finance",
           route: "/app/dashboard/finance-dashboard",
           icon: <TbCashRegister />,
+          permission: PERMISSIONS.SIDEBAR_FINANCE_DASHBOARD.value,
         },
         {
           id: 5,
@@ -138,6 +197,7 @@ const Sidebar = ({ drawerOpen, onCloseDrawer }) => {
           codeName: "Sales",
           icon: <FaChartLine />,
           route: "/app/dashboard/sales-dashboard",
+          permission: PERMISSIONS.SIDEBAR_SALES_DASHBOARD.value,
         },
         {
           id: 3,
@@ -145,6 +205,7 @@ const Sidebar = ({ drawerOpen, onCloseDrawer }) => {
           codeName: "HR",
           icon: <RiAdminFill />,
           route: "/app/dashboard/HR-dashboard",
+          permission: PERMISSIONS.SIDEBAR_HR_DASHBOARD.value,
         },
 
         {
@@ -153,6 +214,7 @@ const Sidebar = ({ drawerOpen, onCloseDrawer }) => {
           codeName: "Tec",
           icon: <FaLaptopCode />,
           route: "/app/dashboard/frontend-dashboard",
+          permission: PERMISSIONS.SIDEBAR_FRONTEND_DASHBOARD.value,
         },
 
         {
@@ -161,6 +223,7 @@ const Sidebar = ({ drawerOpen, onCloseDrawer }) => {
           codeName: "Administration",
           route: "/app/dashboard/admin-dashboard",
           icon: <FaUserShield />,
+          permission: PERMISSIONS.SIDEBAR_ADMIN_DASHBOARD.value,
         },
 
         {
@@ -169,6 +232,7 @@ const Sidebar = ({ drawerOpen, onCloseDrawer }) => {
           codeName: "Maintenance",
           route: "/app/dashboard/maintenance-dashboard",
           icon: <GiAutoRepair />,
+          permission: PERMISSIONS.SIDEBAR_MAINTENANCE_DASHBOARD.value,
         },
         {
           id: 9,
@@ -176,6 +240,7 @@ const Sidebar = ({ drawerOpen, onCloseDrawer }) => {
           codeName: "IT",
           route: "/app/dashboard/IT-dashboard",
           icon: <FaLaptopMedical />,
+          permission: PERMISSIONS.SIDEBAR_IT_DASHBOARD.value,
         },
 
         {
@@ -184,32 +249,39 @@ const Sidebar = ({ drawerOpen, onCloseDrawer }) => {
           codeName: "Cafe",
           route: "/app/dashboard/cafe-dashboard",
           icon: <GrCafeteria />,
+          permission: PERMISSIONS.SIDEBAR_CAFE_DASHBOARD.value,
+        },
+        {
+          id: 10,
+          title: "Legal Dashboard",
+          codeName: "Legal",
+          route: "/app/dashboard/legal-dashboard",
+          icon: <MdGavel />,
+          permission: PERMISSIONS.SIDEBAR_LEGAL_DASHBOARD.value,
         },
       ],
     },
   ];
 
-  const userDepartments = auth.user.departments.map((item) => item.name);
+  const filteredModules = defaultModules
+    .map((module) => {
+      const filteredSubmenus = module.submenus.filter((submenu) =>
+        canAccessSidebarItem(submenu.permission),
+      );
 
-  // First, attempt to filter submenus based on user departments
-  const filteredModules = defaultModules.map((module) => {
-    const filteredSubmenus = module.submenus.filter((submenu) =>
-      userDepartments.includes(submenu.codeName)
-    );
+      const hasModulePermission = canAccessSidebarItem(module.permission);
 
-    return {
-      ...module,
-      submenus: filteredSubmenus,
-    };
-  });
+      if (!hasModulePermission && filteredSubmenus.length === 0) {
+        return null;
+      }
 
-  // Check if all submenus are empty
-  const hasAnySubmenus = filteredModules.some(
-    (module) => module.submenus.length > 0
-  );
-
-  // If none match, return the original defaultModules
-  const finalModules = hasAnySubmenus ? filteredModules : defaultModules;
+      return {
+        ...module,
+        hasModulePermission,
+        submenus: filteredSubmenus,
+      };
+    })
+    .filter(Boolean);
 
   const handleMenuOpen = (item) => {
     navigate(item.route);
@@ -226,45 +298,43 @@ const Sidebar = ({ drawerOpen, onCloseDrawer }) => {
   return (
     <div className={`flex flex-col px-2  bg-gray`}>
       <div
-        className={`${
-          isSidebarOpen ? "w-60" : "w-16"
-        } bg-white  text-black flex flex-shrink-0 h-[90vh] hideScrollBar overflow-y-auto transition-all duration-100 z-[1]`}
+        className={`${isSidebarOpen ? "w-60" : "w-16"
+          } bg-white  text-black flex flex-shrink-0 h-[90vh] hideScrollBar overflow-y-auto transition-all duration-100 z-[1]`}
       >
         <div className="flex relative w-full">
           <div className="p-0 flex flex-col gap-2 w-full">
             <div
-              className={`rounded-md  ${
-                expandedModule === 0 ? "bg-gray-200" : "bg-white"
-              }`}
+              className={`rounded-md  ${expandedModule === 0 ? "bg-gray-200" : "bg-white"
+                }`}
             >
-              {finalModules.map((module, index) => (
+              {filteredModules.map((module, index) => (
                 <div key={index} className="">
                   <div
-                    className={`cursor-pointer text-gray-500  flex ${
-                      expandedModule === null && isSidebarOpen
-                        ? "justify-between pr-2"
-                        : expandedModule === 0 && isSidebarOpen
+                    className={`cursor-pointer text-gray-500  flex ${expandedModule === null && isSidebarOpen
+                      ? "justify-between pr-2"
+                      : expandedModule === 0 && isSidebarOpen
                         ? "justify-between text-[#1E3D73] pr-2"
                         : "justify-center pr-0"
-                    } items-center   ${
-                      expandedModule === 0 &&
+                      } items-center   ${expandedModule === 0 &&
                       "bg-gray-200 rounded-t-md text-black"
-                    }  ${
-                      isActive(module.route)
+                      }  ${isActive(module.route)
                         ? "text-primary border-r-4 transition-all duration-100 rounded-tl-md rounded-bl-md "
                         : ""
-                    }`}
+                      }`}
                     onClick={() => {
-                      navigate(module.route);
+                      if (module.hasModulePermission) {
+                        navigate(module.route);
+                      } else if (module.submenus?.length) {
+                        toggleModule(index);
+                      }
                     }}
                   >
                     <div className="flex justify-start items-center">
                       <div
-                        className={`flex items-center justify-center text-sm h-9 w-9 ${
-                          expandedModule === 0
-                            ? "bg-primary text-white rounded-md"
-                            : ""
-                        }`}
+                        className={`flex items-center justify-center text-sm h-9 w-9 ${expandedModule === 0
+                          ? "bg-primary text-white rounded-md"
+                          : ""
+                          }`}
                       >
                         {module.icon}
                       </div>
@@ -275,9 +345,8 @@ const Sidebar = ({ drawerOpen, onCloseDrawer }) => {
                     {isSidebarOpen && module.submenus && (
                       <span
                         onClick={() => module.submenus && toggleModule(index)}
-                        className={`transition-transform duration-300 ease-in-out ${
-                          expandedModule === index ? "rotate-180" : "rotate-0"
-                        }`}
+                        className={`transition-transform duration-300 ease-in-out ${expandedModule === index ? "rotate-180" : "rotate-0"
+                          }`}
                       >
                         {expandedModule === index ? (
                           <FaChevronUp />
@@ -288,33 +357,29 @@ const Sidebar = ({ drawerOpen, onCloseDrawer }) => {
                     )}
                   </div>
                   <div
-                    className={`overflow-hidden transition-[max-height] duration-300 ease-in-out ${
-                      expandedModule === index ? "max-h-[500px]" : "max-h-0"
-                    }`}
+                    className={`overflow-hidden transition-[max-height] duration-300 ease-in-out ${expandedModule === index ? "max-h-[500px]" : "max-h-0"
+                      }`}
                   >
                     {module.submenus && (
                       <div>
                         {module.submenus.map((submenu, idx) => (
                           <div
                             key={idx}
-                            className={`cursor-pointer  hover:text-[#1E3D73] transition-all duration-100 ${
-                              isActive(submenu.route)
-                                ? "text-[#1E3D73]"
-                                : "text-gray-500"
-                            }  py-3`}
+                            className={`cursor-pointer  hover:text-[#1E3D73] transition-all duration-100 ${isActive(submenu.route)
+                              ? "text-[#1E3D73]"
+                              : "text-gray-500"
+                              }  py-3`}
                             onClick={() => handleMenuOpen(submenu)}
                           >
                             <div
-                              className={`flex items-center ${
-                                isSidebarOpen
-                                  ? "justify-start"
-                                  : "justify-center"
-                              }`}
+                              className={`flex items-center ${isSidebarOpen
+                                ? "justify-start"
+                                : "justify-center"
+                                }`}
                             >
                               <div
-                                className={`flex justify-center  items-center w-8 ${
-                                  isSidebarOpen ? "text-sm" : "text-sm"
-                                }`}
+                                className={`flex justify-center  items-center w-8 ${isSidebarOpen ? "text-sm" : "text-sm"
+                                  }`}
                               >
                                 {submenu.icon}
                               </div>
@@ -333,95 +398,92 @@ const Sidebar = ({ drawerOpen, onCloseDrawer }) => {
               ))}
             </div>
             {/* menuitems */}
-            <div className="pt-2  flex flex-col gap-2 w-full">
-              <SeperatorUnderline title={"Apps"} />
-              {menuItems.map((item, index) => (
-                <div
-                  key={index}
-                  onClick={() => handleMenuOpen(item)}
-                  className={`cursor-pointer hover:text-primary transition-all duration-100 ${
-                    isAppsActive(item.route)
+            {menuItems.length > 0 && (
+              <div className="pt-2  flex flex-col gap-2 w-full">
+                <SeperatorUnderline title={"Apps"} />
+                {menuItems.map((item, index) => (
+                  <div
+                    key={index}
+                    onClick={() => handleMenuOpen(item)}
+                    className={`cursor-pointer hover:text-primary transition-all duration-100 ${isAppsActive(item.route)
                       ? "text-primary bg-gray-200 rounded-md"
                       : "text-gray-500"
-                  } flex ${
-                    isSidebarOpen ? "" : "justify-center"
-                  } items-center py-0 `}
-                >
-                  <div
-                    className={`flex justify-center items-center w-9 h-9 ${
-                      isAppsActive(item.route)
+                      } flex ${isSidebarOpen ? "" : "justify-center"
+                      } items-center py-0 `}
+                  >
+                    <div
+                      className={`flex justify-center items-center w-9 h-9 ${isAppsActive(item.route)
                         ? "bg-primary text-white rounded-md"
                         : ""
-                    } text-sm`}
-                  >
-                    {item.icon}
+                        } text-sm`}
+                    >
+                      {item.icon}
+                    </div>
+                    {isSidebarOpen && (
+                      <span className="pl-5 text-sm">{item.name}</span>
+                    )}
                   </div>
-                  {isSidebarOpen && (
-                    <span className="pl-5 text-sm">{item.name}</span>
-                  )}
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
             {/* general */}
-            <div className="pt-2  flex flex-col gap-2 w-full">
-              <SeperatorUnderline title={"General"} />
-              {generalItems.map((item, index) => (
-                <div
-                  key={index}
-                  onClick={() => handleMenuOpen(item)}
-                  className={`cursor-pointer hover:text-primary transition-all duration-100 ${
-                    isAppsActive(item.route)
+            {generalItems.length > 0 && (
+              <div className="pt-2  flex flex-col gap-2 w-full">
+                <SeperatorUnderline title={"General"} />
+                {generalItems.map((item, index) => (
+                  <div
+                    key={index}
+                    onClick={() => handleMenuOpen(item)}
+                    className={`cursor-pointer hover:text-primary transition-all duration-100 ${isAppsActive(item.route)
                       ? "text-primary bg-gray-200 rounded-md"
                       : "text-gray-500"
-                  } flex ${
-                    isSidebarOpen ? "" : "justify-center"
-                  } items-center py-0 `}
-                >
-                  <div
-                    className={`flex justify-center items-center w-9 h-9 ${
-                      isAppsActive(item.route)
+                      } flex ${isSidebarOpen ? "" : "justify-center"
+                      } items-center py-0 `}
+                  >
+                    <div
+                      className={`flex justify-center items-center w-9 h-9 ${isAppsActive(item.route)
                         ? "bg-primary text-white rounded-md"
                         : ""
-                    } text-sm`}
-                  >
-                    {item.icon}
+                        } text-sm`}
+                    >
+                      {item.icon}
+                    </div>
+                    {isSidebarOpen && (
+                      <span className="pl-5 text-sm">{item.name}</span>
+                    )}
                   </div>
-                  {isSidebarOpen && (
-                    <span className="pl-5 text-sm">{item.name}</span>
-                  )}
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
             {/* coming soon */}
-            <div className="pt-2  flex flex-col gap-2 w-full">
-              <SeperatorUnderline smallText title={"Coming-soon"} />
-              {upcomingItems.map((item, index) => (
-                <div
-                  key={index}
-                  onClick={() => handleMenuOpen(item)}
-                  className={`cursor-pointer hover:text-primary transition-all duration-100 ${
-                    isAppsActive(item.route)
+            {upcomingItems.length > 0 && (
+              <div className="pt-2  flex flex-col gap-2 w-full">
+                <SeperatorUnderline smallText title={"Coming-soon"} />
+                {upcomingItems.map((item, index) => (
+                  <div
+                    key={index}
+                    onClick={() => handleMenuOpen(item)}
+                    className={`cursor-pointer hover:text-primary transition-all duration-100 ${isAppsActive(item.route)
                       ? "text-primary bg-gray-200 rounded-md"
                       : "text-gray-500"
-                  } flex ${
-                    isSidebarOpen ? "" : "justify-center"
-                  } items-center py-0 `}
-                >
-                  <div
-                    className={`flex justify-center items-center w-9 h-9 ${
-                      isAppsActive(item.route)
+                      } flex ${isSidebarOpen ? "" : "justify-center"
+                      } items-center py-0 `}
+                  >
+                    <div
+                      className={`flex justify-center items-center w-9 h-9 ${isAppsActive(item.route)
                         ? "bg-primary text-white rounded-md"
                         : ""
-                    } text-sm`}
-                  >
-                    {item.icon}
+                        } text-sm`}
+                    >
+                      {item.icon}
+                    </div>
+                    {isSidebarOpen && (
+                      <span className="pl-5 text-sm">{item.name}</span>
+                    )}
                   </div>
-                  {isSidebarOpen && (
-                    <span className="pl-5 text-sm">{item.name}</span>
-                  )}
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>

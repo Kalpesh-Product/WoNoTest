@@ -103,7 +103,7 @@ const Shifts = () => {
     mutationFn: async (payload) => {
       const response = await axios.patch(
         "/api/company/update-company-data",
-        payload
+        payload,
       );
       return response.data;
     },
@@ -114,7 +114,7 @@ const Shifts = () => {
         toast.success("Shift updated");
       }
 
-      queryClient.invalidateQueries(["shifts"]);
+      queryClient.invalidateQueries({ queryKey: ["shifts"] });
       setOpenModal(false);
       resetEditForm();
     },
@@ -126,7 +126,7 @@ const Shifts = () => {
   const fetchShifts = async () => {
     try {
       const response = await axios.get(
-        "/api/company/get-company-data/?field=shifts"
+        "/api/company/get-company-data/?field=shifts",
       );
       return response.data.shifts;
     } catch (error) {
@@ -156,10 +156,11 @@ const Shifts = () => {
   };
 
   const departmentsColumn = [
-    { field: "id", headerName: "Sr No" },
+    { field: "id", headerName: "Sr No", width: 300 },
     {
       field: "shift",
       headerName: "Shift List",
+      flex: 1,
       cellRenderer: (params) => {
         return (
           <div>
@@ -167,11 +168,11 @@ const Shifts = () => {
           </div>
         );
       },
-      flex: 1,
     },
     {
       field: "status",
       headerName: "Status",
+      sort: "desc",
       flex: 1,
       cellRenderer: (params) => {
         const status = params.value ? "Active" : "Inactive"; // Map boolean to string status
@@ -195,6 +196,20 @@ const Shifts = () => {
           />
         );
       },
+    },
+    {
+      field: "startTime",
+      headerName: "Start Time",
+      flex: 1,
+      hide: true,
+      valueGetter: (params) => humanTime(params?.data?.startTime) || "N/A",
+    },
+    {
+      field: "endTime",
+      headerName: "End Time",
+      flex: 1,
+      hide: true,
+      valueGetter: (params) => humanTime(params?.data?.endTime) || "N/A",
     },
     {
       field: "actions",
@@ -280,6 +295,7 @@ const Shifts = () => {
             })),
           ]}
           columns={departmentsColumn}
+          exportData
         />
 
         <div>
@@ -436,7 +452,13 @@ const Shifts = () => {
                   name="isActive"
                   control={editControl}
                   render={({ field }) => (
-                    <TextField {...field} size="small" select fullWidth>
+                    <TextField
+                      {...field}
+                      size="small"
+                      label="Active Status"
+                      select
+                      fullWidth
+                    >
                       <MenuItem value="" disabled>
                         Select Active Status
                       </MenuItem>

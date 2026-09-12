@@ -4,9 +4,51 @@ import PageFrame from "../../../../components/Pages/PageFrame";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import useAxiosPrivate from "../../../../hooks/useAxiosPrivate";
-import { setClientData, } from "../../../../redux/slices/salesSlice";
+import { setClientData } from "../../../../redux/slices/salesSlice";
 import { setSelectedClient } from "../../../../redux/slices/clientSlice";
+import { Chip } from "@mui/material";
 
+const MILLISECONDS_PER_DAY = 24 * 60 * 60 * 1000;
+
+const getCalendarDateInUtc = (value) => {
+  const date = new Date(value);
+  const dateParts =
+    typeof value === "string" && value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+
+  if (dateParts) {
+    return Date.UTC(
+      Number(dateParts[1]),
+      Number(dateParts[2]) - 1,
+      Number(dateParts[3]),
+    );
+  }
+
+  return Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
+};
+
+const calculateAgreementExpiry = (startDate, endDate) => {
+  const startDay = getCalendarDateInUtc(startDate);
+  const endDay = getCalendarDateInUtc(endDate);
+
+  if (
+    !startDate ||
+    !endDate ||
+    Number.isNaN(startDay) ||
+    Number.isNaN(endDay) ||
+    endDay < startDay
+  ) {
+    return "-";
+  }
+
+  const today = getCalendarDateInUtc(new Date());
+  const totalDays = Math.round((endDay - startDay) / MILLISECONDS_PER_DAY);
+  const remainingDays = Math.min(
+    totalDays,
+    Math.max(0, Math.round((endDay - today) / MILLISECONDS_PER_DAY)),
+  );
+
+  return `${remainingDays}/${totalDays} ${totalDays === 1 ? "day" : "days"}`;
+};
 
 const CoWorkingClients = () => {
   const navigate = useNavigate();
@@ -15,20 +57,18 @@ const CoWorkingClients = () => {
   const dispatch = useDispatch();
   const axios = useAxiosPrivate();
   useEffect(() => {
-    const fetchSourceIfEmpty = async () => {
-      if (clientsData.length === 0) {
-        try {
-          const response = await axios.get("/api/sales/co-working-clients");
-          dispatch(setClientData(response.data));
-        } catch (error) {
-          console.error("Failed to fetch leads", error);
-        }
+    const fetchClients = async () => {
+      try {
+        const response = await axios.get("/api/sales/co-working-clients");
+        dispatch(setClientData(response.data));
+      } catch (error) {
+        console.error("Failed to fetch leads", error);
       }
     };
 
-    fetchSourceIfEmpty();
-  }, [clientsData, dispatch]);
-   const handleClickRow = (clientData) => {
+    fetchClients();
+  }, [axios, dispatch]);
+  const handleClickRow = (clientData) => {
     dispatch(setSelectedClient(clientData));
     const isMixBag = location.pathname.includes("mix-bag");
     const isRevenueBasePath =
@@ -38,16 +78,16 @@ const CoWorkingClients = () => {
     if (isMixBag && isRevenueBasePath) {
       navigate(
         `/app/dashboard/sales-dashboard/mix-bag/clients/co-working/${clientData.clientName}`,
-        { replace: true }
+        { replace: true },
       );
     } else if (!isMixBag && isRevenueBasePath) {
       navigate(
-        `/app/dashboard/sales-dashboard/clients/co-working/${clientData.clientName}`
+        `/app/dashboard/sales-dashboard/clients/co-working/${clientData.clientName}`,
       );
     }
   };
   const viewEmployeeColumns = [
-    { field: "id", headerName: "Sr No" },
+    { field: "id", headerName: "Sr No",width:150 },
     {
       field: "clientName",
       headerName: "Client Name",
@@ -65,11 +105,39 @@ const CoWorkingClients = () => {
         </span>
       ),
     },
-    { field: "desks", headerName: "Desks" },
+    { field: "desks", headerName: "Desks", flex:0.5},
     {
       field: "occupancy",
       headerName: "Occupancy (%)",
+      flex: 0.5,
       cellRenderer: (params) => `${params.value}%`,
+    },
+    { field: "agreementExpiry", headerName: "Agreement Expiry", flex: 0.5,},
+     {
+      field: "status",
+      headerName: "Status",
+      sort: 'desc',
+      flex: 1,
+      pinned:"right",
+      cellRenderer: (params) => {
+        const status = params.value ? "Active" : "Inactive";
+        const statusColorMap = {
+          Inactive: { backgroundColor: "#FFECC5", color: "#CC8400" },
+          Active: { backgroundColor: "#90EE90", color: "#006400" },
+        };
+
+        const { backgroundColor, color } = statusColorMap[status];
+
+        return (
+          <Chip
+            label={status}
+            style={{
+              backgroundColor,
+              color,
+            }}
+          />
+        );
+      },
     },
   ];
 
@@ -79,52 +147,53 @@ const CoWorkingClients = () => {
     return desksB - desksA; // Descending
   });
   const tableData = sortedClients.map((item, index) => ({
+    ...item,
     id: index + 1,
-    _id: item._id,
-    company: item.company,
-    clientName: item.clientName,
+    // _id: item._id,
+    // company: item.company,
+    // clientName: item.clientName,
+    status: item.isActive,
     serviceName: item.service?.serviceName,
     serviceDescription: item.service?.description,
-    sector: item.sector,
-    hoCity: item.hoCity,
-    bookingType: item.bookingType,
-    hoState: item.hoState,
+    // sector: item.sector,
+    // hoCity: item.hoCity,
+    // bookingType: item.bookingType,
+    // hoState: item.hoState,
     unitName: item.unit?.unitName,
     unitNo: item.unit?.unitNo,
     buildingName: item.unit?.building?.buildingName,
     buildingAddress: item.unit?.building?.fullAddress,
     cabinDesks: item.cabinDesks || 0,
-    openDesks: item.openDesks,
-    totalDesks: item.totalDesks,
+    // openDesks: item.openDesks,
+    // totalDesks: item.totalDesks,
     desks: Number(item.openDesks || 0) + Number(item.cabinDesks),
     occupancy: (
       ((Number(item.openDesks || 0) + Number(item.cabinDesks)) / 589) *
       100
     ).toFixed(1),
-    ratePerOpenDesk: item.ratePerOpenDesk,
-    ratePerCabinDesk: item.ratePerCabinDesk,
-    annualIncrement: item.annualIncrement,
-    perDeskMeetingCredits: item.perDeskMeetingCredits,
-    totalMeetingCredits: item.totalMeetingCredits,
-    startDate: item.startDate,
-    endDate: item.endDate,
-    lockinPeriod: item.lockinPeriod,
-    rentDate: item.rentDate,
-    nextIncrement: item.nextIncrement,
+    agreementExpiry: calculateAgreementExpiry(item.startDate, item.endDate),
+    // ratePerOpenDesk: item.ratePerOpenDesk,
+    // ratePerCabinDesk: item.ratePerCabinDesk,
+    // annualIncrement: item.annualIncrement,
+    // perDeskMeetingCredits: item.perDeskMeetingCredits,
+    // totalMeetingCredits: item.totalMeetingCredits,
+    // startDate: item.startDate,
+    // endDate: item.endDate,
+    // lockinPeriod: item.lockinPeriod,
+    // rentDate: item.rentDate,
+    // nextIncrement: item.nextIncrement,
     localPocName: item.localPoc?.name,
     localPocEmail: item.localPoc?.email,
     localPocPhone: item.localPoc?.phone,
     hoPocName: item.hOPoc?.name,
     hoPocEmail: item.hOPoc?.email || "",
     hoPocPhone: item.hOPoc?.phone,
-    isActive: item.isActive,
-    createdAt: item.createdAt,
-    updatedAt: item.updatedAt,
+    // isActive: item.isActive,
+    // createdAt: item.createdAt,
+    // updatedAt: item.updatedAt,
     occupiedImage: item.occupiedImage?.imageUrl,
     members: item.members || [],
   }));
-
- 
 
   return (
     <div className="p-4">
@@ -134,9 +203,14 @@ const CoWorkingClients = () => {
             search={true}
             tableTitle={"CO-WORKING CLIENT DETAILS"}
             buttonTitle={"Add Client"}
-            handleClick={() => navigate("/app/dashboard/sales-dashboard/mix-bag/clients/co-working/client-onboarding")}
+            handleClick={() =>
+              navigate(
+                "/app/dashboard/sales-dashboard/mix-bag/clients/co-working/client-onboarding",
+              )
+            }
             data={tableData}
             columns={viewEmployeeColumns}
+            exportData
           />
         </PageFrame>
       </div>{" "}

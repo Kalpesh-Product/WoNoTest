@@ -1,5 +1,5 @@
 const Agreements = require("../../models/hr/Agreements");
-const { handleDocumentUpload } = require("../../config/cloudinaryConfig");
+const { handleDocumentUpload } = require("../../config/s3Config");
 const { PDFDocument } = require("pdf-lib");
 const { default: mongoose } = require("mongoose");
 const UserData = require("../../models/hr/UserData");
@@ -71,19 +71,26 @@ const addAgreement = async (req, res, next) => {
         .json({ message: "Failed to upload agreement document" });
     }
 
-    const agreement = new Agreements({
-      name: agreementName,
-      user: userId,
-      url: response.secure_url,
-      id: response.public_id,
-      isActive: true,
-    });
-
-    await agreement.save();
+    const agreement = await Agreements.findOneAndUpdate(
+      { user: userId, name: agreementName },
+      {
+        $set: {
+          name: agreementName,
+          user: userId,
+          url: response.secure_url,
+          id: response.public_id,
+          isActive: true,
+          isDeleted: false,
+        },
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true },
+    );
 
     return res.status(201).json({
       message: "Agreement uploaded successfully",
       agreementId: agreement._id,
+      agreementUrl: agreement.url,
+      agreement,
     });
   } catch (error) {
     console.error("Add Agreement Error:", error);

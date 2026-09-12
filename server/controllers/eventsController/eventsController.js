@@ -1,6 +1,10 @@
 const Event = require("../../models/events/Events");
 const { Readable } = require("stream");
 const csvParser = require("csv-parser");
+const { default: mongoose } = require("mongoose");
+const {
+  fetchHolidayAndEventsService,
+} = require("../../services/reports/holidayEvent");
 
 const createEvent = async (req, res, next) => {
   const { company } = req;
@@ -18,9 +22,11 @@ const createEvent = async (req, res, next) => {
       return res.status(400).json({ message: "Invalid date format" });
     }
 
+    const normalizedType = String(type).trim().toLowerCase();
+
     const newEvent = new Event({
       title,
-      type,
+      type: normalizedType,
       description,
       start: startDate,
       end: endDate,
@@ -35,6 +41,88 @@ const createEvent = async (req, res, next) => {
   }
 };
 
+const editEvent = async (req, res, next) => {
+  try {
+    const { eventId } = req.params;
+    const { title, description, start, end, allDay, active } = req.body;
+    const { company } = req;
+
+    if (!eventId) {
+      return res.status(400).json({ message: "Event ID is required" });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(eventId)) {
+      return res.status(400).json({ message: "Invalid event ID" });
+    }
+
+    const updatePayload = {};
+
+    if (title !== undefined) updatePayload.title = title;
+    if (description !== undefined) updatePayload.description = description;
+    if (allDay !== undefined) updatePayload.allDay = allDay;
+    if (active !== undefined) updatePayload.active = active;
+
+    let startDate, endDate;
+
+    if (start !== undefined) {
+      startDate = new Date(start);
+      if (isNaN(startDate.getTime())) {
+        return res.status(400).json({ message: "Invalid start date" });
+      }
+      updatePayload.start = startDate;
+    }
+
+    if (end !== undefined) {
+      endDate = new Date(end);
+      if (isNaN(endDate.getTime())) {
+        return res.status(400).json({ message: "Invalid end date" });
+      }
+      updatePayload.end = endDate;
+    }
+
+    const existingEvent = await Event.findOne({ _id: eventId, company }).lean();
+
+    if (!existingEvent) {
+      return res.status(404).json({ message: "Event not found" });
+    }
+
+    const effectiveStart = start ? new Date(start) : existingEvent.start;
+
+    const effectiveEnd = end ? new Date(end) : existingEvent.end;
+
+    if (isNaN(effectiveStart.getTime()) || isNaN(effectiveEnd.getTime())) {
+      return res.status(400).json({ message: "Invalid date format" });
+    }
+
+    if (effectiveEnd < effectiveStart) {
+      return res.status(400).json({
+        message: "End date cannot be earlier than start date",
+      });
+    }
+
+    if (Object.keys(updatePayload).length === 0) {
+      return res.status(400).json({ message: "No update fields provided" });
+    }
+
+    const updatedEvent = await Event.findOneAndUpdate(
+      { _id: eventId, company },
+      updatePayload,
+      { new: true },
+    ).lean();
+
+    if (!updatedEvent) {
+      return res.status(404).json({ message: "Event not found" });
+    }
+
+    return res.status(200).json({
+      message: "Event updated successfully",
+      event: updatedEvent,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 const getAllEvents = async (req, res, next) => {
   try {
     const { company } = req.userData;
@@ -42,47 +130,52 @@ const getAllEvents = async (req, res, next) => {
 
     let query = { company };
 
-    if (thisMonth === "true") {
-      const now = new Date();
-      const year = now.getFullYear();
-      const month = now.getMonth(); // 0-indexed
+    // if (thisMonth === "true") {
+    //   const now = new Date();
+    //   const year = now.getFullYear();
+    //   const month = now.getMonth(); // 0-indexed
 
-      const startOfMonth = new Date(year, month, 1);
-      const endOfMonth = new Date(year, month + 1, 0, 23, 59, 59, 999);
+    //   const startOfMonth = new Date(year, month, 1);
+    //   const endOfMonth = new Date(year, month + 1, 0, 23, 59, 59, 999);
 
-      query.start = { $gte: startOfMonth, $lte: endOfMonth };
-    }
+    //   query.start = { $gte: startOfMonth, $lte: endOfMonth };
+    // }
 
-    const events = await Event.find(query);
+    // const events = await Event.find(query);
 
-    if (!events || events.length === 0) {
-      return res.status(200).json([]);
-    }
+    // if (!events || events.length === 0) {
+    //   return res.status(200).json([]);
+    // }
 
-    const eventsData = events.map((event) => ({
-      id: event._id,
-      title: event.title,
-      start: event.start,
-      end: event.end,
-      allDay: event.allDay,
-      description: event.description,
-      active: event.active,
-      backgroundColor:
-        event.type === "Holiday"
-          ? "#4caf50"
-          : event.type === "Meeting"
-          ? "purple"
-          : event.type === "Task"
-          ? "yellow"
-          : event.type === "Event"
-          ? "blue"
-          : event.type === "Birthday"
-          ? "#ff9800"
-          : "",
-      extendedProps: {
-        type: event.type,
-      },
-    }));
+    // const eventsData = events.map((event) => ({
+    //   id: event._id,
+    //   title: event.title,
+    //   start: event.start,
+    //   end: event.end,
+    //   allDay: event.allDay,
+    //   description: event.description,
+    //   active: event.active,
+    //   backgroundColor:
+    //     event.type === "Holiday"
+    //       ? "#4caf50"
+    //       : event.type === "Meeting"
+    //         ? "purple"
+    //         : event.type === "Task"
+    //           ? "yellow"
+    //           : event.type === "Event"
+    //             ? "blue"
+    //             : event.type === "Birthday"
+    //               ? "#ff9800"
+    //               : "",
+    //   extendedProps: {
+    //     type: event.type,
+    //   },
+    // }));
+
+    const eventsData = await fetchHolidayAndEventsService({
+      company,
+      thisMonth,
+    });
 
     res.status(200).json(eventsData);
   } catch (error) {
@@ -94,7 +187,11 @@ const getNormalEvents = async (req, res, next) => {
   try {
     const { company } = req.userData;
 
-    const normalEvents = await Event.find({ company: company, type: "event" });
+    const normalEvents = await Event.find({
+      company: company,
+      type: { $in: ["event", "Event"] },
+      active: true,
+    });
 
     if (!normalEvents || normalEvents.length < 0) {
       res.status(400).json({ message: "No event found" });
@@ -110,7 +207,11 @@ const getHolidays = async (req, res, next) => {
   try {
     const { company } = req.userData;
 
-    const holidays = await Event.find({ company: company, type: "holiday" });
+    const holidays = await Event.find({
+      company: company,
+      type: { $in: ["holiday", "Holiday"] },
+      active: true,
+    });
 
     if (!holidays || holidays.length < 0) {
       res.status(400).json({ message: "No holiday found" });
@@ -168,7 +269,7 @@ const extendEvent = async (req, res, next) => {
     const extendedMeeting = await Event.findOneAndUpdate(
       { _id: id },
       { end: extendTime },
-      { new: true }
+      { new: true },
     );
 
     if (!extendedMeeting) {
@@ -192,7 +293,7 @@ const deleteEvent = async (req, res, next) => {
     const inActiveEvent = await Event.findOneAndUpdate(
       { _id: id },
       { active: false },
-      { new: true }
+      { new: true },
     );
 
     if (!inActiveEvent) {
@@ -211,7 +312,7 @@ const deleteEvent = async (req, res, next) => {
 const bulkInsertEvents = async (req, res, next) => {
   try {
     const file = req.file;
-    const companyId = req.company; 
+    const companyId = req.company;
 
     if (!file) {
       return res
@@ -275,6 +376,7 @@ const bulkInsertEvents = async (req, res, next) => {
 
 module.exports = {
   createEvent,
+  editEvent,
   getAllEvents,
   getNormalEvents,
   getHolidays,

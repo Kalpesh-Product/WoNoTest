@@ -50,17 +50,79 @@ const ViewVendor = () => {
       toast.error(data.response.data.message);
     },
   });
+const getCountryIsoCode = (countryValue) => {
+    if (!countryValue) return "";
+    const normalizedCountryValue = String(countryValue).trim();
+    const normalizedCountryCode = normalizedCountryValue.toUpperCase();
+    const match = Country.getAllCountries().find(
+      (country) =>
+        country.isoCode === normalizedCountryCode ||
+        country.name.toLowerCase() === normalizedCountryValue.toLowerCase()
+    );
+    return match?.isoCode || "";
+  };
+
+  const getStateIsoCode = (countryIsoCode, stateValue) => {
+    if (!countryIsoCode || !stateValue) return "";
+    const normalizedStateValue = String(stateValue).trim();
+    const normalizedStateCode = normalizedStateValue.toUpperCase();
+    const match = State.getStatesOfCountry(countryIsoCode).find(
+      (stateItem) =>
+        stateItem.isoCode === normalizedStateCode ||
+        stateItem.name.toLowerCase() === normalizedStateValue.toLowerCase()
+    );
+    return match?.isoCode || "";
+  };
+
+  const getCountryName = (countryValue) => {
+    const countryIsoCode = getCountryIsoCode(countryValue);
+    if (!countryIsoCode) return countryValue;
+
+    return (
+      Country.getAllCountries().find(
+        (country) => country.isoCode === countryIsoCode
+      )?.name || countryValue
+    );
+  };
+
+  const getStateName = (countryValue, stateValue) => {
+    const countryIsoCode = getCountryIsoCode(countryValue);
+    if (!countryIsoCode || !stateValue) return stateValue;
+    const normalizedStateValue = String(stateValue).trim();
+    const normalizedStateCode = normalizedStateValue.toUpperCase();
+
+    return (
+      State.getStatesOfCountry(countryIsoCode).find(
+        (stateItem) =>
+          stateItem.isoCode === normalizedStateCode ||
+          stateItem.name.toLowerCase() === normalizedStateValue.toLowerCase()
+      )?.name || stateValue
+    );
+  };
 
   useEffect(() => {
     if (state) {
+      const normalizedCountry = getCountryIsoCode(
+        state.countryCode || state.country
+      );
+      const normalizedState = getStateIsoCode(
+        normalizedCountry,
+        state.stateCode || state.state
+      );
+
       const mapping = {
         vendorMongoId: state.vendorMongoId,
         vendorID: state.vendorID,
         vendorName: state.vendorName,
         address: state.address,
-        state: state.state,
+        state: getStateName(
+          normalizedCountry || state.countryCode || state.country,
+          normalizedState || state.stateCode || state.state
+        ),
         city: state.city,
-        country: state.country,
+        country: getCountryName(
+          normalizedCountry || state.countryCode || state.country
+        ),
         pinCode: state.pinCode || state.address?.match(/\b\d{6}\b/)?.[0] || "",
         email: state.email,
         mobile: state.mobile,
@@ -82,17 +144,21 @@ const ViewVendor = () => {
         id: state.id,
       };
 
-      const statesList = State.getStatesOfCountry(state.country);
-      const citiesList = City.getCitiesOfState(state.country, state.state);
+      const statesList = normalizedCountry
+        ? State.getStatesOfCountry(normalizedCountry)
+        : [];
+      const citiesList = normalizedCountry && normalizedState
+        ? City.getCitiesOfState(normalizedCountry, normalizedState)
+        : [];
       setStates(statesList);
       setCities(citiesList);
-      setSelectedCountry(state.country);
-      setSelectedState(state.state);
+      setSelectedCountry(normalizedCountry || state.country);
+      setSelectedState(normalizedState || state.state);
       setSelectedCity(state.city);
       reset(mapping);
       initialValuesRef.current = mapping;
     }
-  }, [state, setValue]);
+  }, [reset, state]);
 
   const handleEditToggle = () => {
     setIsEditing(!isEditing);
@@ -123,11 +189,19 @@ const ViewVendor = () => {
   const handleCountryChange = (countryCode) => {
     setSelectedCountry(countryCode);
     setStates(State.getStatesOfCountry(countryCode));
+    setSelectedState("");
+    setSelectedCity("");
+    setCities([]);
+    setValue("state", "");
+    setValue("city", "");
   };
   const handleStateChange = (state) => {
     setSelectedState(state);
     setCities(City.getCitiesOfState(selectedCountry, state));
+    setSelectedCity("");
+    setValue("city", "");
   };
+
   const handleCityChange = (city) => {
     setSelectedCity(city);
     // setCities(City.getCitiesOfState(city));
@@ -260,7 +334,7 @@ const ViewVendor = () => {
                   <div className="grid grid-cols sm:grid-cols-1 md:grid-cols-1 gap-4 p-4">
                     {isEditing ? (
                       <>
-                        <Controller
+                        {/* <Controller
                           name="country"
                           control={control}
                           defaultValue=""
@@ -318,7 +392,68 @@ const ViewVendor = () => {
                               ))}
                             </TextField>
                           )}
-                        />
+                        /> */}
+                         <Controller
+                         name="country"
+                         control={control}
+                         defaultValue=""
+                         rules={{ required: "Country is required" }}
+                         render={({ field, fieldState: { error } }) => (
+                           <Select
+                             {...field}
+                             fullWidth
+                             displayEmpty
+                             onChange={(e) => {
+                               const selectedCountryName = e.target.value;
+                               const matchedCountry = countries.find(
+                                 (country) => country.name === selectedCountryName
+                               );
+                               field.onChange(selectedCountryName);
+                               handleCountryChange(matchedCountry?.isoCode || "");
+                             }}
+                             size="small"
+                             error={!!error}>
+                             <MenuItem value="">Select Country</MenuItem>
+                             {countries.map((country) => (
+                               <MenuItem
+                                 key={country.isoCode}
+                                 value={country.name}>
+                                 {country.name}
+                               </MenuItem>
+                             ))}
+                           </Select>
+                         )}
+                       />
+                       <Controller
+                         name="state"
+                         control={control}
+                         defaultValue=""
+                         rules={{ required: "State is required" }}
+                         render={({ field, fieldState: { error } }) => (
+                           <Select
+                             {...field}
+                             fullWidth
+                             displayEmpty
+                             onChange={(e) => {
+                               const selectedStateName = e.target.value;
+                               const matchedState = states.find(
+                                 (state) => state.name === selectedStateName
+                               );
+                               field.onChange(selectedStateName);
+                               handleStateChange(matchedState?.isoCode || "");
+                             }}
+                             size="small"
+                             disabled={!selectedCountry}
+                             error={!!error}>
+                             <MenuItem value="">Select State</MenuItem>
+                             {states.map((state) => (
+                               <MenuItem key={state.isoCode} value={state.name}>
+                                 {state.name}
+                               </MenuItem>
+                             ))}
+                           </Select>
+                         )}
+                       />
                         <Controller
                           name="city"
                           control={control}
@@ -363,7 +498,15 @@ const ViewVendor = () => {
                           </div>
                           <div className="w-full">
                             <span className="text-gray-500">
-                              {getValues(fieldKey)}
+                              {/* {getValues(fieldKey)} */}
+                               {fieldKey === "country"
+                                ? getCountryName(getValues("country"))
+                                : fieldKey === "state"
+                                  ? getStateName(
+                                      getValues("country"),
+                                      getValues("state")
+                                    )
+                                  : getValues(fieldKey)}
                             </span>
                           </div>
                         </div>

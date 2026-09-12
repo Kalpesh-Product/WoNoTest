@@ -34,17 +34,19 @@ const taskSchema = new mongoose.Schema(
     },
     assignedDate: {
       type: Date,
-      required: true,
+      // required: true,
+      default: null,
     },
     dueDate: {
       type: Date,
-      required: true,
+      // required: true,
+      default: null,
     },
     completedDate: {
       type: Date,
     },
     dueTime: {
-      type: String,
+      type: Date,
       default: null,
     },
     status: {
@@ -75,8 +77,13 @@ const taskSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    comment: {
+      type: String,
+      trim: true,
+      default: "",
+    },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 const Task = mongoose.model("Task", taskSchema);

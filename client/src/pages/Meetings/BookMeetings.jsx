@@ -9,7 +9,7 @@ import {
 } from "@mui/material";
 import PrimaryButton from "../../components/PrimaryButton";
 import { Controller, useForm, useWatch } from "react-hook-form";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import useAxiosPrivate from "../../hooks/useAxiosPrivate";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -36,6 +36,7 @@ import StatusChip from "../../components/StatusChip";
 const BookMeetings = () => {
   // ------------------------------Initializations ------------------------------------//
   const navigate = useNavigate();
+  const locationState = useLocation();
   const axios = useAxiosPrivate();
   const { auth } = useAuth();
   const [selectedUnitId, setSelectedUnitId] = useState("");
@@ -128,8 +129,9 @@ const BookMeetings = () => {
   // Filter meeting rooms based on selected location
   const filteredMeetingRooms = selectedUnitId
     ? allMeetingRooms.filter(
-        (room) => room.location?.building?._id === selectedUnitId
-      )
+      (room) =>
+        room.location?.building?._id === selectedUnitId && room.isActive
+    )
     : [];
 
   const groupedRooms = filteredMeetingRooms.reduce((acc, room) => {
@@ -251,24 +253,41 @@ const BookMeetings = () => {
 
   const myMeetingsColumn = [
     { field: "id", headerName: "Sr No" },
-    { field: "agenda", headerName: "Agenda", flex: 1 },
+    {
+      field: "subject",
+      headerName: "Title",
+      flex: 2,
+      minWidth: 300,
+    },
+    //{ field: "agenda", headerName: "Agenda", flex: 1 },
     { field: "date", headerName: "Date" },
     { field: "roomName", headerName: "Room Name" },
+    { field: "buildingName", headerName: "Building Name" },
     {
       field: "location",
       headerName: "Location",
     },
     {
+      field: "status",
+      headerName: "Status",
+      cellRenderer: (params) => (
+        <StatusChip status={params?.data?.status || "N/A"} />
+      ),
+    },
+    {
       field: "actions",
       headerName: "Actions",
+      pinned: "right",
+      width: 120,
+      lockPinned: true,
       cellRenderer: (params) => {
         const rawReview = params.data?.reviews;
 
         const meetingReviews = Array.isArray(rawReview)
           ? rawReview
           : rawReview
-          ? [rawReview]
-          : [];
+            ? [rawReview]
+            : [];
         const userName = `${auth.user?.firstName} ${auth.user?.lastName}`;
 
         return (
@@ -277,7 +296,8 @@ const BookMeetings = () => {
               "Review added"
             ) : (
               <>
-                {userName === params.data.bookedBy ? (
+                {userName === params.data.bookedBy &&
+                  params.data.status === "Completed" ? (
                   <span
                     onClick={() => handleAddReview(params.data)}
                     className="cursor-pointer"
@@ -324,6 +344,7 @@ const BookMeetings = () => {
           perHourCredit: selectedRoom?.perHourCredit,
           perHourPrice: selectedRoom?.perHourPrice,
           seats: selectedRoom?.seats,
+          repeatMeetingClient: locationState.state?.repeatMeetingClient,
         },
       }
     );
@@ -465,10 +486,13 @@ const BookMeetings = () => {
                   agenda: meeting.agenda,
                   date: meeting.date,
                   roomName: meeting.roomName,
-                  reviews: meeting.reviews,
+                  buildingName: meeting.location?.building?.buildingName,
+                  status: meeting.meetingStatus,
+                  review: meeting.reviews?.review,
+                  reply: meeting.reviews?.reply?.text,
                   location: meeting.location
                     ? `${meeting.location?.unitName} - ${meeting.location.unitNo}`
-                    : "N/A",
+                    : "-",
                 }))}
               columns={myMeetingsColumn}
               search
@@ -592,9 +616,8 @@ const BookMeetings = () => {
                         label={
                           isBizNest
                             ? `${user.firstName ?? ""} ${user.lastName ?? ""}`
-                            : `${user.employeeName ?? ""} (${
-                                user.clientName ?? ""
-                              })`
+                            : `${user.employeeName ?? ""} (${user.clientName ?? ""
+                            })`
                         }
                         {...getTagProps({ index })}
                         deleteIcon={<IoMdClose />}
@@ -632,10 +655,10 @@ const BookMeetings = () => {
             onSubmit={reviewForm(submitReview)}
             className="flex flex-col gap-4"
           >
+            <span className="text-content">
+              How was your meeting room experience ?
+            </span>
             <div className="flex gap-4 items-center">
-              <span className="text-content">
-                How was your meeting room experience ?
-              </span>
               <Controller
                 name="rating"
                 control={reviewControl}
@@ -688,6 +711,10 @@ const BookMeetings = () => {
           {selectedMeeting ? (
             <div className="w-full grid grid-cols-1 gap-4">
               <DetalisFormatted
+                title="Title"
+                detail={selectedMeeting?.subject || "N/A"}
+              />
+              <DetalisFormatted
                 title="Agenda"
                 detail={selectedMeeting?.agenda || "N/A"}
               />
@@ -696,8 +723,16 @@ const BookMeetings = () => {
                 detail={selectedMeeting?.date || "N/A"}
               />
               <DetalisFormatted
+                title="Status"
+                detail={selectedMeeting?.status || "N/A"}
+              />
+              <DetalisFormatted
                 title="Room"
                 detail={selectedMeeting?.roomName || "N/A"}
+              />
+              <DetalisFormatted
+                title="Building"
+                detail={selectedMeeting?.buildingName || "N/A"}
               />
               <DetalisFormatted
                 title="Location"
@@ -719,6 +754,16 @@ const BookMeetings = () => {
                     ? dayjs(selectedMeeting.endTime).format("hh:mm A")
                     : "N/A"
                 }
+              />
+              <DetalisFormatted
+                title="Review"
+                detail={
+                  selectedMeeting?.review ? selectedMeeting?.review : "N/A"
+                }
+              />
+              <DetalisFormatted
+                title="Reply"
+                detail={selectedMeeting?.reply ? selectedMeeting?.reply : "N/A"}
               />
             </div>
           ) : (

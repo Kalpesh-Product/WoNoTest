@@ -47,6 +47,12 @@ const VisitorDashboard = () => {
       icon: <RiArchiveDrawerLine />,
       permission: PERMISSIONS.VISITORS_MANAGE_VISITORS.value,
     },
+     {
+      route: "/app/visitors/mix-bag",
+      title: "Mix Bag",
+      icon: <RiArchiveDrawerLine />,
+      permission: PERMISSIONS.VISITORS_MIX_BAG.value,
+    },
     {
       route: "/app/visitors/team-members",
       title: "Team Members",
@@ -62,7 +68,7 @@ const VisitorDashboard = () => {
   ];
 
   const allowedCards = cardsConfig.filter(
-    (card) => !card.permission || userPermissions.includes(card.permission)
+    (card) => !card.permission || userPermissions.includes(card.permission),
   );
   //------------------------PAGE ACCESS END-------------------//
 
@@ -91,8 +97,10 @@ const VisitorDashboard = () => {
     ([type, count]) => ({
       label: type,
       count,
-    })
+    }),
   );
+ const normalizeVisitPurpose = (value = "") =>
+    value.toLowerCase().replace(/[-\s]+/g, " ").trim();
 
   //---------------------------------------------------First Graph Data---------------------------------------------------//
   // Define financial year start and end
@@ -138,7 +146,6 @@ const VisitorDashboard = () => {
       fontFamily: "Poppins-Regular",
     },
     yaxis: {
-      max: 50, // ✅ Add this line
       title: {
         text: "No. of Visitors",
       },
@@ -157,7 +164,7 @@ const VisitorDashboard = () => {
       },
     },
     dataLabels: {
-      enabled: true,
+      enabled: false,
       offsetY: -25,
       style: {
         fontSize: "12px",
@@ -173,33 +180,39 @@ const VisitorDashboard = () => {
   //---------------------------------------------------Category Wise Visitors Donut Data---------------------------------------------------//
   const totalVisitorCategories = visitorTypeRawData.reduce(
     (sum, visitor) => sum + visitor.count,
-    0
+    0,
   );
   const donutVisitorCategoryData = visitorTypeRawData.map((visitor) =>
-    parseFloat(((visitor.count / totalVisitorCategories) * 100).toFixed(1))
+    parseFloat(((visitor.count / totalVisitorCategories) * 100).toFixed(1)),
   );
   const executiveTasksCount = visitorTypeRawData.map(
-    (visitor) => visitor.count
+    (visitor) => visitor.count,
   );
   const colors = ["#1E3D73", "#4C66A1", "#637BB8"];
   //---------------------------------------------------Category Wise Visitors Donut Data---------------------------------------------------//
   //---------------------------------------------------Visitors Table Data---------------------------------------------------//
 
   const visitorsColumns = [
-    { id: "id", label: "Sr No", minWidth: 100 }, // Fixed width
-    { id: "firstName", label: "First Name", minWidth: 80 }, // Minimum width
-    { id: "lastName", label: "Last Name", minWidth: 120 },
-    { id: "email", label: "Email", minWidth: 80 },
-    { id: "phoneNumber", label: "Phone No", minWidth: 100 },
+    { id: "id", label: "Sr No", minWidth: 72, width: 72 }, // Fixed width
+    // { id: "firstName", label: "First Name", minWidth: 80 }, // Minimum width
+    // { id: "lastName", label: "Last Name", minWidth: 120 },
+    { id: "name", label: "Name", minWidth: 150, width: 180 },
+    //{ id: "registeredClientCompany", label: "Company", minWidth: 120 },
+    { id: "visitorCompany", label: "Company", minWidth: 150, width: 180 },
+
     {
       id: "purposeOfVisit",
       label: "Purpose",
       align: "left",
-      minWidth: 300,
+      minWidth: 180,
+      width: 220,
     },
-    { id: "toMeet", label: "To Meet", align: "left", minWidth: 150 },
-    { id: "checkIn", label: "Check In", minWidth: 120 },
-    { id: "checkOut", label: "Checkout", width: 80 },
+    //{ id: "toMeet", label: "To Meet", align: "left", minWidth: 150, width: 180 },
+    { id: "email", label: "Email", minWidth: 180, width: 220 },
+    { id: "phoneNumber", label: "Phone No", minWidth: 130, width: 150 },
+    { id: "dateOfVisit", label: "Date of Visit", minWidth: 130, width: 150 },
+    { id: "checkIn", label: "Check In", minWidth: 110, width: 130 },
+    { id: "checkOut", label: "Checkout", minWidth: 110, width: 130 },
   ];
   //---------------------------------------------------Visitors Table Data---------------------------------------------------//
 
@@ -263,10 +276,10 @@ const VisitorDashboard = () => {
   const totalUsers = usersQuery.isLoading ? [] : usersQuery.data.length;
 
   const maleCount = visitorsData.filter(
-    (user) => user.gender?.toLowerCase() === "male"
+    (user) => user.gender?.toLowerCase() === "male",
   ).length;
   const femaleCount = visitorsData.filter(
-    (user) => user.gender?.toLowerCase() === "female"
+    (user) => user.gender?.toLowerCase() === "female",
   ).length;
 
   const genderData = [
@@ -345,7 +358,7 @@ const VisitorDashboard = () => {
   // ];
 
   const visitorsThisMonth = visitorsData.filter((visitor) =>
-    dayjs(visitor.dateOfVisit).isSame(dayjs(), "month")
+    dayjs(visitor.dateOfVisit).isSame(dayjs(), "month"),
   );
 
   const departmentCountMapMonth = {};
@@ -356,12 +369,12 @@ const VisitorDashboard = () => {
   });
 
   const departmentWiseAssetsMonth = Object.entries(departmentCountMapMonth).map(
-    ([label, value]) => ({ label, value })
+    ([label, value]) => ({ label, value }),
   );
 
   const totalDepartmentAssetsMonth = departmentWiseAssetsMonth.reduce(
     (sum, dept) => sum + dept.value,
-    0
+    0,
   );
 
   const departmentPieDataMonth = departmentWiseAssetsMonth.map((dept) => ({
@@ -394,7 +407,7 @@ const VisitorDashboard = () => {
   const today = dayjs().startOf("day");
 
   const todaysVisitors = visitorsData.filter((visitor) =>
-    dayjs(visitor.dateOfVisit).isSame(today, "day")
+    dayjs(visitor.dateOfVisit).isSame(today, "day"),
   );
 
   const visitorTypeMapToday = {};
@@ -405,16 +418,16 @@ const VisitorDashboard = () => {
   });
 
   const visitorTypeRawDataToday = Object.entries(visitorTypeMapToday).map(
-    ([label, count]) => ({ label, count })
+    ([label, count]) => ({ label, count }),
   );
 
   const totalVisitorCategoriesToday = visitorTypeRawDataToday.reduce(
     (sum, v) => sum + v.count,
-    0
+    0,
   );
 
   const donutVisitorCategoryDataToday = visitorTypeRawDataToday.map((v) =>
-    parseFloat(((v.count / totalVisitorCategoriesToday) * 100).toFixed(1))
+    parseFloat(((v.count / totalVisitorCategoriesToday) * 100).toFixed(1)),
   );
   const executiveTasksCountToday = visitorTypeRawDataToday.map((v) => v.count);
   const labelsToday = visitorTypeRawDataToday.map((v) => v.label);
@@ -425,10 +438,27 @@ const VisitorDashboard = () => {
     return acc;
   }, {});
 
+  const getDayPassCountFromVisitorType = (target) =>
+    Object.entries(visitorTypeCounts).reduce((sum, [type, count]) => {
+      const normalizedType = normalizeVisitPurpose(type);
+      if (normalizedType.includes(target)) {
+        return sum + count;
+      }
+      return sum;
+    }, 0);
+
+  const internalVisitorsCount = visitorsData.filter(
+    (visitor) => visitor.visitorFlag !== "Client",
+  ).length;
+
+  const externalClientsCount = visitorsData.filter(
+    (visitor) => visitor.visitorFlag === "Client",
+  ).length;
+
   const labels = Object.keys(visitorTypeCounts);
   const series = Object.values(visitorTypeCounts);
   const tooltipValue = series.map(
-    (count) => `${count} visitor${count > 1 ? "s" : ""}`
+    (count) => `${count} visitor${count > 1 ? "s" : ""}`,
   );
 
   // -----------------------Department Pie Data End--------------------
@@ -480,6 +510,65 @@ const VisitorDashboard = () => {
     },
   };
 
+  const today1 = new Date().toDateString();
+  const checkedInToday = visitorsData.filter((v1) => {
+    return v1.checkIn && new Date(v1.checkIn).toDateString() === today1;
+  }).length;
+
+  const checkedOutToday = visitorsData.filter((v1) => {
+    return v1.checkOut && new Date(v1.checkOut).toDateString() === today1;
+  }).length;
+
+  const yetToCheckOutToday = visitorsData.filter((v1) => {
+    return (
+      v1.checkIn &&
+      new Date(v1.checkIn).toDateString() === today1 &&
+      !v1.checkOut
+    );
+  }).length;
+
+  const checkInPieData1 = [
+    {
+      label: "Checked In Today",
+      value: checkedInToday,
+      color: "#007bff",
+    },
+    {
+      label: "Checked Out Today",
+      value: checkedOutToday,
+      color: "#28a745",
+    },
+    {
+      label: "Yet To Check Out Today",
+      value: yetToCheckOutToday,
+      color: "#dc3545",
+    },
+  ];
+  console.log(checkInPieData1);
+  const checkInPieOptions1 = {
+    chart: {
+      type: "pie",
+      fontFamily: "Poppins-Regular",
+    },
+    labels: ["Checked In Today", "Checked Out Today", "Yet To Check Out Today"],
+    colors: ["#007bff", "#28a745", "#dc3545"],
+    dataLabels: {
+      enabled: true,
+      formatter: (val) => `${val.toFixed(0)}%`,
+    },
+    tooltip: {
+      y: {
+        formatter: (val, { seriesIndex }) => {
+          const value = checkInPieData1[seriesIndex].value;
+          return `${value} visitors`;
+        },
+      },
+    },
+    legend: {
+      position: "left",
+    },
+  };
+
   const departmentWiseCounts = {};
 
   visitorsData.forEach((visitor) => {
@@ -493,7 +582,7 @@ const VisitorDashboard = () => {
     ([label, value]) => ({
       label,
       value,
-    })
+    }),
   );
 
   const pieChartOptions = {
@@ -521,34 +610,80 @@ const VisitorDashboard = () => {
 
   //------------PAGE ACCESS DATA CARD----------//
 
+  // data: visitorsData.filter((item) =>item.checkIn &&
+  //     new Date(item.checkIn).toDateString() === new Date().toDateString()
+  // ).length,
+
   const dataCardConfigs = [
+    {
+      key: "checkedInVisitorsToday",
+      title: "Today",
+      data: visitorsData.filter(
+        (item) =>
+          item.checkIn &&
+          new Date(item.checkIn).toDateString() === new Date().toDateString(),
+      ).length,
+      description: "Checked In Visitors ",
+      permission: PERMISSIONS.VISITORS_CHECKED_IN_VISITORS_TODAY.value,
+    },
+
+    {
+      key: "yetToCheckOut",
+      title: "Today",
+      data: visitorsData.filter(
+        (item) =>
+          item.checkIn &&
+          new Date(item.checkIn).toDateString() === new Date().toDateString() &&
+          !item.checkOut,
+      ).length,
+      description: "Yet To Check Out Visitors",
+      permission: PERMISSIONS.VISITORS_YET_TO_CHECK_OUT.value,
+    },
+
+    {
+      key: "checkedOutToday",
+      title: "Today",
+      data: visitorsData.filter(
+        (item) =>
+          item.checkOut &&
+          new Date(item.checkOut).toDateString() === new Date().toDateString(),
+      ).length,
+      description: "Checked Out Visitors",
+      permission: PERMISSIONS.VISITORS_CHECKED_OUT_TODAY.value,
+    },
+
     {
       key: "checkedInVisitorsToday",
       title: "Total",
       data: visitorsData.length,
-      description: "Checked In Visitors Today",
+      description: "Checked In Visitors ",
       permission: PERMISSIONS.VISITORS_CHECKED_IN_VISITORS_TODAY.value,
+    },
+
+    {
+      key: "yetToCheckOut",
+      title: "Total",
+      data: visitorsData.filter((item) => item.checkOut === null).length,
+      description: "Yet To Check Out Visitors",
+      permission: PERMISSIONS.VISITORS_YET_TO_CHECK_OUT.value,
     },
     {
       key: "checkedOutToday",
       title: "Total",
       data: visitorsData.filter((item) => item.checkOut).length,
-      description: "Checked Out Today",
+      description: "Checked Out Visitors",
       permission: PERMISSIONS.VISITORS_CHECKED_OUT_TODAY.value,
     },
-    {
-      key: "yetToCheckOut",
-      title: "Total",
-      data: visitorsData.filter((item) => item.checkOut === null).length,
-      description: "Yet To Check Out",
-      permission: PERMISSIONS.VISITORS_YET_TO_CHECK_OUT.value,
-    },
-    {
+
+    
+  ];
+
+   const dataCardConfigs1 = [{
       key: "walkInVisitsToday",
       title: "Total",
       data: visitorsData.filter((item) => item.visitorType === "Walk In")
         .length,
-      description: "Walk In Visits Today",
+      description: "Walk In Visits",
       permission: PERMISSIONS.VISITORS_WALK_IN_VISITS_TODAY.value,
     },
     {
@@ -556,7 +691,7 @@ const VisitorDashboard = () => {
       title: "Total",
       data: visitorsData.filter((item) => item.visitorType === "Scheduled")
         .length,
-      description: "Scheduled Visits Today",
+      description: "Scheduled Visits",
       permission: PERMISSIONS.VISITORS_SCHEDULED_VISITS_TODAY.value,
     },
     {
@@ -564,20 +699,52 @@ const VisitorDashboard = () => {
       title: "Total",
       data: visitorsData.filter((item) => item.visitorType === "Meeting")
         .length,
-      description: "Meeting Bookings Today",
+      description: "Meeting Booking Visits",
       permission: PERMISSIONS.VISITORS_MEETING_BOOKINGS_TODAY.value,
+    },
+     {
+      key: "fullDayVisitsToday",
+      title: "Total",
+      data: getDayPassCountFromVisitorType("full day"),
+      description: "Full Day Pass Visits",
+      permission: PERMISSIONS.VISITORS_FULL_DAY_VISITS_TODAY.value,
+    },
+    {
+      key: "halfDayVisitsToday",
+      title: "Total",
+      data: getDayPassCountFromVisitorType("half day"),
+      description: "Half Day Pass Visits",
+      permission: PERMISSIONS.VISITORS_HALF_DAY_VISITS_TODAY.value,
+    },]
+
+  //First pie-chart config data end
+
+  const pieChartTopConfigs1 = [
+    {
+      layout: 2,
+      key: "checkedInTodayChart",
+      title: "Today",
+      titleLabel: "Visitor Status",
+      border: true,
+      data: checkInPieData1,
+      options: checkInPieOptions1,
+      width: "100%",
+      permission: PERMISSIONS.VISITORS_CHECKED_IN_VISITORS_TODAY.value,
     },
   ];
 
-  //First pie-chart config data end
+  const allowedPieChartsTop1 = pieChartTopConfigs1.filter(
+    (widget) =>
+      !widget.permission || userPermissions.includes(widget.permission),
+  );
 
   //------------------------PAGE ACCESS DONUT START-------------------//
   const donutChartConfigs = [
     {
       layout: 2,
       key: "visitorCategories",
-      title: "Visitor Categories ",
-      titleLabel: "This Month",
+      title: "Overall visitor ",
+      titleLabel: "category ",
       border: true,
       centerLabel: "Visitors",
       labels: labels,
@@ -591,8 +758,34 @@ const VisitorDashboard = () => {
 
   const allowedDonutCharts = donutChartConfigs.filter(
     (widget) =>
-      !widget.permission || userPermissions.includes(widget.permission)
+      !widget.permission || userPermissions.includes(widget.permission),
   );
+
+  const donutChartConfig1 = [
+    {
+      layout: 2,
+      key: "internalExternalClients",
+      title: "Overall visitor ",
+      titleLabel: "Internal & External Clients ",
+      border: true,
+      centerLabel: "Visitors",
+      labels: ["Internal Visitors", "External Clients"],
+      colors: ["#4BC0C0", "#36A2EB"],
+      series: [internalVisitorsCount, externalClientsCount],
+      tooltipValue: [
+        `${internalVisitorsCount} visitor${internalVisitorsCount !== 1 ? "s" : ""}`,
+        `${externalClientsCount} visitor${externalClientsCount !== 1 ? "s" : ""}`,
+      ],
+      // isMonetary: true,
+      permission: PERMISSIONS.VISITORS_INTERNAL_AND_EXTERNAL_CATEGORIES.value,
+    },
+  ];
+
+  const allowedDonutCharts1 = donutChartConfig1.filter(
+    (widget) =>
+      !widget.permission || userPermissions.includes(widget.permission),
+  );
+
   //------------------------PAGE ACCESS DONUT END-------------------//
   //------------------------PAGE ACCESS PIE Top START-------------------//
   const pieChartTopConfigs = [
@@ -600,7 +793,7 @@ const VisitorDashboard = () => {
       layout: 2,
       key: "checkedInVsYetToCheckOut",
       title: "Checked Out v/s Yet To Check Out ",
-      titleLabel: "Today",
+      titleLabel: "Overall",
       border: true,
       data: checkInPieData,
       options: checkInPieOptions,
@@ -611,40 +804,43 @@ const VisitorDashboard = () => {
 
   const allowedPieChartsTop = pieChartTopConfigs.filter(
     (widget) =>
-      !widget.permission || userPermissions.includes(widget.permission)
+      !widget.permission || userPermissions.includes(widget.permission),
   );
+
   //------------------------PAGE ACCESS PIE Top END-------------------//
   //------------------------PAGE ACCESS PIE Bottom START-------------------//
   const pieChartConfigs = [
     {
       key: "visitorGenderData",
-      title: "Visitor Gender Data ",
-      titleLabel: "This Month",
+      title: "Overall",
+      titleLabel: "Visitor Gender Data",
       layout: 1,
       border: true,
       percent: true,
 
       data: genderData,
       options: genderPieChart,
-      width: 438,
+      height: 320,
+      width: 500,
       permission: PERMISSIONS.VISITORS_GENDER_DATA_PIE.value,
     },
     {
       key: "departmentWiseVisits",
-      title: "Department Wise Visits ",
-      titleLabel: "This Month",
+      title: "Overall ",
+      titleLabel: "Department Wise Visits",
       layout: 1,
       border: true,
       data: pieChartData,
       options: pieChartOptions,
       height: 320,
+      width: 500,
       permission: PERMISSIONS.VISITORS_DEPARTMENT_WISE_VISITS_PIE.value,
     },
   ];
 
   const allowedPieCharts = pieChartConfigs.filter(
     (widget) =>
-      !widget.permission || userPermissions.includes(widget.permission)
+      !widget.permission || userPermissions.includes(widget.permission),
   );
   //------------------------PAGE ACCESS PIE Bottom END-------------------//
 
@@ -662,7 +858,7 @@ const VisitorDashboard = () => {
   ];
   const allowedVisitorGraphs = visitorGraphConfigs.filter(
     (widget) =>
-      !widget.permission || userPermissions.includes(widget.permission)
+      !widget.permission || userPermissions.includes(widget.permission),
   );
 
   //----------------PAGE ACCESS VISITOR TABLE----------//
@@ -677,6 +873,9 @@ const VisitorDashboard = () => {
         id: index + 1,
         firstName: item.firstName,
         lastName: item.lastName,
+        name: `${item.firstName} ${item.lastName}`,
+        // registeredClientCompany: item.registeredClientCompany,
+        visitorCompany: item.visitorCompany,
         address: item.address,
         phoneNumber: item.phoneNumber,
         email: item.email,
@@ -684,8 +883,9 @@ const VisitorDashboard = () => {
         toMeet: item.toMeet
           ? `${item.toMeet?.firstName} ${item.toMeet?.lastName}`
           : item.clientToMeet
-          ? item?.clientToMeet?.employeeName
-          : "",
+            ? item?.clientToMeet?.employeeName
+            : "",
+        dateOfVisit: item.dateOfVisit,
         checkIn: humanTime(item.checkIn),
         checkOut: humanTime(item.checkOut),
       })),
@@ -699,7 +899,7 @@ const VisitorDashboard = () => {
 
   const allowedVisitorsTodayTables = visitorsTodayTableConfigs.filter(
     (widget) =>
-      !widget.permission || userPermissions.includes(widget.permission)
+      !widget.permission || userPermissions.includes(widget.permission),
   );
 
   const meetingsWidgets = [
@@ -732,6 +932,19 @@ const VisitorDashboard = () => {
     {
       layout: 3,
       widgets: dataCardConfigs
+        .filter((card) => userPermissions.includes(card.permission))
+        .map((card) => (
+          <DataCard
+            key={card.key}
+            title={card.title}
+            data={card.data}
+            description={card.description}
+          />
+        )),
+    },
+    {
+      layout: 5,
+      widgets: dataCardConfigs1
         .filter((card) => userPermissions.includes(card.permission))
         .map((card) => (
           <DataCard
@@ -810,6 +1023,38 @@ const VisitorDashboard = () => {
     {
       layout: 2,
       widgets: [
+        ...allowedPieChartsTop1.map((item) => (
+          <WidgetSection
+            key={item.key}
+            title={item.title}
+            titleLabel={item.titleLabel}
+            border={item.border}
+          >
+            <PieChartMui
+              data={item.data}
+              options={item.options}
+              width={item.width}
+              centerAlign
+            />
+          </WidgetSection>
+        )),
+
+        ...allowedPieChartsTop.map((item) => (
+          <WidgetSection
+            key={item.key}
+            title={item.title}
+            titleLabel={item.titleLabel}
+            border={item.border}
+          >
+            <PieChartMui
+              data={item.data}
+              options={item.options}
+              width={item.width}
+              centerAlign
+            />
+          </WidgetSection>
+        )),
+
         ...allowedDonutCharts.map((item) => (
           <WidgetSection
             key={item.key}
@@ -826,17 +1071,20 @@ const VisitorDashboard = () => {
             />
           </WidgetSection>
         )),
-        ...allowedPieChartsTop.map((item) => (
+
+        ...allowedDonutCharts1.map((item) => (
           <WidgetSection
             key={item.key}
             title={item.title}
             titleLabel={item.titleLabel}
             border={item.border}
           >
-            <PieChartMui
-              data={item.data}
-              options={item.options}
-              width={item.width}
+            <DonutChart
+              centerLabel={item.centerLabel}
+              labels={item.labels}
+              colors={item.colors}
+              series={item.series}
+              tooltipValue={item.tooltipValue}
             />
           </WidgetSection>
         )),
@@ -894,6 +1142,7 @@ const VisitorDashboard = () => {
             options={item.options}
             width={item.width}
             height={item.height}
+            centerAlign
           />
         </WidgetSection>
       )),

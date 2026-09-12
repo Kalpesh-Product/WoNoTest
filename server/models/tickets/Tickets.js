@@ -39,7 +39,21 @@ const ticketsSchema = new mongoose.Schema(
         ref: "Ticket",
       },
     ],
+    assignedTo: [
+      {
+        assignee: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "UserData",
+          required: true,
+        },
+        assignedAt: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
     assignees: [
+      //deprecated in support & assigned tickets
       {
         type: mongoose.Schema.Types.ObjectId,
         ref: "UserData",
@@ -54,6 +68,18 @@ const ticketsSchema = new mongoose.Schema(
       type: String,
       maxlength: 250,
     },
+     closingCategories: {
+      type: [String],
+      enum: [
+        "Daily Task",
+        "ISP/External Issue",
+        "Client Support",
+        "Client/User Side Issue",
+        "IT Internal Issue",
+        "Others Issue",
+      ],
+      default: undefined,
+    },
     acceptedAt: Date,
     acceptedBy: {
       type: mongoose.Schema.Types.ObjectId,
@@ -67,9 +93,10 @@ const ticketsSchema = new mongoose.Schema(
       reason: {
         type: String,
       },
+      rejectedAt: Date,
     },
     resolvedDate: Date,
-    assignedAt: Date,
+    assignedAt: Date, //deprecated in support & assigned tickets
     escalatededAt: Date,
     company: {
       type: mongoose.Schema.Types.ObjectId,
@@ -79,6 +106,15 @@ const ticketsSchema = new mongoose.Schema(
       id: String,
       url: String,
     },
+    attachments: [
+      {
+        id: String,
+        url: String,
+        name: String,
+        mimeType: String,
+        size: Number,
+      },
+    ],
   },
   { timestamps: true }
 );

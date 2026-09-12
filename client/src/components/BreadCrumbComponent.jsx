@@ -1,25 +1,47 @@
 import React from "react";
 import { Breadcrumbs, Typography, Link } from "@mui/material";
 import { useLocation, useNavigate } from "react-router-dom";
+import CurrencySelector from "./CurrencySelector";
 
 const BreadCrumbComponent = () => {
   const location = useLocation();
   const navigate = useNavigate();
 
+  const formatLabel = (value) => {
+    const acronymMap = {
+      amc: "AMC",
+      biz: "BIZ",
+    };
+
+    return decodeURIComponent(value)
+      .replace(/-/g, " ")
+      .split(" ")
+      .map((word) => {
+        const normalizedWord = word.toLowerCase();
+        if (acronymMap[normalizedWord]) {
+          return acronymMap[normalizedWord];
+        }
+
+        return word.charAt(0).toUpperCase() + word.slice(1);
+      })
+      .join(" ");
+  };
+
   // Extract query parameters
   const searchParams = new URLSearchParams(location.search);
-  
+
   // Convert query parameters into an array of key-value pairs
   const queryParamEntries = Array.from(searchParams.entries());
 
   // Extract and process the path, excluding 'app' for display purposes
-const pathSegments =
-  location.pathname === "/app/dashboard"
-    ? ["dashboard"]
-    : location.pathname
+  const pathSegments =
+    location.pathname === "/app/dashboard"
+      ? ["dashboard"]
+      : location.pathname
         .split("/")
-        .filter((segment) => segment && segment !== "app" && segment !== "dashboard");
-
+        .filter(
+          (segment) => segment && segment !== "app" && segment !== "dashboard"
+        );
 
   // Generate breadcrumb links
   const breadcrumbs = pathSegments.map((segment, index) => {
@@ -27,13 +49,19 @@ const pathSegments =
 
     // Build the navigation path
     const path = pathSegments.slice(0, index + 1).join("/");
-    const isDirectAppPath = location.pathname.startsWith(`/app/${path}`) && !location.pathname.includes("/dashboard");
-    const fullPath = isDirectAppPath ? `/app/${path}` : `/app/dashboard/${path}`;
+    const isDirectAppPath =
+      location.pathname.startsWith(`/app/${path}`) &&
+      !location.pathname.includes("/dashboard");
+    const fullPath = isDirectAppPath
+      ? `/app/${path}`
+      : `/app/dashboard/${path}`;
 
     // Capitalize for display
-    const displayText = decodeURIComponent(segment)
-    .replace(/-/g, " ")
-    .replace(/\b\w/g, (char) => char.toUpperCase());
+    // const displayText = decodeURIComponent(segment)
+    // .replace(/-/g, " ")
+    // .replace(/\b\w/g, (char) => char.toUpperCase());
+
+    const displayText = formatLabel(segment);
 
     return isLast ? (
       <Typography key={index} color="text.primary">
@@ -56,13 +84,13 @@ const pathSegments =
   queryParamEntries.forEach(([key, value], index) => {
     breadcrumbs.push(
       <Typography key={`param-${index}`} color="text.primary">
-        {`${value}`}
+        {formatLabel(value)}
       </Typography>
     );
   });
 
   return (
-    <div className="rounded-t-md">
+    <div className="rounded-t-md flex items-center justify-between gap-4">
       <Breadcrumbs
         separator="›"
         aria-label="breadcrumb"
@@ -85,6 +113,11 @@ const pathSegments =
       >
         {breadcrumbs}
       </Breadcrumbs>
+      {location.pathname.includes("/investor-dashboard") && (
+        <div className="hidden md:block">
+          <CurrencySelector />
+        </div>
+      )}
     </div>
   );
 };

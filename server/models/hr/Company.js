@@ -59,6 +59,11 @@ const companySchema = new mongoose.Schema({
             type: String,
             required: true,
           },
+          policyType: {
+            type: String,
+            enum: ["Leave", "Holiday", "None"],
+            default: "None",
+          },
           documentLink: {
             type: String,
             required: true,
@@ -194,6 +199,43 @@ const companySchema = new mongoose.Schema({
   linkedinURL: {
     type: String,
   },
+  employerCosts: {
+    employerEsi: {
+      type: Number,
+      min: 0,
+      default: 0,
+    },
+    employerPf: {
+      type: Number,
+      min: 0,
+      default: 1950,
+    },
+    employerEpf: {
+      type: Number,
+      min: 0,
+      default: 550,
+    },
+    employerEps: {
+      type: Number,
+      min: 0,
+      default: 1250,
+    },
+    employerEdli: {
+      type: Number,
+      min: 0,
+      default: 75,
+    },
+    epfAdminCharges: {
+      type: Number,
+      min: 0,
+      default: 75,
+    },
+    edliAdminCharges: {
+      type: Number,
+      min: 0,
+      default: 0,
+    },
+  },
   employeeTypes: [
     {
       name: {
@@ -298,6 +340,11 @@ const companySchema = new mongoose.Schema({
         type: String,
         required: true,
       },
+      policyType: {
+        type: String,
+        enum: ["Leave", "Holiday", "None"],
+        default: "None",
+      },
       documentLink: {
         type: String,
         required: true,
@@ -391,6 +438,26 @@ const companySchema = new mongoose.Schema({
   meetingCreditBalance: {
     type: Number,
     default: 0,
+  },
+  meetingCreditBalanceHistory: [
+    {
+      monthStartDate: {
+        type: Date,
+        required: true,
+      },
+      remainingCredit: {
+        type: Number,
+        default: 0,
+      },
+      consumedCredit: {
+        type: Number,
+        default: 0,
+      },
+    },
+  ],
+  lastCreditReset: {
+    type: Date,
+    default: Date.now,
   },
   complianceDocuments: [
     {

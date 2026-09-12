@@ -1,50 +1,145 @@
 import { useQuery } from "@tanstack/react-query";
-import React, { useState } from "react";
+import React, { useCallback, useState } from "react";
 import useAxiosPrivate from "../hooks/useAxiosPrivate";
 import YearWiseTable from "../components/Tables/YearWiseTable";
 import humanDate from "../utils/humanDateForamt";
 import humanTime from "../utils/humanTime";
 import DetalisFormatted from "../components/DetalisFormatted";
 import MuiModal from "../components/MuiModal";
+import PageFrame from "../components/Pages/PageFrame";
+import { MdOutlineRemoveRedEye } from "react-icons/md";
+import dayjs from "dayjs";
 
 const LogPage = () => {
   const axios = useAxiosPrivate();
   const [openModal, setOpenModal] = useState(false);
+  const [selectedLogDate, setSelectedLogDate] = useState(() =>
+    dayjs().startOf("day"),
+  );
+
+  const selectedLogDateKey = selectedLogDate.format("YYYY-MM-DD");
+  const selectedLogDateLabel = selectedLogDate.format("MMM D, YYYY");
+
   const [selectedLog, setselectedLog] = useState({});
   const { data, isLoading } = useQuery({
-    queryKey: ["log"],
+    queryKey: ["secret-logs", selectedLogDateKey],
     queryFn: async () => {
       try {
-        const response = await axios.get("/api/logs/get-logs");
-        return response.data;
+        // const response = await axios.get("/api/logs/get-logs");
+        const response = await axios.get("/api/logs/get-logs", {
+          params: {
+            fromDate: selectedLogDateKey,
+            toDate: selectedLogDateKey,
+          },
+        });
+        return response.data || [];
       } catch (error) {
-        console.error(error.response.data.message);
+        console.error(error?.response?.data?.message || error.message);
+        return [];
+        //   return response.data;
+        // } catch (error) {
+        //   console.error(error.response.data.message);
       }
     },
   });
+
+  const handlePreviousLogDay = useCallback(() => {
+    setSelectedLogDate((prevDate) => prevDate.subtract(1, "day"));
+  }, []);
+
+  const handleNextLogDay = useCallback(() => {
+    setSelectedLogDate((prevDate) => prevDate.add(1, "day"));
+  }, []);
 
   const handleViewlog = (data) => {
     setselectedLog(data);
     setOpenModal(true);
   };
 
+  const isMongoIdSegment = (value) =>
+    typeof value === "string" && /^[a-f\d]{24}$/i.test(value);
+
+  const getReadableLogLabel = (value) => {
+    if (!value || typeof value !== "object") return null;
+
+    const fullName = [value.firstName, value.middleName, value.lastName]
+      .filter(Boolean)
+      .join(" ")
+      .trim();
+
+    return (
+      fullName ||
+      value.name ||
+      value.title ||
+      value.label ||
+      value.departmentId ||
+      value.empId ||
+      value.email ||
+      null
+    );
+  };
+
+  const findPayloadLabelById = (payload, targetId) => {
+    if (!payload || typeof payload !== "object" || !targetId) return null;
+
+    for (const value of Object.values(payload)) {
+      if (Array.isArray(value)) {
+        for (const item of value) {
+          if (item?._id?.toString?.() === targetId) {
+            const label = getReadableLogLabel(item);
+            if (label) return label;
+          }
+        }
+        continue;
+      }
+
+      if (value?._id?.toString?.() === targetId) {
+        const label = getReadableLogLabel(value);
+        if (label) return label;
+      }
+    }
+
+    return null;
+  };
+
+  const formatLogPath = (path, payload) => {
+    const cleanSegments = (path || "")
+      .split("/")
+      .filter(Boolean)
+      .slice(2)
+      .map((segment) => {
+        if (!isMongoIdSegment(segment)) return segment;
+        return findPayloadLabelById(payload, segment) || "-";
+      })
+      .filter(Boolean);
+
+    return cleanSegments.join(" > ") || "-";
+  };
+
+  const formatLogActivity = (action, path) => {
+    if (!action) return "-";
+    if (!isMongoIdSegment(action)) return action;
+
+    const fallbackActivity = (path || "")
+      .split("/")
+      .filter(Boolean)
+      .slice(2)
+      .find((segment) => !isMongoIdSegment(segment));
+
+    return fallbackActivity || "-";
+  };
+
   const columns = [
     {
       headerName: "Sr No",
       field: "srNo",
-      width: 80,
+      width: 100,
+      sort: "desc",
     },
     {
-      headerName: "Action",
-      field: "action",
+      headerName: "Activity",
+      field: "activity",
       flex: 1,
-      cellRenderer: (params) => (
-        <div role="button" onClick={() => handleViewlog(params.data.payload)}>
-          <span className="underline text-primary cursor-pointer">
-            {params.value}
-          </span>
-        </div>
-      ),
     },
     {
       headerName: "User",
@@ -58,18 +153,59 @@ const LogPage = () => {
     },
     {
       headerName: "Date",
-      field: "createdAt",
+      field: "createdAtExport",
       flex: 1,
-      cellRenderer: (params) => humanDate(params.value),
+      valueFormatter: (params) => {
+        if (!params.value) return "-";
+        return params.value;
+      },
+      cellRenderer: (params) => {
+        if (!params.data?.createdAt) return "-";
+        return `${humanDate(params.data.createdAt)}, ${humanTime(params.data.createdAt)}`;
+      },
+    },
+    {
+      headerName: "Details",
+      field: "logDetailsExport",
+      hide: true,
+      lockVisible: true,
+      filter: false,
+      getQuickFilterText: () => "",
+      valueGetter: (params) => formatLogDetailsForExport(params.data?.payload),
+    },
+    {
+      headerName: "Actions",
+      field: "actions",
+      flex: 1,
+      align: "left",
+      pinned: "right",
+      suppressCsvExport: true,
+      cellRenderer: (params) => (
+        <div className="flex items-center justify-center h-full">
+          <button
+            type="button"
+            aria-label="View log details"
+            onClick={() => handleViewlog(params.data.payload)}
+            className="text-[#5f6368] hover:text-primary"
+          >
+            <MdOutlineRemoveRedEye size={20} />
+          </button>
+        </div>
+      ),
     },
   ];
   const tableData = isLoading
     ? []
-    : data.map((item) => ({
+    : // : data.map((item) => ({
+      (data || []).map((item) => ({
         ...item,
+        activity: formatLogActivity(item.action, item.path),
         user: `${item.performedBy?.firstName} ${item.performedBy?.lastName}`,
-        path: item.path.split("/").splice(2).join(" > "),
+        path: formatLogPath(item.path, item.payload),
         createdAt: item.createdAt,
+        createdAtExport: item.createdAt
+          ? `${humanDate(item.createdAt)}, ${humanTime(item.createdAt)}`
+          : "-",
         payload: item.payload,
       }));
 
@@ -87,8 +223,7 @@ const LogPage = () => {
       .replace(/^./, (str) => str.toUpperCase());
   };
 
-  const isMongoId = (value) =>
-    typeof value === "string" && /^[a-f\d]{24}$/i.test(value);
+  const isMongoId = (value) => isMongoIdSegment(value);
 
   // Enhanced filter for object fields
   // const shouldSkipField = (key, value) => {
@@ -108,70 +243,77 @@ const LogPage = () => {
     return false;
   };
 
-  const formatValue = (key, value) => {
-    if (shouldSkipField(key, value)) return null;
-    if (isMongoId(value)) return null;
+  const formatNestedDisplayValue = (value, parentKey = "", asText = false) => {
+    if (value === null || value === undefined || value === "") return "-";
 
-    // Arrays
     if (Array.isArray(value)) {
-      const cleanList = value.filter(
-        (item) => !isMongoId(item) && typeof item !== "object"
-      );
+      const visibleItems = value.filter((item) => {
+        if (typeof item === "object" && item !== null) {
+          return Object.entries(item).some(
+            ([itemKey, itemValue]) => !shouldSkipField(itemKey, itemValue),
+          );
+        }
+        return !isMongoId(item);
+      });
 
-      const cleanedObjects = value
-        .filter((item) => typeof item === "object" && item !== null)
-        .map((obj) =>
-          Object.fromEntries(
-            Object.entries(obj).filter(([k, v]) => !shouldSkipField(k, v))
-          )
-        );
+      if (!visibleItems.length) return "-";
 
-      const finalList = [...cleanList, ...cleanedObjects].filter(Boolean);
-
-      if (finalList.length === 0) return "-";
+      if (asText) {
+        return visibleItems
+          .map((item) => `- ${formatNestedDisplayValue(item, parentKey, true)}`)
+          .join("\n");
+      }
 
       return (
         <ul className="list-disc list-inside">
-          {finalList.map((item, idx) => (
+          {visibleItems.map((item, idx) => (
             <li key={idx}>
-              {typeof item === "object" ? JSON.stringify(item) : item}
+              {typeof item === "object" && item !== null
+                ? formatNestedDisplayValue(item, parentKey)
+                : formatNestedDisplayValue(item, parentKey)}
             </li>
           ))}
         </ul>
       );
     }
 
-    // Objects
-    if (typeof value === "object" && value !== null) {
+    if (typeof value === "object") {
       const entries = Object.entries(value).filter(
-        ([subKey, subVal]) => !shouldSkipField(subKey, subVal)
+        ([childKey, childValue]) => !shouldSkipField(childKey, childValue),
       );
 
-      const hasImage = Object.keys(value).some((k) =>
-        k.toLowerCase().includes("image")
-      );
+      if (!entries.length) return "-";
 
-      if (entries.length === 0 && !hasImage) return null;
+      if (asText) {
+        return entries
+          .map(([childKey, childValue]) => {
+            const imageUrl = childKey.toLowerCase().includes("image")
+              ? typeof childValue === "string"
+                ? childValue
+                : childValue?.url
+              : null;
+            return `${formatKey(childKey)}: ${imageUrl || formatNestedDisplayValue(childValue, childKey, true)}`;
+          })
+          .join("\n");
+      }
 
       return (
         <div className="grid grid-cols-1 gap-1 text-sm max-w-md overflow-x-auto">
-          {Object.entries(value).map(([innerKey, innerValue], idx) => {
-            if (shouldSkipField(innerKey, innerValue)) return null;
-
-            const isImageField = innerKey.toLowerCase().includes("image");
-            if (isImageField && innerValue) {
+          {entries.map(([childKey, childValue], idx) => {
+            const isImageField = childKey.toLowerCase().includes("image");
+            if (isImageField && childValue) {
               const imageUrl =
-                typeof innerValue === "string"
-                  ? innerValue
-                  : innerValue.url || null;
+                typeof childValue === "string"
+                  ? childValue
+                  : childValue.url || null;
 
               if (imageUrl) {
                 return (
                   <div key={idx} className="flex flex-col gap-1">
-                    <span>{formatKey(innerKey)}:</span>
+                    <span>{formatKey(childKey)}:</span>
                     <img
                       src={imageUrl}
-                      alt={innerKey}
+                      alt={childKey}
                       className="h-24 w-24 rounded border object-cover"
                     />
                   </div>
@@ -179,33 +321,52 @@ const LogPage = () => {
               }
             }
 
-            if (
-              typeof innerValue !== "object" ||
-              innerValue === null ||
-              Array.isArray(innerValue)
-            ) {
-              let displayValue = innerValue;
-
-              if (innerKey.toLowerCase().includes("date")) {
-                displayValue = humanDate(innerValue);
-              } else if (innerKey.toLowerCase().includes("time")) {
-                displayValue = humanTime(innerValue);
-              }
-
-              return (
-                <div key={idx} className="flex gap-1 items-start">
-                  <span className="whitespace-nowrap">
-                    {formatKey(innerKey)}:
-                  </span>
-                  <span className="break-words">{displayValue ?? "-"}</span>
-                </div>
-              );
-            }
-
-            return null;
+            return (
+              <div key={idx} className="flex gap-1 items-start">
+                <span className="whitespace-nowrap">
+                  {formatKey(childKey)}:
+                </span>
+                <span className="break-words">
+                  {formatNestedDisplayValue(childValue, childKey)}
+                </span>
+              </div>
+            );
           })}
         </div>
       );
+    }
+
+    if (parentKey.toLowerCase().includes("date")) return humanDate(value);
+    if (parentKey.toLowerCase().includes("time")) return humanTime(value);
+
+    return String(value);
+  };
+
+  const formatValue = (key, value, asText = false) => {
+    if (shouldSkipField(key, value)) return null;
+    if (isMongoId(value)) return null;
+
+    // Arrays
+    if (Array.isArray(value)) {
+      return formatNestedDisplayValue(value, key, asText);
+    }
+
+    // Objects
+    if (typeof value === "object" && value !== null) {
+      const entries = Object.entries(value).filter(
+        ([subKey, subVal]) => !shouldSkipField(subKey, subVal),
+      );
+
+      if (!entries.length) return null;
+
+      const readableLabel = getReadableLogLabel(value);
+      const hasOnlyReadableLabel = entries.every(([subKey]) =>
+        ["name", "title", "label", "empId", "email"].includes(subKey),
+      );
+
+      if (readableLabel && hasOnlyReadableLabel) return readableLabel;
+
+      return formatNestedDisplayValue(value, key, asText);
     }
 
     // Top-level key formatting
@@ -215,47 +376,65 @@ const LogPage = () => {
     return value ?? "-";
   };
 
+  const formatLogDetailsForExport = (payload) => {
+    return (
+      Object.entries(payload || {})
+        .map(([key, value]) => {
+          const formattedValue = formatValue(key, value, true);
+          return formattedValue === null
+            ? null
+            : `${formatKey(key)}: ${formattedValue}`;
+        })
+        .filter((value) => value !== null)
+        .join("\n") || "-"
+    );
+  };
+
   return (
     <div className="p-4">
-      <YearWiseTable
-        data={tableData || []}
-        columns={columns}
-        dateColumn="createdAt"
-        tableHeight={400}
-        tableTitle="Logs Table"
-        exportData={true}
-        search={true}
-      />
-      <MuiModal
-        open={openModal}
-        onClose={() => setOpenModal(false)}
-        title="View Log"
-      >
-        <div className="grid grid-cols-1 lg:grid-cols-1 gap-4">
-          {selectedLog &&
-            Object.entries(selectedLog).map(([key, value], index) => {
-              console.log("keys", key, "->", skipKeys.includes(key));
-              if (skipKeys.includes(key)) {
-                console.log("inside", key, "->", skipKeys.includes(key));
-                return null;
-              }
-              const formattedKey = formatKey(key);
-              const formattedValue = formatValue(key, value);
+      <PageFrame>
+        <YearWiseTable
+          data={tableData || []}
+          columns={columns}
+          dateColumn="createdAt"
+          tableHeight={400}
+          tableTitle="Logs Table"
+          exportData={true}
+          search={true}
+          showDateNavigator
+          selectedDateLabel={selectedLogDateLabel}
+          onPreviousDay={handlePreviousLogDay}
+          onNextDay={handleNextLogDay}
+        />
+        <MuiModal
+          open={openModal}
+          onClose={() => setOpenModal(false)}
+          title="View Log"
+        >
+          <div className="grid grid-cols-1 lg:grid-cols-1 gap-4">
+            {selectedLog &&
+              Object.entries(selectedLog).map(([key, value], index) => {
+                console.log("keys", key, "->", skipKeys.includes(key));
+                if (skipKeys.includes(key)) {
+                  console.log("inside", key, "->", skipKeys.includes(key));
+                  return null;
+                }
+                const formattedKey = formatKey(key);
+                const formattedValue = formatValue(key, value);
 
-              // Skip rendering completely if key OR value is null
+                if (!formattedKey || formattedValue === null) return null;
 
-              if (!formattedKey || formattedValue === null) return null;
-
-              return (
-                <DetalisFormatted
-                  key={index}
-                  title={formattedKey}
-                  detail={formattedValue}
-                />
-              );
-            })}
-        </div>
-      </MuiModal>
+                return (
+                  <DetalisFormatted
+                    key={index}
+                    title={formattedKey}
+                    detail={formattedValue}
+                  />
+                );
+              })}
+          </div>
+        </MuiModal>
+      </PageFrame>
     </div>
   );
 };

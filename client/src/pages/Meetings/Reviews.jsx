@@ -1,14 +1,11 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { Tabs, Tab } from "@mui/material";
 import WidgetSection from "../../components/WidgetSection";
 import DataCard from "../../components/DataCard";
 import AgTable from "../../components/AgTable";
-import { Chip } from "@mui/material";
-import { PiArrowBendUpLeftBold } from "react-icons/pi";
-import { PiArrowBendLeftDownBold } from "react-icons/pi";
-import MuiAside from "../../components/MuiAside";
-import PrimaryButton from "../../components/PrimaryButton";
+import MuiModal from "../../components/MuiModal";
 import TextField from "@mui/material/TextField";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery } from "@tanstack/react-query";
 import useAxiosPrivate from "../../hooks/useAxiosPrivate";
 import { Controller, useForm } from "react-hook-form";
 import useAuth from "../../hooks/useAuth";
@@ -16,40 +13,222 @@ import { toast } from "sonner";
 import { queryClient } from "../../main";
 import humanDate from "../../utils/humanDateForamt";
 import PageFrame from "../../components/Pages/PageFrame";
-import { isAlphanumeric, noOnlyWhitespace } from "../../utils/validators";
+import { noOnlyWhitespace } from "../../utils/validators";
+import ThreeDotMenu from "../../components/ThreeDotMenu";
+import DetalisFormatted from "../../components/DetalisFormatted";
+import { MdOutlineRemoveRedEye } from "react-icons/md";
+import PrimaryButton from "../../components/PrimaryButton";
+import { PERMISSIONS } from "../../constants/permissions";
+import { useLocation, useNavigate } from "react-router-dom";
+import dayjs from "dayjs";
+import { DateRangePicker } from "react-date-range";
+import { Popover } from "@mui/material";
+import { MdCalendarToday } from "react-icons/md";
+import "react-date-range/dist/styles.css";
+import "react-date-range/dist/theme/default.css";
+import {
+  DEFAULT_PAGE_SIZE,
+  PAGE_SIZE_OPTIONS,
+} from "../../constants/pagination";
 
 const Reviews = () => {
   const axios = useAxiosPrivate();
-  const [openSidebar, setOpenSidebar] = useState(false);
-  const [reviewData, setReviewData] = useState({});
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { auth } = useAuth();
+  // const [activeTab, setActiveTab] = useState("clientCredit");
+  const [openModal, setOpenModal] = useState(false);
+  const [modalType, setModalType] = useState("creditView");
+  const [selectedData, setSelectedData] = useState({});
+  const [creditEdits, setCreditEdits] = useState({});
+  const [dateRange, setDateRange] = useState([
+    {
+      startDate: dayjs().startOf("month").toDate(),
+      endDate: dayjs().endOf("month").toDate(),
+      key: "selection",
+    },
+  ]);
+  const [anchorEl, setAnchorEl] = useState(null);
+  const [creditPagination, setCreditPagination] = useState({
+    page: 1,
+    limit: DEFAULT_PAGE_SIZE,
+    total: 0,
+  });
+  const [creditSearch, setCreditSearch] = useState("");
+  const [debouncedCreditSearch, setDebouncedCreditSearch] = useState("");
+
+  useEffect(() => {
+    const timeoutId = setTimeout(
+      () => setDebouncedCreditSearch(creditSearch.trim()),
+      400,
+    );
+    return () => clearTimeout(timeoutId);
+  }, [creditSearch]);
+
+  const handleCreditSearchChange = (value) => {
+    setCreditSearch(value);
+    setCreditPagination((current) => ({ ...current, page: 1 }));
+  };
+  const openCalendar = Boolean(anchorEl);
+
+  const handleOpenCalendar = (event) => {
+    setAnchorEl(event.currentTarget);
+  };
+
+  const handleCloseCalendar = () => {
+    setAnchorEl(null);
+  };
+  const handleCreditDateRangeChange = (item) => {
+    setDateRange([item.selection]);
+    setCreditPagination((current) => ({ ...current, page: 1 }));
+  };
+
+  const userPermissions = useMemo(
+    () => auth?.user?.permissions?.permissions || [],
+    [auth?.user?.permissions?.permissions],
+  );
+
+  const tabItems = useMemo(
+    () => [
+      {
+        key: "clientCredit",
+        label: "Client Credit",
+        path: "/app/meetings/client-credit",
+        permission: PERMISSIONS.MEETINGS_CLIENT_CREDIT.value,
+      },
+      {
+        key: "clientReview",
+        label: "Client Review",
+        path: "/app/meetings/client-review",
+        permission: PERMISSIONS.MEETINGS_CLIENT_REVIEW.value,
+      },
+    ],
+    [],
+  );
+
+  const visibleTabs = useMemo(
+    () => tabItems.filter((tab) => userPermissions.includes(tab.permission)),
+    [tabItems, userPermissions],
+  );
+
+  const activeTabIndex = Math.max(
+    visibleTabs.findIndex((tab) => tab.path === location.pathname),
+    0,
+  );
+
+  const activeTabKey = visibleTabs[activeTabIndex]?.key || null;
+
+  useEffect(() => {
+    if (visibleTabs.length === 0) return;
+
+    const isPathAllowed = visibleTabs.some(
+      (tab) => tab.path === location.pathname,
+    );
+    if (!isPathAllowed) {
+      navigate(visibleTabs[0].path, { replace: true });
+    }
+  }, [location.pathname, navigate, visibleTabs]);
+
   const {
     handleSubmit,
     control,
+    reset,
     formState: { errors },
   } = useForm({
     mode: "onChange",
     defaultValues: {
       reply: "",
+      monthlyCredit: "",
+      consumedCredit: "",
     },
   });
-  const { auth } = useAuth();
+
+  const handleOpenModal = (data, type) => {
+    setSelectedData(data || {});
+    setModalType(type);
+    setOpenModal(true);
+
+    if (type === "reviewReply") {
+      reset({
+        reply: data?.replyText || "",
+        monthlyCredit: "",
+        consumedCredit: "",
+      });
+      return;
+    }
+
+    if (type === "creditEdit") {
+      reset({
+        reply: "",
+        monthlyCredit: data?.monthlyCredit || "",
+        consumedCredit: data?.consumedCredit || "",
+      });
+      return;
+    }
+
+    reset({ reply: "", monthlyCredit: "", consumedCredit: "" });
+  };
+
+  const handleCloseModal = () => {
+    setOpenModal(false);
+    setSelectedData({});
+    setModalType("reviewView");
+    reset({ reply: "", monthlyCredit: "", consumedCredit: "" });
+  };
 
   const { data: reviews = [] } = useQuery({
     queryKey: ["reviews"],
     queryFn: async () => {
-      try {
-        const response = await axios.get("/api/meetings/get-reviews");
-        return response.data;
-      } catch (error) {
-        throw new Error(error.response.data.message);
-      }
+      const response = await axios.get("/api/meetings/get-reviews");
+      return response.data;
     },
+    enabled: activeTabKey === "clientReview",
+  });
+
+  const { data: clientsData = [], isLoading: isClientsLoading } = useQuery({
+    queryKey: [
+      "co-working-clients",
+      "client-credit",
+      creditPagination.page,
+      creditPagination.limit,
+      debouncedCreditSearch,
+    ],
+    placeholderData: keepPreviousData,
+    queryFn: async () => {
+      const response = await axios.get("/api/sales/co-working-clients", {
+        params: {
+          active: true,
+          page: creditPagination.page,
+          limit: creditPagination.limit,
+          search: debouncedCreditSearch || undefined,
+        },
+      });
+      const responsePagination = response.data.pagination;
+
+      setCreditPagination((current) => ({
+        page: Number(responsePagination?.page) || current.page,
+        limit: Number(responsePagination?.limit) || current.limit,
+        total: Number(responsePagination?.total) || 0,
+      }));
+
+      return response.data.data || [];
+    },
+    enabled: activeTabKey === "clientCredit",
+  });
+
+  const { data: meetingsData = [] } = useQuery({
+    queryKey: ["meetings", "client-credit"],
+    queryFn: async () => {
+      const response = await axios.get("/api/meetings/get-meetings");
+      return response.data;
+    },
+    enabled: activeTabKey === "clientCredit",
   });
 
   const { mutate: replyReview, isPending: isReplyReviewPending } = useMutation({
     mutationFn: async (data) => {
       const response = await axios.post("/api/meetings/create-reply", {
-        reviewId: reviewData.id,
+        reviewId: selectedData.id,
         reply: data.reply,
         replierEmail: auth.user.email,
         replierName: auth.user.firstName,
@@ -58,37 +237,48 @@ const Reviews = () => {
     },
     onSuccess: function (data) {
       toast.success(data.message);
-      setOpenSidebar(false);
+      handleCloseModal();
       queryClient.invalidateQueries(["reviews"]);
     },
     onError: function (error) {
-      toast.error(error.message);
+      toast.error(error?.response?.data?.message || error.message);
     },
   });
 
-  const departmentsColumn = [
+  const submitCreditEdit = (formValues) => {
+    const monthlyCredit = Number(formValues.monthlyCredit);
+    const consumedCredit = Number(formValues.consumedCredit);
+
+    if (consumedCredit > monthlyCredit) {
+      toast.error("Consumed credit cannot be greater than monthly credit");
+      return;
+    }
+
+    setCreditEdits((prev) => ({
+      ...prev,
+      [selectedData.clientId]: { monthlyCredit, consumedCredit },
+    }));
+
+    toast.success("Client credit updated in UI");
+    handleCloseModal();
+  };
+
+  const reviewColumns = [
     { field: "srno", headerName: "Sr No" },
-    {
-      field: "nameofreview",
-      headerName: "User",
-      cellRenderer: (params) => {
-        return (
-          <Chip label={params.value} style={{ backgroundColor: "white" }} />
-        );
-      },
-      flex: 1,
-    },
+    { field: "nameofreview", headerName: "User", flex: 1 },
     { field: "date", headerName: "Date" },
     {
       field: "rate",
       headerName: "Rating",
-      cellRenderer: (params) => {
-        return (
-          <div>
-            ⭐ {params.value.toFixed(2)} <small>Out of 5</small>
-          </div>
-        );
-      },
+      cellRenderer: (params) => (
+        <div>
+          ⭐{" "}
+          {typeof params.value === "number"
+            ? params.value.toFixed(2)
+            : params.value}{" "}
+          <small>Out of 5</small>
+        </div>
+      ),
     },
     {
       field: "Reviews",
@@ -104,53 +294,245 @@ const Reviews = () => {
     {
       field: "action",
       headerName: "Actions",
-      cellRenderer: (params) => {
-        const statusColorMap = {
-          "Reply Review": { backgroundColor: "#E8FEF1", color: "#527160" }, // Light orange bg, dark orange font
-          Replied: { backgroundColor: "#EAEAEA", color: "#868686" }, // Light green bg, dark green font
-        };
-
-        const { backgroundColor, color } = statusColorMap[params.value] || {
-          backgroundColor: "gray",
-          color: "white",
-        };
-
-        const handleClick = () => {
-          if (params.value === "Reply Review") {
-            // Trigger modal open when "Reply Review" is clicked
-            setOpenSidebar(true);
-            setReviewData(params.data); // Optional: You can pass the row data to the modal
-          }
-        };
-
-        return (
-          <>
-            <Chip
-              label={
-                params.value === "Reply Review" ? (
-                  <div
-                    className="flex flex-row items-center justify-center gap-2"
-                    onClick={handleClick}
-                  >
-                    <PiArrowBendLeftDownBold />
-                    {params.value}
-                  </div>
-                ) : (
-                  <div className="flex flex-row items-center justify-center gap-2">
-                    <PiArrowBendUpLeftBold />
-                    {params.value}
-                  </div>
-                )
-              }
-              style={{
-                backgroundColor,
-                color,
-              }}
-            />
-          </>
-        );
-      },
       flex: 1,
+      cellRenderer: (params) => (
+        <div className="flex gap-2 items-center">
+          <div
+            onClick={() => handleOpenModal(params.data, "reviewView")}
+            className="hover:bg-gray-200 cursor-pointer p-2 rounded-full transition-all"
+          >
+            <span className="text-subtitle">
+              <MdOutlineRemoveRedEye />
+            </span>
+          </div>
+
+          <ThreeDotMenu
+            rowId={params.data.id}
+            menuItems={[
+              {
+                label: !params.data.replyText ? "Reply to Review" : "Replied",
+                onClick: () => handleOpenModal(params.data, "reviewReply"),
+                disabled: !!params.data.replyText,
+              },
+            ]}
+          />
+        </div>
+      ),
+    },
+  ];
+  const formatExportDate = (date = new Date()) =>
+    new Intl.DateTimeFormat("en-IN", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    }).format(date);
+
+  const buildClientCreditExportRows = (rows, exportDate) =>
+    rows.map((row) => ({
+      "Export Date": exportDate,
+      "Sr No": row.srNo,
+      "Client Name": row.clientName,
+      Month: row.monthLabel,
+      "Monthly Credit": row.monthlyCredit,
+      "Consumed Credit": row.consumedCredit,
+      "Remaining Credit": row.remainingCredit,
+    }));
+
+  const exportClientCredits = (rows = clientCreditRows) => {
+    if (!rows.length) {
+      toast.error("No client credit data available to export");
+      return false;
+    }
+
+    const exportDate = formatExportDate();
+    const exportRows = buildClientCreditExportRows(rows, exportDate);
+    const headers = Object.keys(exportRows[0]);
+    const csvContent = [
+      headers.join(","),
+      ...exportRows.map((row) =>
+        headers
+          .map((header) => `"${String(row[header] ?? "").replace(/"/g, '""')}"`)
+          .join(","),
+      ),
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const downloadLink = document.createElement("a");
+    const fileDate = exportDate.replace(/[/:,\s]/g, "-");
+
+    downloadLink.href = URL.createObjectURL(blob);
+    downloadLink.download = `client-credit-export-${fileDate}.csv`;
+    document.body.appendChild(downloadLink);
+    downloadLink.click();
+    document.body.removeChild(downloadLink);
+    URL.revokeObjectURL(downloadLink.href);
+
+    toast.success("Client credit exported successfully");
+    return true;
+  };
+
+  const clientCreditRows = useMemo(() => {
+    const { startDate, endDate } = dateRange[0] || {};
+    if (!startDate || !endDate || !clientsData.length) return [];
+
+    const startMonth = dayjs(startDate).startOf("month");
+    const endMonth = dayjs(endDate).startOf("month");
+    const today = dayjs();
+    const normalizeClientKey = (value) =>
+      String(value || "")
+        .trim()
+        .toLowerCase();
+    const meetingCreditsByClientMonth = meetingsData.reduce((acc, meeting) => {
+      const isInternalMeeting =
+        String(meeting?.meetingType || "")
+          .trim()
+          .toLowerCase() === "internal";
+      const isCancelledMeeting =
+        String(meeting?.meetingStatus || "")
+          .trim()
+          .toLowerCase() === "cancelled";
+      const meetingClientName = normalizeClientKey(meeting?.client);
+      const meetingMonthDate =
+        meeting?.date || meeting?.startDate || meeting?.startTime;
+
+      if (
+        !isInternalMeeting ||
+        isCancelledMeeting ||
+        !meetingClientName ||
+        !meetingMonthDate
+      ) {
+        return acc;
+      }
+
+      const monthKey = dayjs(meetingMonthDate).format("YYYY-MM");
+      const clientMonthKey = `${meetingClientName}__${monthKey}`;
+
+      if (!acc[clientMonthKey]) {
+        acc[clientMonthKey] = {
+          bookedCredits: 0,
+        };
+      }
+
+      acc[clientMonthKey].bookedCredits += Number(meeting?.creditsUsed || 0);
+
+      return acc;
+    }, {});
+
+    // Generate all months in selected range
+    const monthsArray = [];
+    let tempMonth = startMonth;
+    while (
+      tempMonth.isBefore(endMonth) ||
+      tempMonth.isSame(endMonth, "month")
+    ) {
+      monthsArray.push(tempMonth);
+      tempMonth = tempMonth.add(1, "month");
+    }
+
+    const rows = clientsData.flatMap((client) => {
+      const clientId = client?._id;
+      const clientName = client?.clientName || "-";
+      const totalMonthlyCredit = Number(client?.totalMeetingCredits || 0);
+      const normalizedClientName = normalizeClientKey(clientName);
+
+      return monthsArray.map((month) => {
+        const monthLabel = month.format("MMM YYYY");
+        const monthId = month.format("YYYY-MM");
+        const clientMonthKey = `${normalizedClientName}__${monthId}`;
+        const bookingSummary = meetingCreditsByClientMonth[clientMonthKey];
+        const historyEntry = client?.meetingCreditBalanceHistory?.find((h) =>
+          dayjs(h.monthStartDate).isSame(month, "month"),
+        );
+        const bookedConsumed = Number(bookingSummary?.bookedCredits || 0);
+        const hasHistoryEntry = Boolean(historyEntry?.monthStartDate);
+
+        let remaining = totalMonthlyCredit;
+
+        if (hasHistoryEntry) {
+          remaining = Number(historyEntry?.remainingCredit || 0);
+        } else if (
+          (month.isSame(today, "month") || month.isAfter(today, "month")) &&
+          bookedConsumed > 0
+        ) {
+          remaining = Math.max(
+            Number((totalMonthlyCredit - bookedConsumed).toFixed(2)),
+            0,
+          );
+        }
+
+        const consumed = Math.max(
+          Number((totalMonthlyCredit - remaining).toFixed(2)),
+          0,
+        );
+
+        return {
+          id: `${clientId}-${monthId}`,
+          clientId,
+          clientName,
+          monthLabel,
+          monthlyCredit: totalMonthlyCredit.toFixed(2),
+          consumedCredit: consumed.toFixed(2),
+          remainingCredit: remaining.toFixed(2),
+          monthDate: month.toDate(),
+        };
+      });
+    });
+
+    return rows
+      .sort((a, b) => {
+        if (a.clientName !== b.clientName)
+          return a.clientName.localeCompare(b.clientName);
+        return a.monthDate.getTime() - b.monthDate.getTime();
+      })
+      .map((row, index) => ({
+        ...row,
+        srNo: (creditPagination.page - 1) * creditPagination.limit + index + 1,
+      }));
+  }, [
+    clientsData,
+    creditPagination.limit,
+    creditPagination.page,
+    dateRange,
+    meetingsData,
+  ]);
+
+  const clientCreditColumns = [
+    { field: "srNo", headerName: "Sr No", width: 90 },
+    { field: "clientName", headerName: "Client Name", flex: 1 },
+    { field: "monthLabel", headerName: "Month", flex: 1 },
+    { field: "monthlyCredit", headerName: "Monthly Credit", flex: 1 },
+    { field: "consumedCredit", headerName: "Consumed Credit", flex: 1 },
+    { field: "remainingCredit", headerName: "Remaining Credit", flex: 1 },
+    {
+      field: "action",
+      headerName: "Action",
+      flex: 1,
+      cellRenderer: (params) => (
+        <div className="flex gap-2 items-center">
+          <div
+            onClick={() => handleOpenModal(params.data, "creditView")}
+            className="hover:bg-gray-200 cursor-pointer p-2 rounded-full transition-all"
+          >
+            <span className="text-subtitle">
+              <MdOutlineRemoveRedEye />
+            </span>
+          </div>
+
+          {/* <ThreeDotMenu
+            rowId={`credit-${params.data.clientId}`}
+            menuItems={[
+              {
+                label: "Edit",
+                onClick: () => handleOpenModal(params.data, "creditEdit"),
+              },
+            ]}
+          /> */}
+        </div>
+      ),
     },
   ];
 
@@ -161,102 +543,323 @@ const Reviews = () => {
         ).toFixed(2)
       : "0.00";
 
-  // const averageRatings = rating
-
   return (
-    <>
-      <div>
-        <WidgetSection layout={2}>
-          <DataCard
-            data={reviews.length}
-            title="Total"
-            description="Reviews Count"
-          />
-          <DataCard
-            data={`${averageRatings} ⭐`}
-            title="Average"
-            description=" Ratings"
-          />
-          {/* <DataCard data="10.0k" title="Total" description="Reviews Count" /> */}
-        </WidgetSection>
-
-        <div className="p-6">
-          <PageFrame>
-            <AgTable
-              search={true}
-              searchColumn={"Policies"}
-              data={[
-                ...reviews.map((review, index) => ({
-                  id: review._id,
-                  srno: index + 1,
-                  nameofreview: review.reviewerName,
-                  date: humanDate(review.createdAt),
-                  rate: review.rate,
-                  Reviews: review.review,
-                  action: review?.reply ? "Replied" : "Reply Review",
-                })),
-              ]}
-              columns={departmentsColumn}
-            />
-          </PageFrame>
-        </div>
-        <MuiAside
-          open={openSidebar}
-          onClose={() => setOpenSidebar(false)}
-          title={"Reviews"}
+    <div className="p-4">
+      {visibleTabs.length > 0 && (
+        <Tabs
+          value={activeTabIndex}
+          variant="fullWidth"
+          TabIndicatorProps={{ style: { display: "none" } }}
+          sx={{
+            backgroundColor: "white",
+            borderRadius: 2,
+            border: "1px solid #d1d5db",
+            overflow: "hidden",
+            "& .MuiTab-root": {
+              textTransform: "none",
+              fontWeight: "medium",
+              color: "#1E3D73",
+              borderRight: "0.1px solid #d1d5db",
+            },
+            "& .Mui-selected": {
+              backgroundColor: "#1E3D73",
+              color: "white !important",
+            },
+          }}
         >
-          <div className="p-2 space-y-6">
-            <h1 className="font-pmedium text-subtitle">
-              {reviewData.nameofreview}
-            </h1>
-            <div>
-              ⭐ {reviewData.rate} <small> out of 5</small>
-            </div>
-            <div>
-              <p>{reviewData.Reviews}</p>
-            </div>
-            <div className="mt-5">
-              <form
-                onSubmit={handleSubmit(replyReview)}
-                className="flex flex-col gap-4"
-              >
-                <Controller
-                  name="reply"
-                  control={control}
-                  rules={{
-                    required: "Please add a review",
-                    // validate: {
-                    //   noOnlyWhitespace,
-                    //   isAlphanumeric,
-                    // },
-                  }}
-                  render={({ field }) => (
-                    <TextField
-                      {...field}
-                      type="text"
-                      id="outlined-multiline-flexible"
-                      label="Reply"
-                      fullWidth
-                      error={!!errors.reply}
-                      helperText={errors.reply?.message}
-                      multiline
-                      rows={5}
-                    />
-                  )}
-                />
+          {visibleTabs.map((tab) => (
+            <Tab
+              key={tab.key}
+              label={tab.label}
+              onClick={() => navigate(tab.path)}
+            />
+          ))}
+        </Tabs>
+      )}
 
-                <PrimaryButton
-                  title={"Submit"}
-                  type={"submit"}
-                  isLoading={isReplyReviewPending}
-                  disabled={isReplyReviewPending}
+      <div className="py-4">
+        {activeTabKey === "clientReview" ? (
+          <>
+            <WidgetSection layout={2}>
+              <DataCard
+                data={reviews.length}
+                title="Total"
+                description="Reviews Count"
+              />
+              <DataCard
+                data={`${averageRatings} ⭐`}
+                title="Average"
+                description=" Ratings"
+              />
+            </WidgetSection>
+
+            <div className="pt-4">
+              <PageFrame>
+                <AgTable
+                  search={true}
+                  tableTitle="Client Reviews"
+                  searchColumn={"nameofreview"}
+                  data={reviews.map((review, index) => {
+                    const replyText =
+                      typeof review.reply === "string"
+                        ? review.reply
+                        : review.reply?.text || "";
+                    const hasReply = !!replyText;
+
+                    return {
+                      id: review._id,
+                      srno: index + 1,
+                      nameofreview: review.reviewerName,
+                      date: humanDate(review.createdAt),
+                      rate: review.rate,
+                      Reviews: review.review,
+                      replyText,
+                      action: hasReply ? "Replied" : "Reply Review",
+                    };
+                  })}
+                  columns={reviewColumns}
                 />
-              </form>
+              </PageFrame>
             </div>
+          </>
+        ) : activeTabKey === "clientCredit" ? (
+          <div className="space-y-4">
+            <PageFrame>
+              <div className="flex flex-col gap-4 pb-4">
+                <div className="grid grid-cols-12 items-center w-full pb-4">
+                  <div className="col-span-4">
+                    <span className="text-title text-primary font-pmedium uppercase">
+                      Client Credits
+                    </span>
+                  </div>
+                  <div className="col-span-4 flex justify-center">
+                    <div className="flex items-center gap-2">
+                      <div className="px-6 py-1 rounded-md border-primary border-[1px]">
+                        <span className="text-gray-600 text-content font-pregular">
+                          {dayjs(dateRange[0]?.startDate).format("DD MMM YYYY")}
+                        </span>
+                      </div>
+                      <div className="px-6 py-1 rounded-md border-primary border-[1px]">
+                        <span className="text-gray-600 text-content font-pregular">
+                          {dayjs(dateRange[0]?.endDate).format("DD MMM YYYY")}
+                        </span>
+                      </div>
+                      <div
+                        className="p-2 rounded-md bg-primary text-white cursor-pointer hover:bg-[#1E3D55]"
+                        onClick={handleOpenCalendar}
+                      >
+                        <MdCalendarToday size={19} />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="col-span-4 flex justify-end">
+                    <PrimaryButton
+                      title="Export"
+                      handleSubmit={() => exportClientCredits()}
+                      type="button"
+                      externalStyles="!bg-primary"
+                      padding="px-6 py-2"
+                    />
+                  </div>
+                </div>
+
+                <Popover
+                  open={openCalendar}
+                  anchorEl={anchorEl}
+                  onClose={handleCloseCalendar}
+                  anchorOrigin={{
+                    vertical: "bottom",
+                    horizontal: "left",
+                  }}
+                >
+                  <DateRangePicker
+                    ranges={dateRange}
+                    onChange={handleCreditDateRangeChange}
+                    moveRangeOnFirstSelection={false}
+                  />
+                </Popover>
+              </div>
+
+              <AgTable
+                search={true}
+                tableTitle="Client Credits"
+                searchColumn={"clientName"}
+                data={clientCreditRows}
+                columns={clientCreditColumns}
+                loading={isClientsLoading}
+                hideTitle={true}
+                serverPagination
+                pageSizeOptions={PAGE_SIZE_OPTIONS}
+                paginationPageSize={creditPagination.limit}
+                paginationPage={creditPagination.page}
+                paginationTotal={creditPagination.total}
+                onPaginationPageChange={(page) =>
+                  setCreditPagination((current) => ({ ...current, page }))
+                }
+                onPaginationPageSizeChange={(limit) =>
+                  setCreditPagination((current) =>
+                    current.limit === limit
+                      ? current
+                      : { ...current, page: 1, limit },
+                  )
+                }
+                serverSearch
+                searchValue={creditSearch}
+                onSearchChange={handleCreditSearchChange}
+              />
+            </PageFrame>
           </div>
-        </MuiAside>
+        ) : null}
       </div>
-    </>
+
+      <MuiModal
+        open={openModal}
+        onClose={handleCloseModal}
+        title={
+          modalType === "reviewReply"
+            ? "Reply to Review"
+            : modalType === "creditView"
+              ? "Client Credit Details"
+              : modalType === "creditEdit"
+                ? "Edit Client Credit"
+                : "Review Details"
+        }
+      >
+        {modalType === "reviewView" && (
+          <div className="space-y-4">
+            <DetalisFormatted title="User" detail={selectedData.nameofreview} />
+            <DetalisFormatted title="Date" detail={selectedData.date} />
+            <DetalisFormatted
+              title="Rating"
+              detail={
+                typeof selectedData.rate === "number"
+                  ? `${selectedData.rate.toFixed(2)} / 5`
+                  : selectedData.rate || "—"
+              }
+            />
+            <DetalisFormatted title="Review" detail={selectedData.Reviews} />
+            <DetalisFormatted
+              title="Reply"
+              detail={selectedData.replyText || "No reply yet"}
+            />
+          </div>
+        )}
+
+        {modalType === "reviewReply" && (
+          <div className="space-y-5">
+            <div className="p-2 space-y-6">
+              <p className="font-pmedium text-subtitle">
+                {selectedData.nameofreview || "—"}
+              </p>
+              <p>
+                ⭐ {selectedData.rate} <small> out of 5</small>
+              </p>
+              <p className="text-sm text-content">
+                {selectedData.Reviews || "—"}
+              </p>
+            </div>
+
+            <form
+              onSubmit={handleSubmit(replyReview)}
+              className="flex flex-col gap-4"
+            >
+              <Controller
+                name="reply"
+                control={control}
+                rules={{
+                  required: "Please add a review",
+                  validate: {
+                    noOnlyWhitespace,
+                  },
+                }}
+                render={({ field }) => (
+                  <TextField
+                    {...field}
+                    type="text"
+                    label="Reply"
+                    fullWidth
+                    error={!!errors.reply}
+                    helperText={errors.reply?.message}
+                    multiline
+                    rows={5}
+                  />
+                )}
+              />
+
+              <PrimaryButton
+                title={"Submit"}
+                type={"submit"}
+                isLoading={isReplyReviewPending}
+                disabled={isReplyReviewPending}
+              />
+            </form>
+          </div>
+        )}
+
+        {modalType === "creditView" && (
+          <div className="space-y-4">
+            <DetalisFormatted
+              title="Client Name"
+              detail={selectedData.clientName}
+            />
+            <DetalisFormatted title="Month" detail={selectedData.monthLabel} />
+            <DetalisFormatted
+              title="Monthly Credit"
+              detail={selectedData.monthlyCredit}
+            />
+            <DetalisFormatted
+              title="Consumed Credit"
+              detail={selectedData.consumedCredit}
+            />
+            <DetalisFormatted
+              title="Remaining Credit"
+              detail={selectedData.remainingCredit}
+            />
+          </div>
+        )}
+
+        {modalType === "creditEdit" && (
+          <form
+            onSubmit={handleSubmit(submitCreditEdit)}
+            className="flex flex-col gap-4"
+          >
+            <Controller
+              name="monthlyCredit"
+              control={control}
+              rules={{ required: "Monthly credit is required" }}
+              render={({ field }) => (
+                <TextField
+                  {...field}
+                  type="number"
+                  label="Monthly Credit"
+                  fullWidth
+                  error={!!errors.monthlyCredit}
+                  helperText={errors.monthlyCredit?.message}
+                />
+              )}
+            />
+
+            <Controller
+              name="consumedCredit"
+              control={control}
+              rules={{ required: "Consumed credit is required" }}
+              render={({ field }) => (
+                <TextField
+                  {...field}
+                  type="number"
+                  label="Consumed Credit"
+                  fullWidth
+                  error={!!errors.consumedCredit}
+                  helperText={errors.consumedCredit?.message}
+                />
+              )}
+            />
+
+            <PrimaryButton title={"Save"} type={"submit"} />
+          </form>
+        )}
+      </MuiModal>
+    </div>
   );
 };
 

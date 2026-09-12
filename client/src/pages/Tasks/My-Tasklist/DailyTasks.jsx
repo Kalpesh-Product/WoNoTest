@@ -7,8 +7,9 @@ import { useDispatch, useSelector } from "react-redux";
 import humanTime from "../../../utils/humanTime";
 import humanDate from "../../../utils/humanDateForamt";
 import { Chip, CircularProgress, TextField } from "@mui/material";
-import PrimaryButton from "../../../components/PrimaryButton";
+
 import { Controller, useForm } from "react-hook-form";
+import PrimaryButton from "../../../components/PrimaryButton";
 import MuiModal from "../../../components/MuiModal";
 import {
   DatePicker,
@@ -17,47 +18,79 @@ import {
 } from "@mui/x-date-pickers";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import dayjs from "dayjs";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { FaCheck } from "react-icons/fa6";
 import { queryClient } from "../../../main";
 import { toast } from "sonner";
 import ThreeDotMenu from "../../../components/ThreeDotMenu";
 import DetalisFormatted from "../../../components/DetalisFormatted";
-import { MdOutlineRemoveRedEye } from "react-icons/md";
+import { MdDeleteForever, MdOutlineRemoveRedEye } from "react-icons/md";
+import { HiPencilSquare } from "react-icons/hi2";
 import { setSelectedDepartment } from "../../../redux/slices/performanceSlice";
 import useAuth from "../../../hooks/useAuth";
 import PageFrame from "../../../components/Pages/PageFrame";
 import { isAlphanumeric, noOnlyWhitespace } from "../../../utils/validators";
 import YearWiseTable from "../../../components/Tables/YearWiseTable";
+import { formatDateTimeFields } from "../../../utils/formatDateTime";
+import ConfirmationModal from "../../../components/ConfirmationModal";
+import SecondaryButton from "../../../components/SecondaryButton";
 
 const DailyTasks = () => {
+  const taskFormDefaultValues = {
+    taskName: "",
+    startDate: null,
+    endDate: null,
+    description: "",
+    dueTime: null,
+  };
   const axios = useAxiosPrivate();
   const dispatch = useDispatch();
   const [openModal, setOpenModal] = useState(false);
   const [modalMode, setModalMode] = useState("");
   const [selectedTask, setSelectedTask] = useState({});
+  const [deleteTargetId, setDeleteTargetId] = useState(null);
+  const [completionCommentError, setCompletionCommentError] = useState("");
+  const completionCommentRef = useRef("");
+  const getCurrentMonthRange = () => ({
+    startDate: dayjs().startOf("month").toDate(),
+    endDate: dayjs().endOf("month").toDate(),
+    key: "selection",
+  });
+  const [selectedMyTaskRange, setSelectedMyTaskRange] = useState(
+    getCurrentMonthRange,
+  );
+  const [selectedCompletedTaskRange, setSelectedCompletedTaskRange] = useState(
+    getCurrentMonthRange,
+  );
   const { auth } = useAuth();
   const currentDepartmentId = auth.user?.departments?.[0]?._id;
   const deptId = useSelector((state) => state.performance.selectedDepartment);
+  const myTaskDepartmentId = currentDepartmentId || deptId;
+  const currentUserId = auth?.user?._id;
+  const isCurrentUserTaskOwner = (task) => {
+    const ownerId =
+      task?.assignedBy?._id ||
+      task?.assignedBy?.id ||
+      task?.assignedBy ||
+      "";
+
+    return String(ownerId) === String(currentUserId);
+  };
   useEffect(() => {
     if (!deptId) {
       dispatch(setSelectedDepartment(currentDepartmentId));
     }
-  }, []);
+  }, [currentDepartmentId, deptId, dispatch]);
 
   const {
     handleSubmit: submitDailyKra,
     control,
     formState: { errors },
     watch,
+    reset,
   } = useForm({
     mode: "onChange",
-    defaultValues: {
-      taskName: "",
-      startDate: null,
-      endDate: null,
-      description: "",
-    },
+    defaultValues: taskFormDefaultValues,
   });
   const startDate = watch("startDate");
 
@@ -94,14 +127,15 @@ const DailyTasks = () => {
         endDate: data.endDate,
         dueTime: data.dueTime,
         description: data.description,
-        department: deptId,
-        taskType:"Self"
+        department: myTaskDepartmentId,
+        taskType: "Self",
       });
       return response.data;
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["fetchMyTask"] });
       toast.success(data.message || "KRA Added");
+      reset(taskFormDefaultValues);
       setOpenModal(false);
     },
     onError: (error) => {
@@ -112,6 +146,19 @@ const DailyTasks = () => {
   });
 
   const handleFormSubmit = (data) => {
+    if (modalMode === "edit-task" && selectedTask?.id) {
+      editMyTask({
+        id: selectedTask.id,
+        data: {
+          taskName: data.taskName,
+          description: data.description,
+          startDate: data.startDate,
+          endDate: data.endDate,
+          dueTime: data.dueTime,
+        },
+      });
+      return;
+    }
     addMonthlyKpa(data);
   };
   //--------------POST REQUEST FOR MONTHLY KPA-----------------//
@@ -120,7 +167,8 @@ const DailyTasks = () => {
     mutationKey: ["updateMyTasks"],
     mutationFn: async (data) => {
       const response = await axios.patch(
-        `/api/tasks/update-task-status/${data}`
+        `/api/tasks/update-task-status/${data.taskId}`,
+        { comment: data.comment },
       );
       return response.data;
     },
@@ -129,20 +177,89 @@ const DailyTasks = () => {
       queryClient.invalidateQueries({ queryKey: ["fetchMyTask"] });
       queryClient.invalidateQueries({ queryKey: ["completedTasks"] });
       toast.success(data.message || "Task updated");
+      completionCommentRef.current = "";
+      setCompletionCommentError("");
+      setSelectedTask({});
+      setOpenModal(false);
     },
     onError: (error) => {
       toast.error(error.message || "Error Updating");
     },
   });
   //--------------UPDATE REQUEST FOR MONTHLY KPA-----------------//
+  const { mutate: deleteMyTask, isPending: isDeletePending } = useMutation({
+    mutationKey: ["deleteMyTask"],
+    mutationFn: async (taskId) => {
+      const response = await axios.patch(`/api/tasks/delete-task/${taskId}`);
+      return response.data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["fetchMyTask"] });
+      queryClient.invalidateQueries({ queryKey: ["completedTasks"] });
+      toast.success(data.message || "Task deleted");
+    },
+    onError: (error) => {
+      toast.error(error.message || "Error deleting task");
+    },
+  });
+
+  const handleConfirmDelete = () => {
+    if (!deleteTargetId) return;
+    deleteMyTask(deleteTargetId);
+    setDeleteTargetId(null);
+  };
+
+  const { mutate: editMyTask, isPending: isEditPending } = useMutation({
+    mutationKey: ["editMyTask"],
+    mutationFn: async ({ id, data }) => {
+      const response = await axios.patch(`/api/tasks/update-task/${id}`, data);
+      return response.data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["fetchMyTask"] });
+      toast.success(data.message || "Task updated");
+      reset(taskFormDefaultValues);
+      setOpenModal(false);
+    },
+    onError: (error) => {
+      toast.error(error.message || "Error updating task");
+    },
+  });
+
+
+  const openMarkDoneModal = (taskData) => {
+    setSelectedTask(taskData);
+    completionCommentRef.current = "";
+    setCompletionCommentError("");
+    setModalMode("comment");
+    setOpenModal(true);
+  };
+
+  const handleMarkAsDoneWithComment = () => {
+    const trimmedComment = completionCommentRef.current.trim();
+
+    if (!trimmedComment) {
+      setCompletionCommentError("Comment is required");
+      return;
+    }
+
+    updateMonthlyKpa({
+      taskId: selectedTask?.id,
+      comment: trimmedComment,
+    });
+  };
 
   //--------Column configs----------------//
-  const departmentColumns = [
-    { headerName: "SR no", field: "srno", width: 100, sort: "desc" },
+
+  const formatDateTime = (value) =>
+    value ? `${humanDate(value)}, ${humanTime(value)}` : "N/A";
+
+  const departmentColumns = useMemo(() => [
+    { headerName: "Sr No", field: "srNo", width: 100, sort: "asc" },
     {
       headerName: "Task List",
       field: "taskList",
-      width: 300,
+      flex:1,
       cellRenderer: (params) => (
         <div role="button" onClick={() => handleViewTask(params.data)}>
           <span className="underline text-primary cursor-pointer">
@@ -151,13 +268,27 @@ const DailyTasks = () => {
         </div>
       ),
     },
-    { headerName: "Assigned Date", field: "assignedDate" },
+    {
+      headerName: "Start Date",
+      field: "assignedDate",
+      flex:1
+    },
     // { headerName: "Assigned Time", field: "createdAt" },
-    { headerName: "Due Date", field: "dueDate" },
-    { headerName: "Due Time", field: "dueTime" },
+    {
+      headerName: "Due Date",
+      field: "dueDate",
+      flex:1,
+      cellRenderer: (params) => {
+        const formattedDate = humanDate(params.data?.dueDate);
+        const formattedTime = humanTime(params.data?.dueTime);
+        return `${formattedDate}, ${formattedTime}`;
+      },
+    },
+
     {
       field: "status",
       headerName: "Status",
+      flex:1,
       cellRenderer: (params) => {
         const statusColorMap = {
           Pending: { backgroundColor: "#FFECC5", color: "#CC8400" }, // Light orange bg, dark orange font
@@ -188,17 +319,81 @@ const DailyTasks = () => {
       headerName: "Actions",
       field: "actions",
       pinned: "right",
+      width: 250,
       cellRenderer: (params) => {
         return (
-          <div
-            role="button"
-            onClick={() => updateMonthlyKpa(params.data.id)}
-            className="p-2"
-          >
-            <PrimaryButton
-              disabled={!params.node.selected}
-              title={"Mark As Done"}
-            />
+          <div className="flex items-center">
+            {/* Mark As Done */}
+            <div
+              role="button"
+              onClick={() => {
+                if (!params.node.selected || isUpdatePending || isDeletePending)
+                  return;
+                openMarkDoneModal(params.data);
+              }}
+              className="p-2"
+            >
+              <PrimaryButton
+                title={isUpdatePending ? "⏳" : "Mark As Done"}
+                disabled={
+                  !params.node.selected || isUpdatePending || isDeletePending
+                }
+                className="px-2 py-1 text-xs w-28 h-7"
+              />
+            </div>
+
+
+             {/* Edit Button */}
+                      <button
+              type="button"
+              title="Edit Task"
+              disabled={
+                !params.node.selected ||
+                isDeletePending ||
+                isUpdatePending ||
+                isEditPending
+              }
+              onClick={() => {
+                const taskData = params.data;
+                setSelectedTask(taskData);
+                setModalMode("edit-task");
+                reset({
+                  taskName: taskData?.taskList || "",
+                  description: taskData?.description || "",
+                  startDate: taskData?.assignedDate
+                    ? dayjs(taskData.assignedDate).toISOString()
+                    : null,
+                  endDate: taskData?.dueDate
+                    ? dayjs(taskData.dueDate).toISOString()
+                    : null,
+                  dueTime: taskData?.dueTime ? dayjs(taskData.dueTime) : null,
+                });
+                setOpenModal(true);
+              }}
+              className="ml-2 p-1 h-7 w-7 flex items-center justify-center disabled:cursor-not-allowed"
+            >
+              <HiPencilSquare size={26} color={!params.node.selected ? "#9ca3af" : "#111827"} />
+            </button>
+
+               {/* Delete Button */}
+            <button
+              type="button"
+              title="Delete Task"
+              disabled={
+                !params.node.selected || isDeletePending || isUpdatePending
+              }
+              onClick={() => setDeleteTargetId(params.data.id)}
+              className="ml-2 px-2 py-1 text-xs w-28 h-7 flex items-center justify-center disabled:cursor-not-allowed"
+            >
+              {isDeletePending ? (
+                "⏳"
+              ) : (
+                <MdDeleteForever
+                  size={26}
+                  color={!params.node.selected ? "gray" : "red"}
+                />
+              )}
+            </button>
           </div>
         );
       },
@@ -226,71 +421,116 @@ const DailyTasks = () => {
     //     </div>
     //   ),
     // },
-  ];
-  const completedColumns = [
-    { headerName: "Sr no", field: "srno", width: 100, sort: "desc" },
+  ], [isDeletePending, isEditPending, isUpdatePending, reset]);
+  const completedColumns = useMemo(() => [
+    { headerName: "Sr No", field: "srNo", width: 100, sort: "desc" },
     {
       headerName: "Task List",
       field: "taskList",
       flex: 1,
+      cellRenderer: (params) => <span>{params.value}</span>,
+    },
+    { headerName: "Start Date", field: "assignedDate", hide: true ,flex: 1},
+    { headerName: "Due Date", field: "dueDate", hide: true ,flex: 1},
+    { headerName: "Due Time", field: "dueTime", hide: true , flex: 1},
+    { headerName: "Department", field: "department", hide: true ,flex: 1},
+    // { headerName: "Completed By", field: "completedBy" },
+    { headerName: "Assigned By", field: "assignedBy",flex: 1 },
+    // { headerName: "Completed Date", field: "completedDate" },
+    {
+      headerName: "Action",
+      field: "action",
+      pinned: "right",
+      width: 110,
       cellRenderer: (params) => (
-        <div
-          role="button"
+        <button
+          type="button"
+          title="View Completed Task"
           onClick={() => {
             setModalMode("view-completed");
-            setSelectedTask(params.data);
+            setSelectedTask(
+              formatDateTimeFields({
+                ...params.data,
+                assignedTime: params.data?.assignedDate,
+              }),
+            );
             setOpenModal(true);
           }}
-          className="text-primary underline cursor-pointer"
+          className="h-8 w-8 flex items-center justify-center"
         >
-          {params.value}
-        </div>
+          <MdOutlineRemoveRedEye size={22} color="#111827" />
+        </button>
       ),
     },
-    // { headerName: "Assigned Date", field: "assignedDate" },
-    // { headerName: "Due Date", field: "dueDate" },
-    // { headerName: "Due Time", field: "dueTime" },
-    // { headerName: "Department", field: "department" },
-    { headerName: "Completed By", field: "completedBy" },
-    // { headerName: "Completed Date", field: "completedDate" },
-    { headerName: "Completed Time", field: "completedTime" },
     {
-      field: "status",
-      headerName: "Status",
-      cellRenderer: (params) => {
-        const statusColorMap = {
-          Pending: { backgroundColor: "#FFECC5", color: "#CC8400" }, // Light orange bg, dark orange font
-          InProgress: { backgroundColor: "#ADD8E6", color: "#00008B" }, // Light blue bg, dark blue font
-          resolved: { backgroundColor: "#90EE90", color: "#006400" }, // Light green bg, dark green font
-          open: { backgroundColor: "#E6E6FA", color: "#4B0082" }, // Light purple bg, dark purple font
-          Completed: { backgroundColor: "#16f8062c", color: "#00731b" }, // Light gray bg, dark gray font
-        };
+      headerName: "Completed Date",
+      flex: 1,
+      // field: "completedTime",
+      // cellRenderer: (params) => {
+      //   const completedDate = params.data?.completedDate;
+      //   const completedTime = params.data?.completedTime;
 
-        const { backgroundColor, color } = statusColorMap[params.value] || {
-          backgroundColor: "gray",
-          color: "white",
-        };
-        return (
-          <>
-            <Chip
-              label={params.value}
-              style={{
-                backgroundColor,
-                color,
-              }}
-            />
-          </>
-        );
-      },
+      //   const formattedDate = completedDate;
+      //   const formattedTime = completedTime;
+
+      //   return [formattedDate, formattedTime].filter(Boolean).join(", ");
+      // },
+      field: "completedDate",
     },
-  ];
+    {
+      headerName: "Completed Time",
+      field: "completedTime",
+      flex: 1
+    },
+    {
+      headerName: "Comment",
+      field: "comment",
+      hide: true,
+      flex: 1,
+    },
+    {headerName: "Status", field: "status", hide: true,flex: 1 },
+    // {
+    //   field: "status",
+    //   headerName: "Status",
+    //   cellRenderer: (params) => {
+    //     const statusColorMap = {
+    //       Pending: { backgroundColor: "#FFECC5", color: "#CC8400" }, // Light orange bg, dark orange font
+    //       InProgress: { backgroundColor: "#ADD8E6", color: "#00008B" }, // Light blue bg, dark blue font
+    //       resolved: { backgroundColor: "#90EE90", color: "#006400" }, // Light green bg, dark green font
+    //       open: { backgroundColor: "#E6E6FA", color: "#4B0082" }, // Light purple bg, dark purple font
+    //       Completed: { backgroundColor: "#16f8062c", color: "#00731b" }, // Light gray bg, dark gray font
+    //     };
+
+    //     const { backgroundColor, color } = statusColorMap[params.value] || {
+    //       backgroundColor: "gray",
+    //       color: "white",
+    //     };
+    //     return (
+    //       <>
+    //         <Chip
+    //           label={params.value}
+    //           style={{
+    //             backgroundColor,
+    //             color,
+    //           }}
+    //         />
+    //       </>
+    //     );
+    //   },
+    // },
+  ], []);
   //--------Column configs----------------//
 
   //----------function handlers-------------//
   const handleViewTask = (data) => {
     setModalMode("view");
     setOpenModal(true);
-    setSelectedTask(data);
+    setSelectedTask(
+      formatDateTimeFields({
+        ...data,
+        assignedTime: data?.assignedDate,
+      }),
+    );
   };
   //----------function handlers-------------//
 
@@ -301,32 +541,240 @@ const DailyTasks = () => {
         mongoId: item._id,
         taskList: item.taskName,
         department: item.department?.name,
+        description: item.description,
         completedBy: item.completedBy,
-        assignedDate: humanDate(item.assignedDate),
-        dueDate: humanDate(item.dueDate),
-        dueTime: humanTime(item.dueTime),
-        completedDate: humanDate(item.completedDate),
-        completedTime: humanTime(item.completedDate),
+        assignedBy: item.assignedBy.firstName + " " + item.assignedBy.lastName,
+        assignedDate: item.assignedDate,
+        dueDate: item.dueDate,
+        dueTime: item.dueTime,
+        completedDate: item.completedDate,
+        completedTime: item.completedDate,
+        completedDateTime: `${humanDate(item.completedDate)}, ${humanTime(
+          item.completedDate,
+        )}`,
+        comment: item.comment,
         status: item.status,
       }));
+
+  const isDateInRange = (value, selectedRange) => {
+    if (!value || !selectedRange?.startDate || !selectedRange?.endDate) {
+      return false;
+    }
+
+    const date = dayjs(value);
+
+    if (!date.isValid()) return false;
+
+    return (
+      (date.isAfter(dayjs(selectedRange.startDate).startOf("day")) ||
+        date.isSame(dayjs(selectedRange.startDate).startOf("day"))) &&
+      (date.isBefore(dayjs(selectedRange.endDate).endOf("day")) ||
+        date.isSame(dayjs(selectedRange.endDate).endOf("day")))
+    );
+  };
+
+  const visiblePendingTasks = useMemo(
+    () =>
+      Array.isArray(departmentKra)
+        ? departmentKra.filter(
+            (item) =>
+              isCurrentUserTaskOwner(item) &&
+              isDateInRange(item?.assignedDate, selectedMyTaskRange),
+          )
+        : [],
+    [departmentKra, currentUserId, selectedMyTaskRange],
+  );
+
+  const visibleCompletedEntries = useMemo(
+    () =>
+      Array.isArray(completedEntries)
+        ? completedEntries.filter(
+            (item) =>
+              isCurrentUserTaskOwner(item) &&
+              isDateInRange(item?.assignedDate, selectedCompletedTaskRange),
+          )
+        : [],
+    [completedEntries, currentUserId, selectedCompletedTaskRange],
+  );
+
+  const visibleCompletedData = useMemo(
+    () =>
+      visibleCompletedEntries.map((item, index) => ({
+        srno: index + 1,
+        mongoId: item._id,
+        taskList: item.taskName,
+        department: item.department?.name,
+        description: item.description,
+        completedBy: item.completedBy,
+        assignedBy: item.assignedBy.firstName + " " + item.assignedBy.lastName,
+        assignedDate: item.assignedDate,
+        dueDate: item.dueDate,
+        dueTime: item.dueTime,
+        completedDate: item.completedDate,
+        completedTime: item.completedDate,
+        completedDateTime: `${humanDate(item.completedDate)}, ${humanTime(
+          item.completedDate,
+        )}`,
+        comment: item.comment,
+        status: item.status,
+      })),
+    [visibleCompletedEntries],
+  );
+
+  const pendingOnlyTasks = useMemo(
+    () =>
+      visiblePendingTasks.filter(
+        (item) => String(item?.status || "").toLowerCase() !== "completed",
+      ),
+    [visiblePendingTasks],
+  );
+
+  const myTaskSummary = useMemo(
+    () => {
+      const uniqueTaskIds = new Set([
+        ...pendingOnlyTasks.map((item) => String(item?._id || item?.id || "")),
+        ...visibleCompletedEntries.map((item) =>
+          String(item?._id || item?.id || ""),
+        ),
+      ]);
+
+      return {
+        pending: pendingOnlyTasks.length,
+        completed: visibleCompletedEntries.length,
+        total: Array.from(uniqueTaskIds).filter(Boolean).length,
+      };
+    },
+    [pendingOnlyTasks, visibleCompletedEntries],
+  );
+
+  const currentMyTaskMonthLabel = dayjs(
+    selectedMyTaskRange?.startDate || new Date(),
+  ).format("MMMM");
+  const currentCompletedMonthLabel = dayjs(
+    selectedCompletedTaskRange?.startDate || new Date(),
+  ).format("MMMM");
+  const getNormalizedRange = (selectedRange) => {
+    if (!selectedRange?.startDate || !selectedRange?.endDate) return null;
+
+    return {
+      startDate: selectedRange.startDate,
+      endDate: selectedRange.endDate,
+      key: selectedRange.key || "selection",
+    };
+  };
+  const handleMyTaskRangeChange = ({ selectedRange }) => {
+    const normalizedRange = getNormalizedRange(selectedRange);
+
+    setSelectedMyTaskRange((prev) => {
+      const prevStart = prev?.startDate ? dayjs(prev.startDate).valueOf() : null;
+      const prevEnd = prev?.endDate ? dayjs(prev.endDate).valueOf() : null;
+      const nextStart = normalizedRange?.startDate
+        ? dayjs(normalizedRange.startDate).valueOf()
+        : null;
+      const nextEnd = normalizedRange?.endDate
+        ? dayjs(normalizedRange.endDate).valueOf()
+        : null;
+
+      if (prevStart === nextStart && prevEnd === nextEnd) {
+        return prev;
+      }
+
+      return normalizedRange;
+    });
+    setSelectedCompletedTaskRange((prev) => {
+      const prevStart = prev?.startDate ? dayjs(prev.startDate).valueOf() : null;
+      const prevEnd = prev?.endDate ? dayjs(prev.endDate).valueOf() : null;
+      const nextStart = normalizedRange?.startDate
+        ? dayjs(normalizedRange.startDate).valueOf()
+        : null;
+      const nextEnd = normalizedRange?.endDate
+        ? dayjs(normalizedRange.endDate).valueOf()
+        : null;
+
+      if (prevStart === nextStart && prevEnd === nextEnd) {
+        return prev;
+      }
+
+      return normalizedRange;
+    });
+  };
+  const handleMyCompletedTaskRangeChange = ({ selectedRange }) => {
+    const normalizedRange = getNormalizedRange(selectedRange);
+
+    setSelectedCompletedTaskRange((prev) => {
+      const prevStart = prev?.startDate ? dayjs(prev.startDate).valueOf() : null;
+      const prevEnd = prev?.endDate ? dayjs(prev.endDate).valueOf() : null;
+      const nextStart = normalizedRange?.startDate
+        ? dayjs(normalizedRange.startDate).valueOf()
+        : null;
+      const nextEnd = normalizedRange?.endDate
+        ? dayjs(normalizedRange.endDate).valueOf()
+        : null;
+
+      if (prevStart === nextStart && prevEnd === nextEnd) {
+        return prev;
+      }
+
+      return normalizedRange;
+    });
+    setSelectedMyTaskRange((prev) => {
+      const prevStart = prev?.startDate ? dayjs(prev.startDate).valueOf() : null;
+      const prevEnd = prev?.endDate ? dayjs(prev.endDate).valueOf() : null;
+      const nextStart = normalizedRange?.startDate
+        ? dayjs(normalizedRange.startDate).valueOf()
+        : null;
+      const nextEnd = normalizedRange?.endDate
+        ? dayjs(normalizedRange.endDate).valueOf()
+        : null;
+
+      if (prevStart === nextStart && prevEnd === nextEnd) {
+        return prev;
+      }
+
+      return normalizedRange;
+    });
+  };
 
   return (
     <>
       <div className="flex flex-col gap-4">
         <PageFrame>
           <WidgetSection padding layout={1}>
+            <div className="w-full pb-3">
+              <div className="flex justify-between items-center gap-3 flex-wrap">
+                <span className="text-title text-primary font-pmedium uppercase">
+                  MY TASKS - {currentMyTaskMonthLabel}
+                </span>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <div className="flex gap-1 justify-center items-center uppercase bg-[#dbe4ff] text-sm text-[#274784] font-pmedium px-3 py-1.5 rounded-lg border border-[#aec6fb]">
+                    <div>Total :</div>
+                    <div>{myTaskSummary.total}</div>
+                  </div>
+                  <div className="flex gap-1 justify-center items-center uppercase bg-[#fce8e3] text-sm text-[#d96b4f] font-pmedium px-3 py-1.5 rounded-lg border border-[#f3b7a8]">
+                    <div>Pending :</div>
+                    <div>{myTaskSummary.pending}</div>
+                  </div>
+                  <div className="flex gap-1 justify-center items-center uppercase bg-[#d8f0df] text-sm text-[#16784d] font-pmedium px-3 py-1.5 rounded-lg border border-[#a9ddba]">
+                    <div>Completed :</div>
+                    <div>{myTaskSummary.completed}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
             <YearWiseTable
-              key={departmentKra.length}
+              key={`${dayjs(selectedMyTaskRange?.startDate).valueOf()}-${dayjs(
+                selectedMyTaskRange?.endDate,
+              ).valueOf()}-${pendingOnlyTasks.length}`}
               checkbox
-              tableTitle={`MY TASKS`}
+              tableTitle={""}
               buttonTitle={"Add Task"}
               handleSubmit={() => {
+                reset(taskFormDefaultValues);
                 setModalMode("add-task");
                 setOpenModal(true);
               }}
               data={[
-                ...departmentKra
-                  .filter((item) => item.status !== "Completed")
+                ...pendingOnlyTasks
                   .map((item, index) => ({
                     srno: index + 1,
                     id: item._id,
@@ -334,13 +782,16 @@ const DailyTasks = () => {
                     assignedDate: item.assignedDate,
                     dueDate: item.dueDate,
                     status: item.status,
-                    dueTime: humanTime(item.dueTime),
+                    dueTime: item.dueTime,
+                    description: item.description,
                     // createdAt: humanTime(item.createdAt),
                     assignedBy: `${item.assignedBy.firstName} ${item.assignedBy.lastName}`,
                   })),
               ]}
-              dateColumn={"dueDate"}
+              dateColumn={"assignedDate"}
               columns={departmentColumns}
+              initialDateRange={selectedMyTaskRange}
+              onDateFilterChange={handleMyTaskRangeChange}
             />
           </WidgetSection>
         </PageFrame>
@@ -349,11 +800,18 @@ const DailyTasks = () => {
             <WidgetSection padding layout={1}>
               <YearWiseTable
                 exportData={true}
-                key={completedEntries.length}
-                tableTitle={`MY COMPLETED TASKS`}
-                data={completedData}
-                dateColumn={"completionDate"}
+                taskExportDateTimeFormatting
+                key={`${dayjs(
+                  selectedCompletedTaskRange?.startDate,
+                ).valueOf()}-${dayjs(
+                  selectedCompletedTaskRange?.endDate,
+                ).valueOf()}-${visibleCompletedData.length}`}
+                tableTitle={`MY COMPLETED TASKS - ${currentCompletedMonthLabel}`}
+                data={visibleCompletedData}
+                dateColumn={"completedDate"}
                 columns={completedColumns}
+                initialDateRange={selectedCompletedTaskRange}
+                onDateFilterChange={handleMyCompletedTaskRangeChange}
               />
             </WidgetSection>
           ) : (
@@ -364,18 +822,29 @@ const DailyTasks = () => {
         </PageFrame>
       </div>
 
+      <ConfirmationModal
+        open={!!deleteTargetId}
+        onClose={() => setDeleteTargetId(null)}
+        onConfirm={handleConfirmDelete}
+        isLoading={isDeletePending}
+      />
+
       <MuiModal
         open={openModal}
         onClose={() => setOpenModal(false)}
         title={
           modalMode === "add-task"
             ? "Add My Task"
+              : modalMode === "edit-task"
+              ? "Edit My Task"
+            : modalMode === "comment"
+              ? "Comment"
             : modalMode === "view"
-            ? "Completed task"
-            : "View Task"
+              ? "View Task"
+              : "Completed task"
         }
       >
-        {modalMode === "add-task" && (
+          {(modalMode === "add-task" || modalMode === "edit-task") && (
           <form
             onSubmit={submitDailyKra(handleFormSubmit)}
             className="grid grid-cols-1 lg:grid-cols-1 gap-4"
@@ -463,6 +932,7 @@ const DailyTasks = () => {
                     label="End Date"
                     format="DD-MM-YYYY"
                     disabled={!startDate}
+                    minDate={startDate ? dayjs(startDate) : undefined}
                     value={field.value ? dayjs(field.value) : null}
                     onChange={(date) =>
                       field.onChange(date ? date.toISOString() : null)
@@ -504,31 +974,75 @@ const DailyTasks = () => {
               />
             </LocalizationProvider>
             <PrimaryButton
-              type="submit"
-              title={"Submit"}
-              isLoading={isAddKpaPending}
-              disabled={isAddKpaPending}
+       title={modalMode === "edit-task" ? "Update" : "Submit"}
+              isLoading={
+                modalMode === "edit-task" ? isEditPending : isAddKpaPending
+              }
+              disabled={
+                modalMode === "edit-task" ? isEditPending : isAddKpaPending
+              }
             />
           </form>
+        )}
+        {modalMode === "comment" && (
+          <div className="grid grid-cols-1 gap-4">
+            <TextField
+              label="Comment"
+              size="small"
+              multiline
+              rows={4}
+              key={selectedTask?.id || "comment"}
+              defaultValue=""
+              onChange={(event) => {
+                completionCommentRef.current = event.target.value;
+                if (completionCommentError) {
+                  setCompletionCommentError("");
+                }
+              }}
+              error={!!completionCommentError}
+              helperText={completionCommentError}
+              fullWidth
+            />
+            <div className="flex items-center justify-center gap-3">
+              <PrimaryButton
+                title="Done"
+                handleSubmit={handleMarkAsDoneWithComment}
+                isLoading={isUpdatePending}
+                disabled={isUpdatePending}
+              />
+              <SecondaryButton
+                title="Cancel"
+                handleSubmit={() => {
+                  completionCommentRef.current = "";
+                  setCompletionCommentError("");
+                  setSelectedTask({});
+                  setOpenModal(false);
+                }}
+                disabled={isUpdatePending}
+              />
+            </div>
+          </div>
         )}
 
         {modalMode === "view" && selectedTask && (
           <div className="grid grid-cols-1 lg:grid-cols-1 gap-4">
             <DetalisFormatted title={"Task"} detail={selectedTask?.taskList} />
+            <DetalisFormatted title={"Description"} detail={selectedTask?.description} />
             <DetalisFormatted
-              title={"Assigned Date"}
-              detail={humanDate(selectedTask?.assignedDate)}
+              title={"Start Date"}
+              detail={`${selectedTask?.assignedDate}`}
             />
+            {/* <DetalisFormatted
+              title={"Start Time"}
+              detail={selectedTask?.assignedTime}
+            /> */}
             <DetalisFormatted
               title={"Due Date"}
-              detail={humanDate(selectedTask?.dueDate)}
+              detail={`${selectedTask?.dueDate}, ${selectedTask?.dueTime}`}
             />
+
             <DetalisFormatted
-              title={"Due Time"}
-              detail={selectedTask?.dueTime}
-            />
-            <DetalisFormatted
-              title={"Assigned By"}
+              title={"Added  By"}
               detail={selectedTask?.assignedBy}
             />
 
@@ -538,32 +1052,41 @@ const DailyTasks = () => {
         {modalMode === "view-completed" && selectedTask && (
           <div className="grid grid-cols-1 lg:grid-cols-1 gap-4">
             <DetalisFormatted title={"Task"} detail={selectedTask?.taskList} />
+            <DetalisFormatted title={"Description"} detail={selectedTask?.description}/>
             <DetalisFormatted
-              title={"Assigned Date"}
+              title={"Start Date"}
               detail={selectedTask?.assignedDate}
             />
+            {/* <DetalisFormatted
+              title={"Start Time"}
+              detail={selectedTask?.assignedTime}
+            /> */}
             <DetalisFormatted
               title={"Completed Date"}
-              detail={selectedTask?.completedDate}
+              detail={`${selectedTask?.completedDate}, ${selectedTask?.completedTime}`}
             />
-            <DetalisFormatted
-              title={"Completed Time"}
-              detail={selectedTask?.completedDate}
-            />
+
             <DetalisFormatted
               title={"Due Date"}
-              detail={selectedTask?.dueDate}
+              detail={`${selectedTask?.dueDate}, ${selectedTask?.dueTime}`}
             />
+
             <DetalisFormatted
-              title={"Due Time"}
-              detail={selectedTask?.dueTime}
+              title={"Assigned By"}
+              detail={selectedTask?.assignedBy}
             />
+
             <DetalisFormatted
               title={"Completed By"}
               detail={selectedTask?.completedBy}
             />
 
+        
             <DetalisFormatted title={"Status"} detail={selectedTask?.status} />
+             <DetalisFormatted
+              title={"Comment"}
+              detail={selectedTask?.comment || "-"}
+            />
           </div>
         )}
       </MuiModal>

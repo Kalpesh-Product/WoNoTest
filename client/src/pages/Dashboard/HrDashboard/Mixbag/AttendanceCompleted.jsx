@@ -34,6 +34,7 @@ const AttendanceCompleted = () => {
 
   const columns = [
     { field: "srNo", headerName: "Sr No", width: 100 },
+    {field:"empId", headerName:"Employee ID", flex:1,hide:true},
     {
       field: "name",
       headerName: "Name",
@@ -47,11 +48,16 @@ const AttendanceCompleted = () => {
         </span>
       ),
     },
+    { field: "reason", headerName: "Reason", flex: 1,hide:true },
     { field: "addedBy", headerName: "Added By", flex: 1 },
     { field: "date", headerName: "Date" },
-    { field: "inTime", headerName: "Start Time" },
-    { field: "outTime", headerName: "End Time" },
+    { field: "inTime", headerName: "Corrected In Time" },
+    { field: "outTime", headerName: "Corrected Out Time" },
+    { field: "originalInTime", headerName: "Original In Time",hide:true },
+    { field: "originalOutTime", headerName: "Original Out Time",hide:true },
     { field: "status", headerName: "Status", cellRenderer : (params)=>(<StatusChip status={params.value} />) },
+    {field: "approvedBy", headerName: "Approved By", flex: 1,hide: true, valueGetter: (params) => params?.data?.approvedBy ? `${params.data.approvedBy.firstName} ${params.data.approvedBy.lastName}` : "N/A"},
+    {field: "rejectedBy", headerName: "Rejected By", flex: 1,hide: true, valueGetter: (params) => params?.data?.rejectedBy ? `${params.data.rejectedBy.firstName} ${params.data.rejectedBy.lastName}` : "N/A"},
   ];
 
   const tableData = isLoading
@@ -64,10 +70,18 @@ const AttendanceCompleted = () => {
         reason: item.reason,
         name: `${item.user?.firstName} ${item.user?.lastName}`,
         date: item.createdAt,
-        inTime: humanTime(item.inTime),
+         inTime: item.inTime
+          ? humanTime(item.inTime)
+          : item.originalInTime
+            ? humanTime(item.originalInTime)
+            : "N/A",
         outTime: humanTime(item.outTime),
         originalInTime: humanTime(item.originalInTime),
-        originalOutTime: humanTime(item.originalOutTime),
+        originalOutTime: item.originalOutTime
+          ? humanTime(item.originalOutTime)
+          : item.outTime
+            ? humanTime(item.outTime)
+            : "N/A",
         status: item.status,
       }));
 
@@ -83,7 +97,8 @@ const AttendanceCompleted = () => {
           dateColumn={"date"}
           columns={columns}
           data={!isLoading ? tableData : []}
-          tableTitle={"ATTENDANCE REQUESTS"}
+          tableTitle={"COMPLETED ATTENDANCE REQUESTS"}
+          exportData
         />
       </PageFrame>
       <MuiModal
@@ -105,11 +120,11 @@ const AttendanceCompleted = () => {
               detail={selectedRequest?.addedBy || "N/A"}
             />
             <DetalisFormatted
-              title="Start Time"
+              title="Corrected In Time"
               detail={selectedRequest?.inTime}
             />
             <DetalisFormatted
-              title="End Time"
+              title="Corrected Out Time"
               detail={selectedRequest?.outTime}
             />
             <DetalisFormatted

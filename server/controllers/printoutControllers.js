@@ -1,0 +1,330 @@
+const mongoose = require("mongoose");
+const Printout = require("./../models/Printout");
+const Company = require("../models/hr/Company");
+const buildDateFilter = require("../utils/dateFilter");
+const {
+  fetchPrintoutReportService,
+  populatePrintout,
+  sanitizePrintout,
+} = require("../services/printoutService");
+
+const clientModels = ["CoworkingClient", "Company"];
+const requestedByModels = ["CoworkingMember", "UserData"];
+
+const isValidObjectId = (value) => mongoose.Types.ObjectId.isValid(value);
+
+const validatePrintoutPayload = (payload, { isUpdate = false } = {}) => {
+  const errors = [];
+  const requiredFields = [
+    "takenAt",
+    "location",
+    "unit",
+    "client",
+    "requestedBy",
+    "printoutCount",
+  ];
+
+  if (!isUpdate) {
+    requiredFields.forEach((field) => {
+      if (
+        payload[field] === undefined ||
+        payload[field] === null ||
+        payload[field] === ""
+      ) {
+        errors.push(`${field} is required`);
+      }
+    });
+  }
+
+  [
+    "takenBy",
+    "location",
+    "unit",
+    "client",
+    "requestedBy",
+    "department",
+  ].forEach((field) => {
+    if (
+      payload[field] !== undefined &&
+      payload[field] !== null &&
+      payload[field] !== "" &&
+      !isValidObjectId(payload[field])
+    ) {
+      errors.push(`Invalid ${field} ID provided`);
+    }
+  });
+
+  if (
+    payload.takenAt !== undefined &&
+    isNaN(new Date(payload.takenAt).getTime())
+  ) {
+    errors.push("Invalid takenAt provided");
+  }
+
+  if (payload.printoutCount !== undefined) {
+    const printoutCount = Number(payload.printoutCount);
+    if (!Number.isInteger(printoutCount) || printoutCount < 1) {
+      errors.push("printoutCount must be a positive integer");
+    }
+  }
+
+  return errors;
+};
+
+const buildPrintoutPayload = (body, company, { isUpdate = false } = {}) => {
+  const allowedFields = [
+    "takenBy",
+    "takenAt",
+    "location",
+    "unit",
+    "client",
+    "clientModel",
+    "requestedByModel",
+    "requestedBy",
+    "department",
+    "printoutCount",
+    "remark",
+  ];
+
+  const payload = {};
+
+  if (body.client !== undefined && body.client !== null && body.client !== "") {
+    const isClient = company.toString() !== body.client.toString();
+    payload.clientModel = isClient ? "CoworkingClient" : "Company";
+    payload.requestedByModel = isClient ? "CoworkingMember" : "UserData";
+  }
+
+  allowedFields.forEach((field) => {
+    if (body[field] !== undefined) {
+      payload[field] = body[field];
+    }
+  });
+
+  if (payload.takenAt !== undefined) {
+    payload.takenAt = new Date(payload.takenAt);
+  }
+  if (payload.printoutCount !== undefined) {
+    payload.printoutCount = Number(payload.printoutCount);
+  }
+  if (!isUpdate && payload.department === undefined) {
+    payload.department = null;
+  }
+
+  return payload;
+};
+
+const addPrintout = async (req, res) => {
+  try {
+    const { user, company } = req;
+    const errors = validatePrintoutPayload(req.body);
+    if (errors.length) {
+      return res.status(400).json({
+        message: "Missing or invalid required fields",
+        errors,
+      });
+    }
+
+    const printoutPayload = buildPrintoutPayload(
+      {
+        ...req.body,
+        takenBy: user,
+      },
+      company,
+    );
+
+    const printout = await Printout.create(printoutPayload);
+    const populatedPrintout = await Printout.findById(printout._id)
+      .populate(populatePrintout)
+      .lean()
+      .exec();
+
+    return res.status(201).json({
+      message: "Printout added successfully",
+      printout: sanitizePrintout(populatedPrintout),
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: "An error occurred while adding the printout",
+      error: error.message,
+    });
+  }
+};
+
+const editPrintout = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { company } = req;
+
+    if (!isValidObjectId(id)) {
+      return res.status(400).json({ message: "Invalid printout ID provided" });
+    }
+
+    const printoutPayload = buildPrintoutPayload(req.body, company, {
+      isUpdate: true,
+    });
+    if (!Object.keys(printoutPayload).length) {
+      return res.status(400).json({
+        message: "At least one editable field is required",
+      });
+    }
+
+    const errors = validatePrintoutPayload(printoutPayload, { isUpdate: true });
+    if (errors.length) {
+      return res.status(400).json({
+        message: "Invalid printout update payload",
+        errors,
+      });
+    }
+
+    const printout = await Printout.findByIdAndUpdate(id, printoutPayload, {
+      new: true,
+      runValidators: true,
+    })
+      .populate(populatePrintout)
+      .lean()
+      .exec();
+
+    if (!printout) {
+      return res.status(404).json({ message: "Printout not found" });
+    }
+
+    return res.status(200).json({
+      message: "Printout updated successfully",
+      printout: sanitizePrintout(printout),
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: "An error occurred while updating the printout",
+      error: error.message,
+    });
+  }
+};
+
+const getPrintouts = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (id) {
+      if (!isValidObjectId(id)) {
+        return res
+          .status(400)
+          .json({ message: "Invalid printout ID provided" });
+      }
+
+      const printout = await Printout.findById(id)
+        .populate(populatePrintout)
+        .lean()
+        .exec();
+
+      if (!printout) {
+        return res.status(404).json({ message: "Printout not found" });
+      }
+
+      return res.status(200).json({
+        message: "Printout fetched successfully",
+        printout: sanitizePrintout(printout),
+      });
+    }
+
+    const {
+      location,
+      unit,
+      client,
+      requestedBy,
+      department,
+      fromDate,
+      toDate,
+      search,
+      searchContext,
+    } = req.query;
+    const filters = {};
+    const requestDateFilter = req.query?.dateFilter ||
+      req.query?.filters || {
+        startDate:
+          req.query?.["dateFilter[startDate]"] ||
+          req.query?.["filters[startDate]"] ||
+          req.query?.startDate ||
+          fromDate,
+        endDate:
+          req.query?.["dateFilter[endDate]"] ||
+          req.query?.["filters[endDate]"] ||
+          req.query?.endDate ||
+          toDate,
+      };
+    const hasDateFilter = Boolean(
+      requestDateFilter?.startDate || requestDateFilter?.endDate,
+    );
+
+    const filterErrors = [];
+    [
+      ["location", location],
+      ["unit", unit],
+      ["client", client],
+      ["requestedBy", requestedBy],
+      ["department", department],
+    ].forEach(([key, value]) => {
+      if (value) {
+        if (!isValidObjectId(value)) {
+          filterErrors.push(`Invalid ${key} ID provided`);
+          return;
+        }
+        filters[key] = value;
+      }
+    });
+
+    let dateFilter;
+    if (hasDateFilter) {
+      if (requestDateFilter.startDate) {
+        const parsedFromDate = new Date(requestDateFilter.startDate);
+        if (isNaN(parsedFromDate.getTime())) {
+          filterErrors.push("Invalid start date provided");
+        }
+      }
+      if (requestDateFilter.endDate) {
+        const parsedToDate = new Date(requestDateFilter.endDate);
+        if (isNaN(parsedToDate.getTime())) {
+          filterErrors.push("Invalid end date provided");
+        }
+      }
+
+      if (!filterErrors.length) {
+        dateFilter = buildDateFilter({
+          startDate: requestDateFilter.startDate,
+          endDate: requestDateFilter.endDate,
+          field: "takenAt",
+        });
+      }
+    }
+
+    if (filterErrors.length) {
+      return res.status(400).json({
+        message: "Invalid printout filters provided",
+        errors: filterErrors,
+      });
+    }
+
+    const { printouts, pagination } = await fetchPrintoutReportService({
+      filters,
+      page: req.query?.page,
+      limit: req.query?.limit,
+      search,
+      searchContext,
+      ...(dateFilter && { dateFilter }),
+    });
+
+    return res.status(200).json({
+      message: "Printouts fetched successfully",
+      printouts,
+      ...(pagination && { pagination }),
+    });
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({
+      message: error.message,
+    });
+  }
+};
+
+module.exports = {
+  addPrintout,
+  editPrintout,
+  getPrintouts,
+};

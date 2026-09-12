@@ -10,7 +10,7 @@ import { toast } from "sonner";
 import useAuth from "../../../hooks/useAuth";
 import { queryClient } from "../../../main";
 import ThreeDotMenu from "../../../components/ThreeDotMenu";
-import PageFrame from "../../../components/Pages/PageFrame";  
+import PageFrame from "../../../components/Pages/PageFrame";
 import StatusChip from "../../../components/StatusChip";
 import DetalisFormatted from "../../../components/DetalisFormatted";
 import { useSelector } from "react-redux";
@@ -51,7 +51,7 @@ const AssetsCategories = () => {
 
   const { mutate: createCategory, isPending: pendingCreate } = useMutation({
     mutationFn: async (data) => {
-      const response = await axios.post("/api/assets/create-asset-category", {
+      const response = await axios.post("/api/assets/create-category", {
         assetCategoryName: data.categoryName,
         departmentId: departmentId,
       });
@@ -69,10 +69,7 @@ const AssetsCategories = () => {
   });
   const { mutate: editCategory, isPending: pendingEdit } = useMutation({
     mutationFn: async (data) => {
-      const response = await axios.patch(
-        "/api/assets/update-asset-category",
-        data
-      );
+      const response = await axios.patch("/api/assets/update-category", data);
       return response.data;
       // console.log("edit form : ", data);
     },
@@ -88,15 +85,16 @@ const AssetsCategories = () => {
 
   const { data: assetCategories = [], isPending: isCategoriesPending } =
     useQuery({
-      queryKey: ["assetCategories"],
+     queryKey: ["assetCategories", departmentId],
       queryFn: async () => {
         try {
           const response = await axios.get(
-            `/api/assets/get-category?departmentId=${departmentId}`
+            `/api/category/get-category?departmentId=${departmentId}`,
           );
-          return response.data;
+          return Array.isArray(response.data) ? response.data : [];
         } catch (error) {
-          console.error(error.message);
+          console.error(error.response?.data?.message || error.message);
+          return [];
         }
       },
     });
@@ -118,7 +116,7 @@ const AssetsCategories = () => {
   useEffect(() => {
     setValue("categoryName", selectedAsset?.categoryName);
     setValue("status", selectedAsset?.isActive);
-  }, [selectedAsset]);
+  }, [selectedAsset, setValue]);
 
   const getRowStyle = (params) => {
     if (!params.data.isActive) {
@@ -129,11 +127,11 @@ const AssetsCategories = () => {
   //--------------------Event handlers------------------------------//
   //--------------------Table Data------------------------------//
   const categoriesColumn = [
-    { field: "srNo", headerName: "Sr No" },
+    { field: "srNo", headerName: "Sr No",width:200 },
     {
       field: "categoryName",
       headerName: "Category Name",
-      flex: 3,
+      flex: 1,
       cellRenderer: (params) => (
         <span
           role="button"
@@ -149,14 +147,26 @@ const AssetsCategories = () => {
       ),
     },
     {
+      field: "subCategoriesCount",
+      headerName: "Sub Categories Count",
+       flex: 1,
+    },
+    {
+      field: "assetQuantity",
+      headerName: "No. of Assets",
+       flex: 1,
+    },
+    {
       field: "status",
       headerName: "Status",
+      sort: "desc",
+      flex: 1,
       cellRenderer: (params) => <StatusChip status={params.value} />,
     },
     {
       field: "action",
       headerName: "Action",
-      flex: 1,
+      flex: 0.7,
       cellRenderer: (params) => {
         return (
           <ThreeDotMenu
@@ -176,20 +186,24 @@ const AssetsCategories = () => {
       },
     },
   ];
-  const tableData = isCategoriesPending
+  const tableData = isCategoriesPending || !Array.isArray(assetCategories)
     ? []
     : assetCategories.map((item, index) => {
-        const status = item.isActive ? "Active" : "Inactive";
-        const subCategories = item.subCategories.map((sub)=> sub.subCategoryName)
+      const status = item.isActive ? "Active" : "Inactive";
+      const subCategories = Array.isArray(item.subCategories)
+        ? item.subCategories.map((sub) => sub.subCategoryName)
+        : [];
 
-        return {
-          ...item,
-          _id: item._id,
-          srNo: index + 1,
-          status: status,
-          subCategories
-        };
-      });
+      return {
+        ...item,
+        _id: item._id,
+        srNo: index + 1,
+        status: status,
+        subCategories,
+        subCategoriesCount: item?.subCategoriesCount || subCategories.length,
+        assetQuantity: item?.assetQuantity || 0,
+      };
+    });
   //--------------------Table Data------------------------------//
 
   return (
@@ -207,7 +221,7 @@ const AssetsCategories = () => {
         data={tableData}
         columns={categoriesColumn}
         tableHeight={350}
-        // getRowStyle={getRowStyle}
+      // getRowStyle={getRowStyle}
       />
 
       <MuiModal
@@ -217,8 +231,8 @@ const AssetsCategories = () => {
           modalMode === "add"
             ? "Add Category"
             : modalMode === "view"
-            ? "View Category"
-            : "Edit Category"
+              ? "View Category"
+              : "Edit Category"
         }
       >
         {modalMode === "add" && (
@@ -321,7 +335,19 @@ const AssetsCategories = () => {
             />
             <DetalisFormatted
               title={"Sub Categories"}
-              detail={selectedAsset?.subCategories ? [...selectedAsset.subCategories].join(","): "N/A"}
+              detail={
+                selectedAsset?.subCategories
+                  ? [...selectedAsset.subCategories].join(",")
+                  : "N/A"
+              }
+            />
+             <DetalisFormatted
+              title={"Sub Categories Count"}
+              detail={selectedAsset?.subCategoriesCount ?? 0}
+            />
+            <DetalisFormatted
+              title={"No. of Assets"}
+              detail={selectedAsset?.assetQuantity ?? 0}
             />
             <DetalisFormatted
               title={"Department"}

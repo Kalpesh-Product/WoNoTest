@@ -1,3 +1,9 @@
+const {
+  fetchDeptTaskReportService,
+  fetchMyTasksReportService,
+  fetchAllTasksService,
+} = require("../../services/reports/task");
+const buildDateFilter = require("../../utils/dateFilter");
 const { default: mongoose } = require("mongoose");
 const User = require("../../models/hr/UserData");
 const Task = require("../../models/tasks/Task");
@@ -7,7 +13,167 @@ const { createLog } = require("../../utils/moduleLogs");
 const validateUsers = require("../../utils/validateUsers");
 const Department = require("../../models/Departments");
 const UserData = require("../../models/hr/UserData");
+const Unit = require("../../models/locations/Unit");
 const emitter = require("../../utils/eventEmitter");
+const { Readable } = require("stream");
+const csvParser = require("csv-parser");
+const {
+  toUtcStartOfDay,
+  getTodayUtcRange,
+  getRequestTimezone,
+} = require("../../utils/dateTimezone");
+
+const VALID_BULK_TASK_STATUSES = ["Pending", "InProgress", "Completed"];
+const BULK_TASK_REQUIRED_FIELDS = [
+  "taskName",
+  "department",
+  // "description",
+  "assignedDate",
+  // "dueDate",t
+  "dueTime",
+  "taskType",
+];
+const CSV_MIME_TYPES = [
+  "text/csv",
+  "application/csv",
+  "application/vnd.ms-excel",
+  "text/plain",
+];
+
+const normalizeCsvValue = (value) => String(value || "").trim();
+
+const normalizeLookupValue = (value) => normalizeCsvValue(value).toLowerCase();
+
+const escapeRegex = (value) =>
+  normalizeCsvValue(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const isValidCsvUpload = (file) => {
+  const originalName = normalizeLookupValue(file?.originalname);
+  return (
+    CSV_MIME_TYPES.includes(file?.mimetype) || originalName.endsWith(".csv")
+  );
+};
+
+const parseCsvRows = (csvData) =>
+  new Promise((resolve, reject) => {
+    const rows = [];
+
+    Readable.from(csvData)
+      .pipe(csvParser())
+      .on("data", (row) => rows.push(row))
+      .on("end", () => resolve(rows))
+      .on("error", reject);
+  });
+
+const parseTaskDate = (value) => {
+  const parsedDate = new Date(normalizeCsvValue(value));
+  return isNaN(parsedDate.getTime()) ? null : parsedDate;
+};
+
+const parseTaskDueTime = (value, dueDate) => {
+  const rawDueTime = normalizeCsvValue(value);
+  if (!rawDueTime || !dueDate) return null;
+
+  const parsedTime = new Date(rawDueTime);
+  if (!isNaN(parsedTime.getTime())) return parsedTime;
+
+  const timeMatch = rawDueTime.match(
+    /^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?$/i,
+  );
+  if (!timeMatch) return null;
+
+  let hours = Number(timeMatch[1]);
+  const minutes = Number(timeMatch[2]);
+  const seconds = Number(timeMatch[3] || 0);
+  const meridiem = timeMatch[4]?.toUpperCase();
+
+  if (minutes > 59 || seconds > 59 || hours > (meridiem ? 12 : 23)) {
+    return null;
+  }
+
+  if (meridiem === "PM" && hours !== 12) hours += 12;
+  if (meridiem === "AM" && hours === 12) hours = 0;
+
+  const dateWithTime = new Date(dueDate);
+  dateWithTime.setHours(hours, minutes, seconds, 0);
+  return dateWithTime;
+};
+
+const splitUserName = (name) => {
+  const parts = normalizeCsvValue(name).split(/\s+/).filter(Boolean);
+  if (parts.length < 2) return null;
+  return {
+    firstName: parts[0],
+    lastName: parts.slice(1).join(" "),
+  };
+};
+
+const resolveBulkTaskUser = async (value, company) => {
+  const normalizedValue = normalizeCsvValue(value);
+  if (!normalizedValue) return null;
+
+  const baseQuery = company ? { company } : {};
+  if (mongoose.Types.ObjectId.isValid(normalizedValue)) {
+    return UserData.findOne({ _id: normalizedValue, ...baseQuery })
+      .select("_id")
+      .lean();
+  }
+
+  const name = splitUserName(normalizedValue);
+  const firstName = name?.firstName || normalizedValue;
+  const userQuery = {
+    ...baseQuery,
+    firstName: new RegExp(`^${escapeRegex(firstName)}$`, "i"),
+  };
+
+  if (name?.lastName) {
+    userQuery.lastName = new RegExp(`^${escapeRegex(name.lastName)}$`, "i");
+  }
+
+  return UserData.findOne(userQuery).select("_id").lean();
+};
+
+const resolveBulkTaskDepartment = async (value) => {
+  const normalizedValue = normalizeCsvValue(value);
+  if (!normalizedValue) return null;
+
+  if (mongoose.Types.ObjectId.isValid(normalizedValue)) {
+    return Department.findOne({ _id: normalizedValue, isActive: true })
+      .select("_id")
+      .lean();
+  }
+
+  return Department.findOne({
+    name: new RegExp(`^${escapeRegex(normalizedValue)}$`, "i"),
+    isActive: true,
+  })
+    .select("_id")
+    .lean();
+};
+
+const resolveBulkTaskLocation = async (value, company) => {
+  const normalizedValue = normalizeCsvValue(value);
+  if (!normalizedValue) return null;
+
+  const baseQuery = { isActive: true, ...(company ? { company } : {}) };
+  if (mongoose.Types.ObjectId.isValid(normalizedValue)) {
+    return Unit.findOne({ _id: normalizedValue, ...baseQuery })
+      .select("_id")
+      .lean();
+  }
+
+  const escapedValue = escapeRegex(normalizedValue);
+  return Unit.findOne({
+    ...baseQuery,
+    $or: [
+      { unitNo: new RegExp(`^${escapedValue}$`, "i") },
+      { unitName: new RegExp(`^${escapedValue}$`, "i") },
+      { unitName: new RegExp(escapedValue, "i") },
+    ],
+  })
+    .select("_id")
+    .lean();
+};
 
 const createTasks = async (req, res, next) => {
   const { user, ip, company } = req;
@@ -27,6 +193,8 @@ const createTasks = async (req, res, next) => {
       dueTime,
       endDate: dueDate,
       startDate: assignedDate,
+      location,
+      assignTo,
     } = req.body;
 
     if (
@@ -42,7 +210,7 @@ const createTasks = async (req, res, next) => {
         "Missing required fields",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
 
@@ -51,19 +219,48 @@ const createTasks = async (req, res, next) => {
         "Invalid department ID provided",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
 
     const parsedAssignedDate = new Date(assignedDate);
     const parsedDueDate = new Date(dueDate);
 
+    let validatedLocation = null;
+    if (location) {
+      if (!mongoose.Types.ObjectId.isValid(location)) {
+        throw new CustomError(
+          "Invalid location ID provided",
+          logPath,
+          logAction,
+          logSourceKey,
+        );
+      }
+
+      validatedLocation = await Unit.findOne({
+        _id: location,
+        company,
+        isActive: true,
+      })
+        .select("_id")
+        .lean();
+
+      if (!validatedLocation) {
+        throw new CustomError(
+          "Selected location does not exist",
+          logPath,
+          logAction,
+          logSourceKey,
+        );
+      }
+    }
+
     if (isNaN(parsedAssignedDate.getTime())) {
       throw new CustomError(
         "Invalid date format",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
     if (isNaN(parsedDueDate.getTime())) {
@@ -71,9 +268,39 @@ const createTasks = async (req, res, next) => {
         "Invalid date format",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
+
+    if (parsedAssignedDate > parsedDueDate) {
+      throw new CustomError(
+        "Start date cannot be after end date",
+        logPath,
+        logAction,
+        logSourceKey,
+      );
+    }
+    // const timezone = getRequestTimezone(req);
+    // const parsedAssignedDate = toUtcStartOfDay(assignedDate, timezone);
+
+    // if (!parsedAssignedDate) {
+    //   throw new CustomError(
+    //     "Invalid assigned date",
+    //     logPath,
+    //     logAction,
+    //     logSourceKey
+    //   );
+    // }
+    // const parsedDueDate = toUtcStartOfDay(dueDate, timezone);
+
+    // if (!parsedDueDate) {
+    //   throw new CustomError(
+    //     "Invalid due date",
+    //     logPath,
+    //     logAction,
+    //     logSourceKey
+    //   );
+    // }
 
     if (
       typeof description !== "string" ||
@@ -84,7 +311,7 @@ const createTasks = async (req, res, next) => {
         "Character limit exceeded",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
 
@@ -101,6 +328,18 @@ const createTasks = async (req, res, next) => {
     //     );
     //   }
     // }
+    let existingUsers = [];
+    if (assignTo) {
+      existingUsers = await validateUsers([assignTo]);
+      if (existingUsers.length !== 1) {
+        throw new CustomError(
+          "Assignee is invalid or does not exist",
+          logPath,
+          logAction,
+          logSourceKey,
+        );
+      }
+    }
 
     const newTask = new Task({
       taskName,
@@ -109,20 +348,20 @@ const createTasks = async (req, res, next) => {
       description,
       // status,
       // priority: priority ? priority : "High",
-      // assignedTo: existingUsers,
+      assignedTo: existingUsers,
       assignedBy: user,
-      assignedDate,
+      assignedDate: parsedAssignedDate,
       dueDate: parsedDueDate,
       dueTime: dueTime,
       company,
+      location: validatedLocation?._id || null,
     });
 
     await newTask.save();
 
     // Emit the task notification
-    const foundDepartment = await Department.findById(department).select(
-      "name"
-    );
+    const foundDepartment =
+      await Department.findById(department).select("name");
 
     const userDetails = await UserData.findById({
       _id: user,
@@ -131,7 +370,6 @@ const createTasks = async (req, res, next) => {
     const deptEmployees = await UserData.find({
       departments: { $in: department },
     });
-    console.log(department);
 
     // const deptEmployees = await UserData.find({
     //   departments: { $in: [department] },
@@ -173,7 +411,7 @@ const createTasks = async (req, res, next) => {
       next(error);
     } else {
       next(
-        new CustomError(error.message, logPath, logAction, logSourceKey, 500)
+        new CustomError(error.message, logPath, logAction, logSourceKey, 500),
       );
     }
   }
@@ -187,13 +425,23 @@ const updateTaskStatus = async (req, res, next) => {
 
   try {
     const { id } = req.params;
+ const { comment } = req.body;
 
     if (!id) {
       throw new CustomError(
         "Task ID must be provided",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
+      );
+    }
+
+    if (comment === undefined) {
+      throw new CustomError(
+        "Comment must be provided",
+        logPath,
+        logAction,
+        logSourceKey,
       );
     }
 
@@ -202,15 +450,16 @@ const updateTaskStatus = async (req, res, next) => {
         "Invalid task ID provided",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
 
     const currDate = new Date();
-    const updatedTask = await Task.findByIdAndUpdate(
-      id,
-      { status: "Completed", completedBy: user, completedDate: currDate },
-      { new: true, runValidators: true }
+    const updatedTask = await Task.findOneAndUpdate(
+      { _id: id, company, isDeleted: { $ne: true } },
+      { status: "Completed", completedBy: user, completedDate: currDate,comment: comment },
+
+      { new: true, runValidators: true },
     );
 
     if (!updatedTask) {
@@ -240,7 +489,7 @@ const updateTaskStatus = async (req, res, next) => {
       next(error);
     } else {
       next(
-        new CustomError(error.message, logPath, logAction, logSourceKey, 500)
+        new CustomError(error.message, logPath, logAction, logSourceKey, 500),
       );
     }
   }
@@ -254,14 +503,25 @@ const updateTask = async (req, res, next) => {
 
   try {
     const { id } = req.params;
-    const { taskName, description, status, priority, assignees } = req.body;
+    const {
+      taskName,
+      description,
+      status,
+      priority,
+      assignees,
+      startDate,
+      endDate,
+      dueTime,
+      assignTo,
+      location,
+    } = req.body;
 
     if (!id) {
       throw new CustomError(
         "Task ID must be provided",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
 
@@ -269,13 +529,38 @@ const updateTask = async (req, res, next) => {
 
     if (taskName !== undefined) updates.taskName = taskName;
     if (description !== undefined) updates.description = description;
+    if (startDate !== undefined) {
+      const parsedAssignedDate = new Date(startDate);
+      if (isNaN(parsedAssignedDate.getTime())) {
+        throw new CustomError(
+          "Invalid start date",
+          logPath,
+          logAction,
+          logSourceKey,
+        );
+      }
+      updates.assignedDate = parsedAssignedDate;
+    }
+    if (endDate !== undefined) {
+      const parsedDueDate = new Date(endDate);
+      if (isNaN(parsedDueDate.getTime())) {
+        throw new CustomError(
+          "Invalid end date",
+          logPath,
+          logAction,
+          logSourceKey,
+        );
+      }
+      updates.dueDate = parsedDueDate;
+    }
+    if (dueTime !== undefined) updates.dueTime = dueTime;
     if (status !== undefined) {
       if (status !== "Completed") {
         throw new CustomError(
           "Invalid status value",
           logPath,
           logAction,
-          logSourceKey
+          logSourceKey,
         );
       }
       updates.status = status;
@@ -287,7 +572,7 @@ const updateTask = async (req, res, next) => {
           "Invalid priority value",
           logPath,
           logAction,
-          logSourceKey
+          logSourceKey,
         );
       }
       updates.priority = priority;
@@ -298,10 +583,50 @@ const updateTask = async (req, res, next) => {
           "Assignees must be an array of user IDs",
           logPath,
           logAction,
-          logSourceKey
+          logSourceKey,
         );
       }
       updates.assignedTo = assignees;
+    }
+    if (assignTo !== undefined) {
+      const existingUsers = await validateUsers([assignTo]);
+      if (existingUsers.length !== 1) {
+        throw new CustomError(
+          "Assignee is invalid or does not exist",
+          logPath,
+          logAction,
+          logSourceKey,
+        );
+      }
+      updates.assignedTo = existingUsers;
+    }
+    if (location !== undefined) {
+      if (!mongoose.Types.ObjectId.isValid(location)) {
+        throw new CustomError(
+          "Invalid location ID provided",
+          logPath,
+          logAction,
+          logSourceKey,
+        );
+      }
+
+      const validatedLocation = await Unit.findOne({
+        _id: location,
+        company,
+        isActive: true,
+      })
+        .select("_id")
+        .lean();
+
+      if (!validatedLocation) {
+        throw new CustomError(
+          "Selected location does not exist",
+          logPath,
+          logAction,
+          logSourceKey,
+        );
+      }
+      updates.location = validatedLocation._id;
     }
 
     if (Object.keys(updates).length === 0) {
@@ -309,14 +634,14 @@ const updateTask = async (req, res, next) => {
         "No valid fields to update",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
 
     const updatedTask = await Task.findByIdAndUpdate(
       id,
       { $set: updates },
-      { new: true, runValidators: true }
+      { new: true, runValidators: true },
     );
 
     if (!updatedTask) {
@@ -344,7 +669,7 @@ const updateTask = async (req, res, next) => {
       next(error);
     } else {
       next(
-        new CustomError(error.message, logPath, logAction, logSourceKey, 500)
+        new CustomError(error.message, logPath, logAction, logSourceKey, 500),
       );
     }
   }
@@ -353,167 +678,121 @@ const updateTask = async (req, res, next) => {
 const getAllTasks = async (req, res, next) => {
   try {
     const { company, departments, roles } = req;
-
-    let query = { company };
-
-    if (!roles.includes("Master Admin") && !roles.includes("Super Adtmin")) {
-      query.department = { $in: departments };
-    }
-
-    const tasks = await Task.find(query)
-      .populate("assignedBy", "firstName lastName")
-      .populate("completedBy", "firstName lastName")
-      .populate("department", "name")
-      .select("-company")
-      .lean();
-
-    const transformedTasks = tasks.map((task) => {
-      const completedBy = task.completedBy
-        ? [
-            task.completedBy.firstName,
-            task.completedBy.middleName,
-            task.completedBy.lastName,
-          ]
-            .filter(Boolean)
-            .join(" ")
-        : "";
-      return {
-        ...task,
-        department: task.department.name,
-        completedBy,
+    const requestDateFilter = req.query?.dateFilter ||
+      req.query?.filters || {
+        startDate:
+          req.query?.["dateFilter[startDate]"] ||
+          req.query?.["filters[startDate]"] ||
+          req.query?.startDate,
+        endDate:
+          req.query?.["dateFilter[endDate]"] ||
+          req.query?.["filters[endDate]"] ||
+          req.query?.endDate,
       };
+    const hasDateFilter = Boolean(
+      requestDateFilter?.startDate || requestDateFilter?.endDate,
+    );
+
+    const payload = await fetchAllTasksService({
+      company,
+      departments,
+      roles,
+      page: req.query?.page,
+      limit: req.query?.limit,
+      ...(hasDateFilter && {
+        dateFilter: buildDateFilter({
+          startDate: requestDateFilter.startDate,
+          endDate: requestDateFilter.endDate,
+          field: "assignedDate",
+        }),
+      }),
     });
 
-    return res.status(200).json(transformedTasks);
+    return res.status(200).json(payload);
   } catch (error) {
     next(error);
   }
 };
 
-const getTasks = async (req, res, next) => {
+async function getTasks(req, res, next) {
   try {
-    const { company } = req;
-    const { dept } = req.query;
-    const query = { company };
-
-    // const team = await UserData.find({});
-
-    if (dept) {
-      // const admins = await User.aggregate([
-      //   {
-      //     $match: {
-      //       departments: { $in: [new mongoose.Types.ObjectId(dept)] },
-      //     },
-      //   },
-      //   {
-      //     $unwind: "$role", // Unwind role array
-      //   },
-      //   {
-      //     $lookup: {
-      //       from: "roles",
-      //       localField: "role",
-      //       foreignField: "_id",
-      //       as: "roleInfo",
-      //     },
-      //   },
-      //   {
-      //     $unwind: "$roleInfo",
-      //   },
-      //   {
-      //     $match: {
-      //       "roleInfo.roleTitle": {
-      //         $regex: /Admin$/,
-      //         $options: "i",
-      //       },
-      //     },
-      //   },
-      //   {
-      //     $project: { _id: 1 }, // Only need user IDs
-      //   },
-      // ]);
-
-      // const adminIds = admins.map((admin) => admin._id);
-
-      query.department = dept;
-      query.status = "Pending";
-      query.taskType = "Department";
-      // query.assignedBy = { $in: adminIds };
-    }
-
-    const tasks = await Task.find(query)
-      .populate("department", "name")
-      .populate("assignedBy", "firstName lastName")
-      .populate("completedBy", "firstName lastName")
-      .select("-company")
-      .lean();
-
-    const transformedTasks = tasks.map((task) => {
-      const completedBy = task.completedBy
-        ? [
-            task.completedBy.firstName,
-            task.completedBy.middleName,
-            task.completedBy.lastName,
-          ]
-            .filter(Boolean)
-            .join(" ")
-        : "";
-
-      return {
-        ...task,
-        department: task.department.name,
-        dueDate: task.dueDate,
-        dueTime: task.dueTime ? task.dueTime : null,
-        assignedDate: task.assignedDate,
-        completedBy,
+    const requestDateFilter = req.query?.dateFilter ||
+      req.query?.filters || {
+        startDate:
+          req.query?.["dateFilter[startDate]"] ||
+          req.query?.["filters[startDate]"] ||
+          req.query?.startDate,
+        endDate:
+          req.query?.["dateFilter[endDate]"] ||
+          req.query?.["filters[endDate]"] ||
+          req.query?.endDate,
       };
+    const hasDateFilter = Boolean(
+      requestDateFilter?.startDate || requestDateFilter?.endDate,
+    );
+
+    const payload = await fetchDeptTaskReportService({
+      departmentId: req.body?.department,
+      departments: req.body?.departments || req?.departments || [],
+      roles: req?.roles || [],
+      company: req?.company || null,
+      user: req?.user || null,
+      query: req?.query,
+      page: req.query?.page,
+      limit: req.query?.limit,
+      ...(hasDateFilter && {
+        dateFilter: buildDateFilter({
+          startDate: requestDateFilter.startDate,
+          endDate: requestDateFilter.endDate,
+          field: "assignedDate",
+        }),
+      }),
     });
 
-    return res.status(200).json(transformedTasks);
+    return res.status(200).json(payload);
   } catch (error) {
-    next(error);
+    return next(error);
   }
-};
+}
 
 const getMyTasks = async (req, res, next) => {
   try {
-    const { user, company } = req;
-    const { flag } = req.query;
-    const query = { company, assignedBy: user, taskType: "Self" };
-
-    if (flag === "pending") {
-      query.status = "Pending";
-    }
-
-    const tasks = await Task.find(query)
-      .populate("department", "name")
-      .populate("assignedBy", "firstName lastName")
-      .populate("completedBy", "firstName lastName")
-      .select("-company")
-      .lean();
-
-    const transformedTasks = tasks.map((task) => {
-      const completedBy = task.completedBy
-        ? [
-            task.completedBy.firstName,
-            task.completedBy.middleName,
-            task.completedBy.lastName,
-          ]
-            .filter(Boolean)
-            .join(" ")
-        : "";
-
-      return {
-        ...task,
-        dueDate: task.dueDate,
-        dueTime: task.dueTime ? task.dueTime : null,
-        assignedDate: task.assignedDate,
-        completedBy,
+    const requestDateFilter = req.query?.dateFilter ||
+      req.query?.filters || {
+        startDate:
+          req.query?.["dateFilter[startDate]"] ||
+          req.query?.["filters[startDate]"] ||
+          req.query?.startDate,
+        endDate:
+          req.query?.["dateFilter[endDate]"] ||
+          req.query?.["filters[endDate]"] ||
+          req.query?.endDate,
       };
+    const hasDateFilter = Boolean(
+      requestDateFilter?.startDate || requestDateFilter?.endDate,
+    );
+
+    const payload = await fetchMyTasksReportService({
+      departmentId: req.body?.department,
+      departments: req.body?.departments || req?.departments || [],
+      roles: req?.roles || [],
+      company: req?.company || null,
+      user: req?.user || null,
+      query: req?.query,
+      page: req.query?.page,
+      limit: req.query?.limit,
+      ...(hasDateFilter && {
+        dateFilter: buildDateFilter({
+          startDate: requestDateFilter.startDate,
+          endDate: requestDateFilter.endDate,
+          field: "assignedDate",
+        }),
+      }),
     });
 
-    return res.status(200).json(transformedTasks);
+    return res.status(200).json(payload);
   } catch (error) {
-    next(error);
+    return next(error);
   }
 };
 
@@ -525,10 +804,16 @@ const getMyAssignedTasks = async (req, res, next) => {
       company,
       assignedBy: { $ne: user },
       department: { $in: departments },
+      isDeleted: { $ne: true },
     })
       .populate("department", "name")
       .populate("assignedBy", "firstName lastName")
       .populate("completedBy", "firstName lastName")
+      .populate({
+        path: "location",
+        select: "unitName unitNo",
+        populate: { path: "building", select: "buildingName" },
+      })
       .select("-company")
       .lean();
 
@@ -570,7 +855,13 @@ const getCompletedTasks = async (req, res, next) => {
     })
       .populate("department", "name")
       .populate("assignedBy", "firstName lastName")
+      .populate("assignedTo", "firstName middleName lastName")
       .populate("completedBy", "firstName lastName")
+      .populate({
+        path: "location",
+        select: "unitName unitNo",
+        populate: { path: "building", select: "buildingName" },
+      })
       .select("-company")
       .lean();
 
@@ -590,6 +881,7 @@ const getCompletedTasks = async (req, res, next) => {
         : "";
       return {
         ...task,
+        unitNo: task.location?.unitNo || "N/A",
         dueDate: task.dueDate,
         dueTime: task.dueTime ? task.dueTime : "06:30 PM",
         assignedDate: task.assignedDate,
@@ -610,6 +902,7 @@ const getMyCompletedTasks = async (req, res, next) => {
     const tasks = await Task.find({
       company,
       completedBy: user,
+      isDeleted: { $ne: true },
       // $or: [
       //   { $and: [{ taskType: "Self" }, { status: "Completed" }] },
       //   { $and: [{ completedBy: user }] },
@@ -618,6 +911,11 @@ const getMyCompletedTasks = async (req, res, next) => {
       .populate("department", "name")
       .populate("assignedBy", "firstName lastName")
       .populate("completedBy", "firstName lastName")
+      .populate({
+        path: "location",
+        select: "unitName unitNo",
+        populate: { path: "building", select: "buildingName" },
+      })
       .select("-company")
       .lean();
 
@@ -651,21 +949,35 @@ const getMyCompletedTasks = async (req, res, next) => {
 const getMyTodayTasks = async (req, res, next) => {
   try {
     const { user, company } = req;
+    const timezone = getRequestTimezone(req);
+    const { start, end } = getTodayUtcRange(timezone);
 
     const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
+    // startOfDay.setHours(0, 0, 0, 0);
 
     const endOfDay = new Date();
-    endOfDay.setHours(23, 59, 59, 999);
+    // endOfDay.setHours(23, 59, 59, 999);
 
     const tasks = await Task.find({
       company,
-      assignedDate: { $gte: startOfDay, $lte: endOfDay },
-      $or: [{ assignedBy: { $in: [user] } }, { completedBy: { $in: [user] } }],
+      isDeleted: { $ne: true },
+      // assignedDate: { $gte: start, $lte: end },
+      // assignedDate: { $gte: startOfDay, $lte: endOfDay },
+      $or: [
+        { assignedBy: { $in: [user] } },
+        { assignedTo: { $in: [user] } },
+        { completedBy: { $in: [user] } },
+      ],
     })
       .populate("department", "name")
       .populate("assignedBy", "firstName lastName")
+      .populate("assignedTo", "firstName lastName")
       .populate("completedBy", "firstName lastName")
+      .populate({
+        path: "location",
+        select: "unitName unitNo",
+        populate: { path: "building", select: "buildingName" },
+      })
       .select("-company")
       .lean();
 
@@ -720,12 +1032,18 @@ const getTodayDeptTasks = async (req, res, next) => {
 
     const tasks = await Task.find({
       company,
+      isDeleted: { $ne: true },
       assignedDate: { $gte: startOfDay, $lte: endOfDay },
       department: dept,
     })
       .populate("department", "name")
       .populate("assignedBy", "firstName lastName")
       .populate("completedBy", "firstName lastName")
+      .populate({
+        path: "location",
+        select: "unitName unitNo",
+        populate: { path: "building", select: "buildingName" },
+      })
       .select("-company")
       .lean();
 
@@ -764,6 +1082,7 @@ const getTodayDeptTasks = async (req, res, next) => {
 const getTeamMembersTasks = async (req, res, next) => {
   try {
     const { company, departments } = req;
+    const { month } = req.query;
 
     if (!company || !departments || departments.length === 0) {
       return res
@@ -781,31 +1100,69 @@ const getTeamMembersTasks = async (req, res, next) => {
       ])
       .select("firstName middleName lastName email");
 
+    // const tasks = await Task.find({
+    //   company,
+    //   department: { $in: departments },
+    // })
+    //   .populate([
+    //     {
+    //       path: "completedBy",
+    //       select: "email firstName lastName isActive",
+    //       populate: [
+    //         { path: "role", select: "roleTitle" },
+    //         { path: "departments", select: "name" },
+    //       ],
+    //     },
+    //   ])
+    //   .populate("assignedBy", "firstName lastName")
+    //   .select("-company")
+    //   .lean();
+
+    const monthPattern = /^\d{4}-\d{2}$/;
+    const monthToUse = monthPattern.test(month || "")
+      ? month
+      : new Date().toISOString().slice(0, 7);
+    const [year, monthIndex] = monthToUse.split("-").map(Number);
+    const startDate = new Date(year, monthIndex - 1, 1);
+    const endDate = new Date(year, monthIndex, 1);
+
     const tasks = await Task.find({
       company,
       department: { $in: departments },
+      status: "Completed",
+      taskType: "Department",
+      completedBy: { $ne: null },
+      isDeleted: { $ne: true },
+      completedDate: { $gte: startDate, $lt: endDate },
     })
-      .populate([
-        {
-          path: "completedBy",
-          select: "email firstName lastName isActive",
-          populate: [
-            { path: "role", select: "roleTitle" },
-            { path: "departments", select: "name" },
-          ],
-        },
-      ])
-      .populate("assignedBy", "firstName lastName")
-      .select("-company")
+      .select("completedBy")
       .lean();
+
+    // const transformedTasks = teamMembers.map((member) => {
+    //   const memberId = member._id.toString();
+
+    //   const totalTasks = tasks.filter((emp) => {
+    //     const completedById = emp?.completedBy?._id;
+    //     return completedById && completedById.toString() === memberId;
+    //   }).length;
+
+    //   return {
+    //     name: `${member.firstName} ${member.middleName || ""} ${
+    //       member.lastName
+    //     }`.trim(),
+    //     email: member.email,
+    //     department: member.departments.map((dept) => dept.name),
+    //     role: member.role.map((r) => r.roleTitle),
+    //     tasks: totalTasks,
+    //   };
+    // });
 
     const transformedTasks = teamMembers.map((member) => {
       const memberId = member._id.toString();
 
-      const totalTasks = tasks.filter((emp) => {
-        const completedById = emp?.completedBy?._id;
-        return completedById && completedById.toString() === memberId;
-      }).length;
+      const completedTaskCount = tasks.filter(
+        (task) => task.completedBy?.toString() === memberId,
+      ).length;
 
       return {
         name: `${member.firstName} ${member.middleName || ""} ${
@@ -814,7 +1171,7 @@ const getTeamMembersTasks = async (req, res, next) => {
         email: member.email,
         department: member.departments.map((dept) => dept.name),
         role: member.role.map((r) => r.roleTitle),
-        tasks: totalTasks,
+        tasks: completedTaskCount,
       };
     });
 
@@ -827,9 +1184,19 @@ const getTeamMembersTasks = async (req, res, next) => {
 const getAllDeptTasks = async (req, res, next) => {
   try {
     const { roles, departments, company } = req;
-
+    const { month } = req.query;
     let departmentMap = new Map();
-    let query = { company, taskType: "Department" };
+    let query = { company, taskType: "Department", isDeleted: { $ne: true } };
+
+    const monthPattern = /^\d{4}-\d{2}$/;
+    const monthToUse = monthPattern.test(month || "")
+      ? month
+      : new Date().toISOString().slice(0, 7);
+    const [year, monthIndex] = monthToUse.split("-").map(Number);
+    const startDate = new Date(year, monthIndex - 1, 1);
+    const endDate = new Date(year, monthIndex, 1);
+
+    query.assignedDate = { $gte: startDate, $lt: endDate };
 
     const isSuperAdmin =
       roles.includes("Master Admin") || roles.includes("Super Admin");
@@ -888,9 +1255,18 @@ const getAssignedTasks = async (req, res, next) => {
   try {
     const { user, company } = req;
 
-    const tasks = await Task.find({ company, assignedBy: user })
+    const tasks = await Task.find({
+      company,
+      assignedBy: user,
+      isDeleted: { $ne: true },
+    })
       .populate("assignedBy", "firstName lastName")
       .populate("completedBy", "firstName lastName")
+      .populate({
+        path: "location",
+        select: "unitName unitNo",
+        populate: { path: "building", select: "buildingName" },
+      })
       .select("-company")
       .lean();
 
@@ -928,31 +1304,45 @@ const completeTasks = async (req, res, next) => {
   const logSourceKey = "task";
 
   try {
-    const { taskIds } = req.body;
+    const { taskIds, comment } = req.body;
 
-    if (!taskIds || !taskIds.length) {
-      throw new CustomError("Missing tasks", logPath, logAction, logSourceKey);
+    if (!taskIds || !taskIds.length || comment === undefined) {
+      throw new CustomError(
+        "Missing task ID or comment",
+        logPath,
+        logAction,
+        logSourceKey,
+      );
     }
 
     // Step 1: Fetch tasks before updating
-    const existingTasks = await Task.find({ _id: { $in: taskIds }, company });
+    const existingTasks = await Task.find({
+      _id: { $in: taskIds },
+      company,
+      isDeleted: { $ne: true },
+    });
 
     if (!existingTasks.length) {
       throw new CustomError(
         "No tasks found for the given IDs",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
 
     await Task.updateMany(
-      { _id: { $in: taskIds }, company },
-      { status: "Completed" }
+      { _id: { $in: taskIds }, company, isDeleted: { $ne: true } },
+      { status: "Completed" },
     );
 
     // Step 3: Fetch updated tasks
-    const updatedTasks = await Task.find({ _id: { $in: taskIds }, company });
+    const updatedTasks = await Task.find({
+      _id: { $in: taskIds },
+      comment: comment,
+      company,
+      isDeleted: { $ne: true },
+    });
 
     // Log the changes
 
@@ -974,7 +1364,7 @@ const completeTasks = async (req, res, next) => {
               ?.status,
             newStatus: task.status,
           },
-        })
+        }),
     );
 
     return res.status(200).json({
@@ -985,7 +1375,7 @@ const completeTasks = async (req, res, next) => {
       next(error);
     } else {
       next(
-        new CustomError(error.message, logPath, logAction, logSourceKey, 500)
+        new CustomError(error.message, logPath, logAction, logSourceKey, 500),
       );
     }
   }
@@ -1004,14 +1394,23 @@ const deleteTask = async (req, res, next) => {
         "Task ID must be provided",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
 
-    const deletedTask = await Task.findByIdAndUpdate(
-      { _id: id, company },
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      throw new CustomError(
+        "Invalid task ID provided",
+        logPath,
+        logAction,
+        logSourceKey,
+      );
+    }
+
+    const deletedTask = await Task.findOneAndUpdate(
+      { _id: id, company, isDeleted: { $ne: true } },
       { isDeleted: true },
-      { new: true }
+      { new: true, runValidators: true },
     );
 
     if (!deletedTask) {
@@ -1019,7 +1418,7 @@ const deleteTask = async (req, res, next) => {
         "Failed to delete the task",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
 
@@ -1043,7 +1442,7 @@ const deleteTask = async (req, res, next) => {
       next(error);
     } else {
       next(
-        new CustomError(error.message, logPath, logAction, logSourceKey, 500)
+        new CustomError(error.message, logPath, logAction, logSourceKey, 500),
       );
     }
   }
@@ -1053,10 +1452,11 @@ const getTasksSummary = async (req, res, next) => {
   try {
     const { company, departments, roles } = req;
 
-    const tasks = await Task.find({ company })
+    const tasks = await Task.find({ company, isDeleted: { $ne: true } })
       .populate("assignedBy", "firstName lastName")
       .populate("completedBy", "firstName lastName")
       .populate("department", "name")
+      .populate({ path: "location", select: "unitNo unitName" })
       .select("-company")
       .lean();
 
@@ -1092,6 +1492,159 @@ const getTasksSummary = async (req, res, next) => {
   }
 };
 
+const bulkInsertTasks = async (req, res, next) => {
+  try {
+    const { company, user } = req;
+    const file = req.file;
+
+    if (!file || !isValidCsvUpload(file)) {
+      return res.status(400).json({
+        success: false,
+        message: "Please provide a valid CSV file",
+      });
+    }
+
+    const csvData = file.buffer.toString("utf-8").trim();
+    if (!csvData) {
+      return res.status(400).json({
+        success: false,
+        message: "CSV file is empty",
+      });
+    }
+
+    const rows = await parseCsvRows(csvData);
+    const tasks = [];
+    const invalidRows = [];
+
+    for (const [index, row] of rows.entries()) {
+      const rowNumber = index + 2;
+      const reasons = [];
+      const taskName = normalizeCsvValue(row.taskName);
+      const taskType = normalizeCsvValue(row.taskType);
+      const assignedBy = normalizeCsvValue(row.assignedBy);
+      const assignedTo = normalizeCsvValue(row.assignedTo);
+      const description = normalizeCsvValue(row.description);
+      const assignedDate = normalizeCsvValue(row.assignedDate);
+      const dueDate = normalizeCsvValue(row.dueDate);
+      const dueTime = normalizeCsvValue(row.dueTime);
+      const status = normalizeCsvValue(row.status) || "Pending";
+      const location = normalizeCsvValue(row.location);
+      const department = normalizeCsvValue(row.department);
+
+      const missingFields = BULK_TASK_REQUIRED_FIELDS.filter(
+        (field) => !normalizeCsvValue(row[field]),
+      );
+      if (missingFields.length > 0) {
+        reasons.push(`Missing required fields: ${missingFields.join(", ")}`);
+      }
+
+      if (taskType && !["Self", "Department"].includes(taskType)) {
+        reasons.push("Invalid taskType. Must be Self or Department");
+      }
+
+      if (!VALID_BULK_TASK_STATUSES.includes(status)) {
+        reasons.push(
+          "Invalid status. Must be Pending, InProgress, or Completed",
+        );
+      }
+
+      if (
+        description &&
+        (typeof description !== "string" ||
+          !description.length ||
+          description.replace(/\s/g, "").length > 100)
+      ) {
+        reasons.push("Character limit exceeded");
+      }
+
+      const parsedAssignedDate = parseTaskDate(assignedDate);
+      const parsedDueDate = parseTaskDate(dueDate);
+      if (assignedDate && !parsedAssignedDate) {
+        reasons.push("Invalid assignedDate format");
+      }
+      if (dueDate && !parsedDueDate) reasons.push("Invalid dueDate format");
+      if (
+        parsedAssignedDate &&
+        parsedDueDate &&
+        parsedAssignedDate > parsedDueDate
+      ) {
+        reasons.push("Start date cannot be after end date");
+      }
+
+      const parsedDueTime = parseTaskDueTime(dueTime, parsedDueDate);
+      if (dueTime && parsedDueDate && !parsedDueTime) {
+        reasons.push("Invalid dueTime format");
+      }
+
+      const resolvedDepartment = department
+        ? await resolveBulkTaskDepartment(department)
+        : null;
+      if (department && !resolvedDepartment) {
+        reasons.push(`Invalid department: ${department}`);
+      }
+
+      const resolvedLocation = location
+        ? await resolveBulkTaskLocation(location, company)
+        : null;
+      if (location && !resolvedLocation) {
+        reasons.push(`Invalid location: ${location}`);
+      }
+
+      const resolvedAssignedTo = assignedTo
+        ? await resolveBulkTaskUser(assignedTo, company)
+        : null;
+      if (assignedTo && !resolvedAssignedTo) {
+        reasons.push(`Invalid assignedTo user: ${assignedTo}`);
+      }
+
+      const resolvedAssignedBy = assignedBy
+        ? await resolveBulkTaskUser(assignedBy, company)
+        : null;
+      if (assignedBy && !resolvedAssignedBy) {
+        reasons.push(`Invalid assignedBy user: ${assignedBy}`);
+      }
+
+      if (reasons.length > 0) {
+        invalidRows.push({ rowNumber, row, reasons });
+        continue;
+      }
+
+      tasks.push({
+        taskName,
+        taskType,
+        department: resolvedDepartment._id,
+        description,
+        assignedTo: resolvedAssignedTo ? [resolvedAssignedTo._id] : [],
+        assignedBy: resolvedAssignedBy?._id || user,
+        assignedDate: parsedAssignedDate,
+        dueDate: parsedDueDate,
+        dueTime: parsedDueTime,
+        status,
+        company,
+        location: resolvedLocation?._id || null,
+      });
+    }
+
+    let insertedTasks = [];
+    if (tasks.length > 0) {
+      insertedTasks = await Task.insertMany(tasks, { ordered: false });
+    }
+
+    return res.status(insertedTasks.length > 0 ? 201 : 400).json({
+      success: insertedTasks.length > 0,
+      message:
+        insertedTasks.length > 0
+          ? "Tasks uploaded successfully"
+          : "No valid task rows found in the CSV",
+      insertedCount: insertedTasks.length,
+      skippedCount: invalidRows.length,
+      invalidRows,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   createTasks,
   updateTask,
@@ -1110,4 +1663,5 @@ module.exports = {
   getMyAssignedTasks,
   getTodayDeptTasks,
   getTasksSummary,
+  bulkInsertTasks,
 };

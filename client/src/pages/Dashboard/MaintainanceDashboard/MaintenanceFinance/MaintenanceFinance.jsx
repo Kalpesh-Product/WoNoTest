@@ -15,6 +15,11 @@ const tabs = [
     path: "budget",
     permission: PERMISSIONS.MAINTENANCE_BUDGET.value,
   },
+ {
+    label: "Budget History",
+    path: "budget-history",
+    permission: PERMISSIONS.MAINTENANCE_BUDGET_HISTORY.value,
+  },
   {
     label: "Payment Schedule",
     path: "payment-schedule",
@@ -24,6 +29,16 @@ const tabs = [
     label: "Voucher",
     path: "voucher",
     permission: PERMISSIONS.MAINTENANCE_VOUCHER.value,
+  },
+   {
+    label: "Reject Voucher",
+    path: "reject-voucher",
+    permission: PERMISSIONS.MAINTENANCE_REJECT_VOUCHER.value,
+  },
+  {
+    label: "Voucher History",
+    path: "voucher-history",
+    permission: PERMISSIONS.MAINTENANCE_VOUCHER_HISTORY.value,
   },
 ];
 

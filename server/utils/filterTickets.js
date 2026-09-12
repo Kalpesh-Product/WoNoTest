@@ -9,8 +9,8 @@ function generateQuery(queryMapping, roles) {
   const matchedRole =
     roleHierarchy.find((roleTitle) =>
       roles.some(
-        (userRole) => userRole === roleTitle || userRole.endsWith(roleTitle)
-      )
+        (userRole) => userRole === roleTitle || userRole.endsWith(roleTitle),
+      ),
     ) || "None";
 
   return queryMapping[matchedRole] || {};
@@ -40,6 +40,15 @@ async function fetchTickets(query, companyId) {
         },
         {
           path: "closedBy",
+          select: "firstName lastName",
+          populate: {
+            path: "departments",
+            select: "name",
+            model: "Department",
+          },
+        },
+        {
+          path: "assignedTo.assignee",
           select: "firstName lastName",
           populate: {
             path: "departments",
@@ -92,14 +101,14 @@ async function fetchTickets(query, companyId) {
       const department = company.selectedDepartments.find(
         (dept) =>
           dept.department.toString() ===
-          ticket.raisedToDepartment?._id.toString()
+          ticket.raisedToDepartment?._id.toString(),
       );
 
       let priority = "Low"; // Default priority
 
       if (department) {
         const issue = department.ticketIssues.find(
-          (issue) => issue.title === ticket.ticket
+          (issue) => issue.title === ticket.ticket,
         );
         priority = issue?.priority || "High";
       }
@@ -129,7 +138,7 @@ async function filterAcceptedAssignedTickets(
   user,
   roles,
   userDepartments,
-  companyId
+  companyId,
 ) {
   // Role-based query mapping
   const queryMapping = {
@@ -266,8 +275,8 @@ async function filterSupportTickets(user, roles, userDepartments, companyId) {
   const matchedRole =
     roleHierarchy.find((roleTitle) =>
       roles.some(
-        (userRole) => userRole === roleTitle || userRole.endsWith(roleTitle)
-      )
+        (userRole) => userRole === roleTitle || userRole.endsWith(roleTitle),
+      ),
     ) || "None";
 
   try {
@@ -279,7 +288,7 @@ async function filterSupportTickets(user, roles, userDepartments, companyId) {
       .populate({
         path: "ticket",
         select:
-          "ticket description status acceptedBy assignees image raisedBy raisedToDepartment",
+          "ticket description status acceptedBy assignedTo acceptedAt assignedAt closedAt assignees image raisedBy raisedToDepartment",
         populate: [
           {
             path: "raisedBy",
@@ -298,7 +307,15 @@ async function filterSupportTickets(user, roles, userDepartments, companyId) {
             select: "firstName lastName",
           },
           {
+            path: "closedBy",
+            select: "firstName lastName",
+          },
+          {
             path: "assignees",
+            select: "firstName lastName",
+          },
+          {
+            path: "assignedTo.assignee",
             select: "firstName lastName",
           },
         ],
@@ -309,71 +326,84 @@ async function filterSupportTickets(user, roles, userDepartments, companyId) {
       })
       .select("-company");
 
-    // if (matchedRole === "Master Admin" || matchedRole === "Super Admin") {
-    //   return supportTickets;
-    // }
-    // if (matchedRole.endsWith("Admin")) {
-    //   let adminTickets = supportTickets.filter((ticket) => {
-    //     return userDepartments.some((dept) => {
-    //       return ticket.ticket.raisedToDepartment._id.equals(
-    //         new mongoose.Types.ObjectId(dept)
-    //       );
-    //     });
-    //   });
+    let filteredTickets = [];
+    if (matchedRole === "Master Admin" || matchedRole === "Super Admin") {
+      filteredTickets = supportTickets;
+    } else if (
+      matchedRole.endsWith("Admin") &&
+      !["Master Admin", "Super Admin"].includes(matchedRole)
+    ) {
+      filteredTickets = supportTickets.filter((ticket) => {
+        return [userDepartments].some((dept) => {
+          return ticket.ticket.raisedToDepartment._id.equals(
+            new mongoose.Types.ObjectId(dept),
+          );
+        });
+      });
+    } else {
+      filteredTickets = supportTickets.filter((ticket) =>
+        ticket.user._id.equals(new mongoose.Types.ObjectId(user)),
+      );
+    }
 
-    //   return adminTickets;
-    // }
-    if (matchedRole.endsWith("Admin") || matchedRole === "Employee") {
-      let employeeTickets = supportTickets.filter((ticket) =>
-        ticket.user._id.equals(new mongoose.Types.ObjectId(user))
+    filteredTickets = filteredTickets.filter(
+      (ticket) => ticket?.ticket && ticket.ticket.status !== "Closed",
+    );
+
+    // const isAdmin = matchedRole.endsWith("Admin");
+
+    // let employeeTickets = isAdmin
+    //   ? supportTickets
+    //   : supportTickets.filter((ticket) =>
+    //       ticket.user._id.equals(new mongoose.Types.ObjectId(user))
+    //     );
+
+    if (!filteredTickets.length) return [];
+
+    const tickets = filteredTickets;
+
+    const company = await Company.findById(companyId)
+      .select("selectedDepartments")
+      .lean()
+      .exec();
+
+    if (!company) return tickets; // or [] if you want to skip all in case of no company
+
+    const updatedTickets = tickets.map((ticket) => {
+      const department = company.selectedDepartments.find(
+        (dept) =>
+          dept.department.toString() ===
+          ticket.ticket.raisedToDepartment?._id.toString(),
       );
 
-      if (!employeeTickets) return [];
-      const tickets = employeeTickets;
+      let priority = "Low"; // Default priority
 
-      const company = await Company.findById(companyId)
-        .select("selectedDepartments")
-        .lean()
-        .exec();
-
-      if (!company) return tickets; // or [] if you want to skip all in case of no company
-
-      const updatedTickets = tickets.map((ticket) => {
-        const department = company.selectedDepartments.find(
-          (dept) =>
-            dept.department.toString() ===
-            ticket.ticket.raisedToDepartment?._id.toString()
+      if (department) {
+        const issue = department.ticketIssues.find(
+          (issue) => issue.title === ticket.ticket.ticket,
         );
 
-        let priority = "Low"; // Default priority
+        priority = issue?.priority || "High";
+      }
 
-        if (department) {
-          const issue = department.ticketIssues.find(
-            (issue) => issue.title === ticket.ticket.ticket
-          );
+      // If no match found or still Low, look for "Other"
+      if (!priority || priority === "Low") {
+        const otherIssue = company.selectedDepartments
+          .flatMap((dept) => dept.ticketIssues)
+          .find((issue) => issue.title === "Other");
 
-          priority = issue?.priority || "High";
-        }
+        priority = otherIssue?.priority || "Low";
+      }
 
-        // If no match found or still Low, look for "Other"
-        if (!priority || priority === "Low") {
-          const otherIssue = company.selectedDepartments
-            .flatMap((dept) => dept.ticketIssues)
-            .find((issue) => issue.title === "Other");
+      return {
+        ...ticket._doc,
+        priority,
+      };
+    });
 
-          priority = otherIssue?.priority || "Low";
-        }
-
-        return {
-          ...ticket._doc,
-          priority,
-        };
-      });
-
-      // console.log("updatedTickets", updatedTickets);
-      return updatedTickets;
-      // return employeeTickets;
-    }
+    // console.log("updatedTickets", updatedTickets);
+    return updatedTickets;
+    // return filteredTickets;
   } catch (error) {
     return [];
   }
@@ -453,13 +483,13 @@ async function filterCloseTickets(user, roles, userDepartments, companyId) {
           $and: [
             { status: "Closed" },
             { raisedToDepartment: { $in: userDepartments } },
-            { acceptedBy: user },
+            // { acceptedBy: user },
           ],
         },
         {
           $and: [
             { status: "Closed" },
-            { assignees: [user] },
+            // { assignees: [user] },
             { raisedToDepartment: { $in: userDepartments } },
           ],
         },

@@ -12,21 +12,8 @@ const inventorySchema = new mongoose.Schema(
       ref: "Department",
     },
     itemName: {
-      type: String,
-      required: true,
-    },
-    // Opening inventory
-    openingInventoryUnits: {
-      type: Number,
-      required: true,
-    },
-    openingPerUnitPrice: {
-      type: Number,
-      required: true,
-    },
-    openingInventoryValue: {
-      type: Number,
-      required: true,
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Item",
     },
 
     // New purchase
@@ -45,25 +32,55 @@ const inventorySchema = new mongoose.Schema(
       required: false,
       default: 0,
     },
-    date: {
-      type: Date,
-      default: new Date(),
-    },
-
-    // Closing inventory
-    closingInventoryUnits: {
+     openingInventoryUnits: {
       type: Number,
       required: false,
+    },
+    openingPerUnitPrice: {
+      type: Number,
+      required: false,
+    },
+    openingInventoryValue: {
+      type: Number,
+      required: false,
+    },
+
+    consumptions: [
+      {
+        quantity: Number,
+        source: { type: String, enum: ["opening", "newPurchase"] },
+        date: { type: Date, default: Date.now },
+        addedBy: { type: mongoose.Schema.Types.ObjectId, ref: "UserData" },
+      },
+    ],
+    unit: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Unit",
+    },
+    buildingName: {
+      type: String,
+      required: false,
+      default: "",
+    },
+    addedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "UserData",
+    },
+    remainingUnits: {
+      type: Number,
+      required: true,
       default: 0,
     },
-    category: {
-      type: String,
+      assignedUnits: {
+      type: Number,
       required: true,
+      default: 0,
     },
   },
+
   {
     timestamps: true,
-  }
+  },
 );
 
 const Inventory = mongoose.model("Inventory", inventorySchema);

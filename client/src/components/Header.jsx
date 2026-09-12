@@ -37,6 +37,15 @@ import { queryClient } from "../main";
 import relativeTime from "dayjs/plugin/relativeTime";
 import dayjs from "dayjs";
 
+const notificationRoutes = {
+  meeting: "/app/meetings/calendar",
+  meetings: "/app/meetings/calendar",
+  ticket: "/app/tickets/manage-tickets",
+  tickets: "/app/tickets/manage-tickets",
+  task: "/app/tasks/department-tasks",
+  tasks: "/app/tasks/department-tasks",
+  performance: "/app/performance",
+};
 
 const Header = ({
   notifications = [],
@@ -46,7 +55,7 @@ const Header = ({
 }) => {
   const axios = useAxiosPrivate();
   dayjs.extend(relativeTime);
-  const [isHovered, setIsHovered] = useState(false);
+  //const [isHovered, setIsHovered] = useState(false);
   const { isSidebarOpen, setIsSidebarOpen } = useSidebar();
   const navigate = useNavigate();
   const { auth } = useAuth(); // Assuming signOut is a method from useAuth()
@@ -70,6 +79,21 @@ const Header = ({
       toast.error(error.message || "Error");
     },
   });
+
+  const { mutate: markAllRead, isPending: isMarkingAllRead } = useMutation({
+    mutationKey: ["markAllRead"],
+    mutationFn: async () => {
+      const response = await axios.patch(`/api/notifications/mark-all-read`);
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    },
+    onError: (error) => {
+      toast.error(error.message || "Error");
+    },
+  });
+
 
   // State for Popover
   const [anchorEl, setAnchorEl] = useState(null);
@@ -156,7 +180,11 @@ const Header = ({
 
             <div className="flex w-full justify-end gap-4">
               <button
-                onClick={(e) => setNotificationAnchorEl(e.currentTarget)}
+                onClick={(e) => {
+                  setNotificationAnchorEl(e.currentTarget);
+                }}
+
+
                 className="relative bg-[#1E3D73] text-white rounded-md "
               >
                 <Badge
@@ -170,9 +198,9 @@ const Header = ({
                 </Badge>
               </button>
 
-              <button className="bg-[#1E3D73] p-2 text-white rounded-md">
+              {/* <button className="bg-[#1E3D73] p-2 text-white rounded-md">
                 <MdOutlineMailOutline size={20} />
-              </button>
+              </button> */}
             </div>
           </>
         )}
@@ -188,31 +216,33 @@ const Header = ({
             )}
           </Avatar>
 
-          <div
+          {/* <div
             className="w-full relative"
             onMouseEnter={() => setIsHovered(true)}
             onMouseLeave={() => setIsHovered(false)}
-          >
+          > */}
+          {/* <div className="w-full relative"> */}
+           <div className="w-full relative min-h-[52px] flex items-center">
             {!isMobile && (
               <>
                 <h1 className="text-xl font-semibold text-start">
                   {auth.user.firstName}
                 </h1>
-                <span className="text-content w-full">
+                {/* <span className="text-content w-full"> */}
                   {/* {auth.user.designation.split(" ").length > 2 */}
-                  {auth.user.designation.split(" ").length > 3
-                    ? // ? auth.user.designation.split(" ").slice(0, 2).join(" ") +
+                  {/* {auth.user.designation.split(" ").length > 3 */}
+                    {/* ? // ? auth.user.designation.split(" ").slice(0, 2).join(" ") +
                       auth.user.designation.split(" ").slice(0, 2).join(" ") +
                       "..."
-                    : auth.user.designation}
-                </span>
+                    : auth.user.designation} */}
+                {/* </span>
                 {isHovered && auth.user.designation.split(" ").length > 1 ? (
                   <div className="motion-preset-slide-up-sm absolute top-14 right-0 bg-white border-default border-primary rounded-md p-4 w-96">
                     <span>{auth.user.designation}</span>
                   </div>
                 ) : (
                   ""
-                )}
+                )} */}
               </>
             )}
           </div>
@@ -273,9 +303,15 @@ const Header = ({
         onClose={() => setNotificationAnchorEl(null)}
         anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
         transformOrigin={{ vertical: "top", horizontal: "right" }}
+        PaperProps={{
+          sx: {
+            borderRadius: "12px",
+            boxShadow: "0 10px 30px rgba(0, 0, 0, 0.12)",
+          },
+        }}
       >
-        <div className="p-4 w-[30rem] max-h-[400px] overflow-y-auto">
-          <div className="flex justify-between items-center mb-2">
+        <div className="w-[30rem] max-h-[400px] overflow-y-auto bg-white p-4">
+          <div className="mb-2 flex items-center justify-between">
             <div className="flex items-center gap-5 rounded-full">
               <span className="font-pmedium text-subtitle">Notifications</span>
               <Badge
@@ -285,15 +321,25 @@ const Header = ({
                 overlap="circular"
               ></Badge>
             </div>
-            <IconButton
-              size="small"
-              onClick={onRefreshNotifications}
-              disabled={isRefreshingNotifications}
-            >
-              <HiOutlineRefresh
-                className={`${isRefreshingNotifications ? "animate-spin" : ""}`}
-              />
-            </IconButton>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => markAllRead()}
+                disabled={unseenCount === 0 || isMarkingAllRead}
+                className="text-xs font-pmedium text-primary hover:underline disabled:cursor-not-allowed disabled:text-gray-400 disabled:no-underline"
+              >
+                {isMarkingAllRead ? "Marking..." : "Mark all as read"}
+              </button>
+              <IconButton
+                size="small"
+                onClick={onRefreshNotifications}
+                disabled={isRefreshingNotifications}
+              >
+                <HiOutlineRefresh
+                  className={`${isRefreshingNotifications ? "animate-spin" : ""}`}
+                />
+              </IconButton>
+            </div>
           </div>
           <Divider className="my-2" />
           {isRefreshingNotifications ? (
@@ -306,22 +352,21 @@ const Header = ({
                 <p className="text-gray-500 text-sm">No notifications yet.</p>
               ) : (
                 <>
-                  <div className="h-52 overflow-y-auto pr-4">
-                    <ul className="space-y-2">
+                  <div className="h-52 overflow-y-auto pr-2">
+                    <ul className="space-y-3">
                       {notifications.slice(0, 9).map((n, index) => {
                         const initiator = `${n.initiatorData?.firstName} ${n.initiatorData?.lastName}`;
                         const currentUser = auth?.user?._id;
                         const module = n.module || "";
-                        const navigations = {
-                          Meetings: "/app/meetings/calendar",
-                          Tickets: "/app/tickets/manage-tickets",
-                          Tasks: "/app/tasks/department-tasks",
-                          Performance: "/app/performance",
-                        };
+                        const notificationRoute =
+                          notificationRoutes[module.trim().toLowerCase()];
 
                         const userEntry = n.users?.find(
                           (item) =>
-                            item.userActions?.whichUser?._id === currentUser
+                            String(
+                              item.userActions?.whichUser?._id ||
+                                item.userActions?.whichUser
+                            ) === String(currentUser)
                         );
 
                         const hasRead = userEntry?.userActions?.hasRead;
@@ -329,51 +374,52 @@ const Header = ({
                         return (
                           <li
                             key={n._id || index}
-                            className={`text-sm p-2 rounded ${
-                              !n.hasRead
-                                ? "bg-gray-200 border-borderGray border-default"
-                                : "border-default border-borderGray"
+                            className={`rounded-md border p-3 text-sm shadow-sm transition-colors ${
+                              !hasRead
+                                ? "bg-[#E2E5E9] border-[#C8CDD3]"
+                                : "bg-[#EEF1F4] border-[#C8CDD3]"
                             }`}
                           >
-                            <div className="flex w-full justify-between items-center gap-4 mb-2">
-                              <div className="flex justify-between w-full items-center">
-                                <div
-                                  role="button"
-                                  onClick={() => {
-                                    if (navigations[module]) {
-                                      navigate(navigations[module]);
-                                      setNotificationAnchorEl(null);
-                                    }
-                                  }}
-                                  className="flex flex-col gap-1 w-full"
-                                >
-                                  <div className="flex justify-between w-full">
-                                    <div className="flex justify-start w-full">
-                                      <span className="font-pmedium">
-                                        {n.module}
-                                      </span>
-                                    </div>
+                            <div className="flex items-start justify-between gap-4">
+                              <div
+                                role="button"
+                                onClick={() => {
+                                  if (!hasRead) {
+                                    updateRead(n._id);
+                                  }
+                                  if (notificationRoute) {
+                                    navigate(notificationRoute);
+                                    setNotificationAnchorEl(null);
+                                  }
+                                }}
+                                className={`min-w-0 flex-1 ${
+                                  notificationRoute
+                                    ? "cursor-pointer"
+                                    : "cursor-default"
+                                }`}
+                              >
+                                <div className="flex items-start justify-between gap-3">
+                                  <span className="font-pmedium text-slate-900">
+                                    {n.module}
+                                  </span>
 
-                                    <div className="text-xs text-gray-500 w-full flex justify-end">
-                                      {dayjs(n.createdAt).fromNow()}
-                                    </div>
-                                  </div>
+                                  <span className="shrink-0 text-xs text-slate-500">
+                                    {dayjs(n.createdAt).fromNow()}
+                                  </span>
                                 </div>
+                                <p className="mt-2 text-sm leading-5 text-slate-700">
+                                  {n.message}
+                                </p>
                               </div>
-                            </div>
-
-                            <div className="w-full grid grid-cols-5">
-                              <div className="col-span-4 flex items-end">
-                                <span>{n.message}</span>
-                              </div>
-                              <div className="col-span-1 flex justify-end items-start">
+                              <div className="flex items-start pt-0.5">
                                 {!hasRead && (
                                   <button
                                     onClick={() => updateRead(n._id)}
-                                    className="p-2 rounded-full bg-green-300 text-green-600"
+                                    disabled={isUpdatePending}
+                                    className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-green-300 text-green-700"
                                     title="Mark as Read"
                                   >
-                                    <FaCheck />
+                                    <FaCheck size={12} />
                                   </button>
                                 )}
                               </div>

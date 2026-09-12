@@ -12,7 +12,14 @@ const coworkingMemberSchema = new mongoose.Schema(
     },
     employeeName: {
       type: String,
+      required: true,
     },
+    gender: {
+      type: String,
+      enum: ["Male", "Female"],
+      required: true, 
+    },
+
     designation: {
       type: String,
     },
@@ -47,17 +54,34 @@ const coworkingMemberSchema = new mongoose.Schema(
     },
     biometricStatus: {
       type: String,
-      enum: ["Active", "Inactive", "Pending"], // customize if needed
+       enum: ["Active", "Inactive", "Pending", "Approved", "Revoke"],  // customize if needed
       default: "Pending",
+    },
+    isActive: {
+      type: Boolean,
+      default: true,
+    },
+    isDeleted: {
+      type: Boolean,
+      default: false,
+    },
+    deletedAt: {
+      type: Date,
+      default: null,
+    },
+    deletedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "UserData",
+      default: null,
     },
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 const CoworkingMember = mongoose.model(
   "CoworkingMember",
-  coworkingMemberSchema
+  coworkingMemberSchema,
 );
 module.exports = CoworkingMember;

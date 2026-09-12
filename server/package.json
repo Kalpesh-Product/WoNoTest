@@ -6,20 +6,34 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "nodemon server.js",
     "start": "node server.js",
-    "structure": "node generateStructure.js > structure.txt"
+    "structure": "node generateStructure.js > structure.txt",
+    "migrate:externalvisits": "node scripts/migrateExternalVisits.js",
+    "start:worker": "node workers/index.js",
+    "dev:api": "nodemon server.js",
+    "dev:worker": "nodemon workers/index.js",
+    "scaffold:report": "node scripts/scaffoldReportAutomation.js",
+    "report-cycle:leads": "node scripts/reportAutomation.js --name leads --aliases unique-leads --serviceName fetchLeadReportService --serviceFile services/reports/lead.js --controller controllers/salesControllers/leadsControllers.js --controllerFn getLeads --dateField dateOfContact --contextKeys company,query --emptyMessage \"No leads found\"",
+    "report-cycle": "node scripts/reportAutomation.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1015.0",
+    "@bull-board/api": "^7.0.0",
+    "@bull-board/express": "^7.0.0",
     "axios": "^1.11.0",
     "bcryptjs": "^2.4.3",
+    "bullmq": "^5.76.6",
     "cloudinary": "^2.5.1",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
+    "crypto": "^1.0.1",
     "csv-parser": "^3.2.0",
     "date-fns": "^4.1.0",
+    "dayjs": "^1.11.19",
+    "dayjs-plugin-utc": "^0.1.2",
     "dotenv": "^16.4.5",
     "express": "^4.21.1",
     "ioredis": "^5.4.1",
@@ -31,6 +45,7 @@
     "nodemon": "^3.1.9",
     "pdf-lib": "^1.17.1",
     "sharp": "^0.33.5",
-    "socket.io": "^4.8.1"
+    "socket.io": "^4.8.1",
+    "yup": "^1.7.1"
   }
 }

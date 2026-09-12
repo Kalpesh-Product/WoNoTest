@@ -25,6 +25,11 @@ const tabs = [
     path: "asset-list",
     permission: PERMISSIONS.FRONTEND_ASSET_LIST.value,
   },
+    {
+    label: "Monthly Budget Reports",
+    path: "monthly-budget-report",
+    permission: PERMISSIONS.FRONTEND_MONTHLY_BUDGET_REPORT.value,
+  },
   {
     label: "Monthly Invoice Reports",
     path: "monthly-invoice-reports",
@@ -53,11 +58,12 @@ const tabs = [
   );
 
   return (
-      <TabLayout
+    <TabLayout
       basePath="/app/dashboard/frontend-dashboard/data"
       defaultTabPath="leads"
       tabs={tabs}
       hideTabsCondition={(pathname) => pathname.includes("leads/")}
+      hideTabsOnPaths={["vendor/"]}
     />
   );
 };

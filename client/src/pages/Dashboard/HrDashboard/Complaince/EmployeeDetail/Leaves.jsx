@@ -16,7 +16,7 @@ import {
 import { Controller, useForm } from "react-hook-form";
 import MuiModal from "../../../../../components/MuiModal";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
-import { CircularProgress, MenuItem, TextField } from "@mui/material";
+import { Chip, CircularProgress, MenuItem, TextField } from "@mui/material";
 import dayjs from "dayjs";
 import { toast } from "sonner";
 import useAuth from "../../../../../hooks/useAuth";
@@ -25,11 +25,13 @@ import { useSelector } from "react-redux";
 import PageFrame from "../../../../../components/Pages/PageFrame";
 import ThreeDotMenu from "../../../../../components/ThreeDotMenu";
 import { MdOutlineRemoveRedEye } from "react-icons/md";
+import { MdNavigateBefore, MdNavigateNext } from "react-icons/md";
 import {
   noOnlyWhitespace,
   isAlphanumeric,
 } from "../../../../../utils/validators";
 import YearWiseTable from "../../../../../components/Tables/YearWiseTable";
+import { PERMISSIONS } from "../../../../../constants/permissions";
 
 const Leaves = () => {
   const axios = useAxiosPrivate();
@@ -52,11 +54,21 @@ const Leaves = () => {
     },
   });
   const [openModal, setOpenModal] = useState(false);
+  const today = new Date();
+  const currentFiscalYear =
+    today.getMonth() >= 3 ? today.getFullYear() : today.getFullYear() - 1;
+  const [selectedYear, setSelectedYear] = useState(currentFiscalYear);
   const name = localStorage.getItem("employeeName") || "Employee";
   const { auth } = useAuth();
 
+  const hasCorrectionRequestAccess = useMemo(() => {
+    return auth?.permissions?.some(
+      (permission) => permission.value === PERMISSIONS.HR_LEAVE_REQUEST.value
+    );
+  }, [auth?.permissions]);
+
   const { data: leaves = [], isLoading } = useQuery({
-    queryKey: ["leaves"],
+    queryKey: ["leaves", id],
     queryFn: async () => {
       try {
         const response = await axios.get(`/api/leaves/view-leaves/${id}`);
@@ -65,6 +77,17 @@ const Leaves = () => {
         throw new Error(error.response.data.message);
       }
     },
+    enabled: Boolean(id),
+  });
+  const { data: leaveSummary = {} } = useQuery({
+    queryKey: ["leave-summary", id, selectedYear],
+    queryFn: async () => {
+      const response = await axios.get(
+        `/api/leaves/view-leave-summary/${id}?year=${selectedYear}&financialYear=true`,
+      );
+      return response.data;
+    },
+    enabled: Boolean(id),
   });
 
   const { mutate: correctionPost, isPending: correctionPending } = useMutation({
@@ -96,6 +119,7 @@ const Leaves = () => {
     onSuccess: (data) => {
       toast.success(data.message || "Leave Approved");
       queryClient.invalidateQueries({ queryKey: ["leaves"] });
+      queryClient.invalidateQueries({ queryKey: ["leave-summary", id] });
     },
     onError: (error) => {
       toast.error(error?.response?.data?.message || "Approval failed");
@@ -110,6 +134,7 @@ const Leaves = () => {
     onSuccess: (data) => {
       toast.success(data.message || "Leave Rejected");
       queryClient.invalidateQueries({ queryKey: ["leaves"] });
+      queryClient.invalidateQueries({ queryKey: ["leave-summary", id] });
     },
     onError: (error) => {
       toast.error(error?.response?.data?.message || "Rejection failed");
@@ -149,36 +174,36 @@ const Leaves = () => {
               menuItems={[
                 ...(params.data.status === "Rejected"
                   ? [
-                      {
-                        label: "Approve",
-                        onClick: () => approveLeave(params.data._id),
-                        isLoading: isApproving,
-                      },
-                    ]
+                    {
+                      label: "Approve",
+                      onClick: () => approveLeave(params.data._id),
+                      isLoading: isApproving,
+                    },
+                  ]
                   : []),
                 ...(params.data.status === "Approved"
                   ? [
-                      {
-                        label: "Reject",
-                        onClick: () => rejectLeave(params.data._id),
-                        isLoading: isRejecting,
-                      },
-                    ]
+                    {
+                      label: "Reject",
+                      onClick: () => rejectLeave(params.data._id),
+                      isLoading: isRejecting,
+                    },
+                  ]
                   : []),
                 ...(params.data.status !== "Approved" &&
-                params.data.status !== "Rejected"
+                  params.data.status !== "Rejected"
                   ? [
-                      {
-                        label: "Approve",
-                        onClick: () => approveLeave(params.data._id),
-                        isLoading: isApproving,
-                      },
-                      {
-                        label: "Reject",
-                        onClick: () => rejectLeave(params.data._id),
-                        isLoading: isRejecting,
-                      },
-                    ]
+                    {
+                      label: "Approve",
+                      onClick: () => approveLeave(params.data._id),
+                      isLoading: isApproving,
+                    },
+                    {
+                      label: "Reject",
+                      onClick: () => rejectLeave(params.data._id),
+                      isLoading: isRejecting,
+                    },
+                  ]
                   : []),
               ]}
             />
@@ -256,13 +281,41 @@ const Leaves = () => {
   const months = leavesData.monthlyData.map((entry) => entry.month);
 
   const leaveCounts = useMemo(() => {
-    const counts = {};
+    const counts = { Sick: 0, Privileged: 0, "Comp Off": 0 };
+    const fiscalYearStart = new Date(selectedYear, 3, 1);
+    const nextFiscalYearStart = new Date(selectedYear + 1, 3, 1);
     for (const leave of leaves) {
-      const type = leave.leaveType || "Unknown";
-      counts[type] = (counts[type] || 0) + 1;
+      const leaveDate = new Date(leave.fromDate);
+      if (
+        Number.isNaN(leaveDate.getTime()) ||
+        leaveDate < fiscalYearStart ||
+        leaveDate >= nextFiscalYearStart ||
+        leave.status === "Rejected"
+      ) {
+        continue;
+      }
+
+      const normalizedType = String(leave.leaveType || "").toLowerCase();
+      const type = normalizedType.includes("sick")
+        ? "Sick"
+        : normalizedType.replace(/[\s-]/g, "").includes("compoff")
+          ? "Comp Off"
+        : normalizedType.includes("privileged") ||
+            normalizedType.includes("priviledged") ||
+            normalizedType.includes("abrupt")
+          ? "Privileged"
+          : null;
+      if (type) {
+        counts[type] += (Number(leave.hours) || 0) / 9;
+      }
     }
-    return counts;
-  }, [leaves]);
+    return Object.fromEntries(
+      Object.entries(counts).map(([type, count]) => [
+        type,
+        Number(count.toFixed(2)),
+      ]),
+    );
+  }, [leaves, selectedYear]);
 
   const chartSeries = [
     {
@@ -300,7 +353,7 @@ const Leaves = () => {
       title: { text: "Leave Type" },
     },
     yaxis: {
-      max: 12,
+      max: Math.max(12, Math.ceil(Math.max(...Object.values(leaveCounts), 0))),
       title: { text: "Number of Leaves" },
       dataLabels: {
         positon: "top",
@@ -315,18 +368,71 @@ const Leaves = () => {
   return (
     <div className="flex flex-col gap-8">
       <div>
-        <WidgetSection layout={1} title={"Leaves Data"} border>
+        <WidgetSection
+          layout={1}
+          title={"Leaves Data"}
+          border
+          normalCase
+          headerRightContent={
+            <div className="flex flex-wrap justify-end gap-3">
+              {[
+                ["PL", leaveSummary.leaveTypes?.privileged],
+                ["SL", leaveSummary.leaveTypes?.sick],
+              ].map(([label, summary]) => (
+                <div
+                  key={label}
+                  className="flex flex-wrap items-center gap-2 rounded-lg border border-borderGray bg-white px-2 py-1"
+                >
+                  <span className="text-sm font-pmedium text-primary">
+                    {label}
+                  </span>
+                  <Chip
+                    size="small"
+                    label={`Allotted: ${summary?.allotted ?? 0}`}
+                    sx={{ backgroundColor: "#dbe4ff", color: "#274784" }}
+                  />
+                  <Chip
+                    size="small"
+                    label={`Overflowed: ${summary?.overflowed ?? 0}`}
+                    sx={{ backgroundColor: "#fce8e3", color: "#d96b4f" }}
+                  />
+                  <Chip
+                    size="small"
+                    label={`Remaining: ${summary?.remaining ?? 0}`}
+                    sx={{ backgroundColor: "#d8f0df", color: "#16784d" }}
+                  />
+                </div>
+              ))}
+            </div>
+          }
+        >
           {isLoading ? (
             <div className="flex justify-center items-center h-96">
               <CircularProgress />
             </div>
           ) : (
-            <BarGraph
-              chartId="leave-type-bar"
-              data={chartSeries}
-              options={chartOptions}
-              height={350}
-            />
+            <div className="flex flex-col gap-4">
+              <BarGraph
+                chartId="leave-type-bar"
+                data={chartSeries}
+                options={chartOptions}
+                height={350}
+              />
+              <div className="flex items-center justify-center gap-4 pb-4">
+                <SecondaryButton
+                  title={<MdNavigateBefore />}
+                  handleSubmit={() => setSelectedYear((year) => year - 1)}
+                />
+                <span className="min-w-20 text-center font-psemibold text-primary">
+                  {`FY ${selectedYear}\u2013${String(selectedYear + 1).slice(-2)}`}
+                </span>
+                <SecondaryButton
+                  title={<MdNavigateNext />}
+                  handleSubmit={() => setSelectedYear((year) => year + 1)}
+                  disabled={selectedYear >= currentFiscalYear}
+                />
+              </div>
+            </div>
           )}
         </WidgetSection>
       </div>
@@ -344,6 +450,8 @@ const Leaves = () => {
             tableTitle={`${name}'s Leaves`}
             dateColumn={"fromDate"}
             buttonTitle={"Add Requested Leave"}
+            exportData
+            buttonDisabled={!hasCorrectionRequestAccess}
             handleSubmit={() => {
               setOpenModal(true);
             }}
@@ -441,7 +549,7 @@ const Leaves = () => {
                   {...field}
                   label="Hours"
                   type="number"
-                  // helperText={errors.quantity?.message}
+                // helperText={errors.quantity?.message}
                 />
               )}
             />

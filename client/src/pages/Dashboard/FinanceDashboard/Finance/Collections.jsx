@@ -1,24 +1,102 @@
-import React, { useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import WidgetSection from "../../../../components/WidgetSection";
 import BarGraph from "../../../../components/graphs/BarGraph";
 import MuiModal from "../../../../components/MuiModal";
 import DetalisFormatted from "../../../../components/DetalisFormatted";
 import DataCard from "../../../../components/DataCard";
+import PrimaryButton from "../../../../components/PrimaryButton";
 import { useQuery } from "@tanstack/react-query";
 import useAxiosPrivate from "../../../../hooks/useAxiosPrivate";
 import { inrFormat } from "../../../../utils/currencyFormat";
-import YearWiseTable from "../../../../components/Tables/YearWiseTable";
-import { MdOutlineRemoveRedEye } from "react-icons/md";
+// import YearWiseTable from "../../../../components/Tables/YearWiseTable";
+// import { MdOutlineRemoveRedEye } from "react-icons/md";
 import humanDate from "../../../../utils/humanDateForamt";
 import dayjs from "dayjs";
-import { Chip } from "@mui/material";
+import customParseFormat from "dayjs/plugin/customParseFormat";
 import WidgetTable from "../../../../components/Tables/WidgetTable";
+import SecondaryButton from "../../../../components/SecondaryButton";
+import { MdNavigateBefore, MdNavigateNext } from "react-icons/md";
+import StatusChip from "../../../../components/StatusChip";
+
+// const fiscalYears = ["FY 2024-25", "FY 2025-26"];
+
+// const fiscalYearMonthMap = {
+//   "FY 2024-25": [
+//     "Apr-24",
+//     "May-24",
+//     "Jun-24",
+//     "Jul-24",
+//     "Aug-24",
+//     "Sep-24",
+//     "Oct-24",
+//     "Nov-24",
+//     "Dec-24",
+//     "Jan-25",
+//     "Feb-25",
+//     "Mar-25",
+//   ],
+//   "FY 2025-26": [
+//     "Apr-25",
+//     "May-25",
+//     "Jun-25",
+//     "Jul-25",
+//     "Aug-25",
+//     "Sep-25",
+//     "Oct-25",
+//     "Nov-25",
+//     "Dec-25",
+//     "Jan-26",
+//     "Feb-26",
+//     "Mar-26",
+//   ],
+dayjs.extend(customParseFormat);
+
+const fiscalMonths = [
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+  "Jan",
+  "Feb",
+  "Mar",
+];
+
+const getFiscalYearStart = (date = dayjs()) => {
+  const parsedDate = dayjs(date);
+  return parsedDate.month() >= 3 ? parsedDate.year() : parsedDate.year() - 1;
+};
+
+const formatFiscalYear = (startYear) =>
+  `FY ${startYear}-${String(startYear + 1).slice(-2)}`;
+
+const getFiscalYearMonths = (startYear) =>
+  fiscalMonths.map((month, index) => {
+    const year = index < 9 ? startYear : startYear + 1;
+    return `${month}-${String(year).slice(-2)}`;
+  });
+
+const getFiscalYearStartFromMonth = (monthLabel) => {
+  const parsedMonth = dayjs(`01-${monthLabel}`, "DD-MMM-YY", true);
+
+  if (!parsedMonth.isValid()) return null;
+
+  return parsedMonth.month() >= 3 ? parsedMonth.year() : parsedMonth.year() - 1;
+};
 
 const Collections = () => {
   const [viewModalOpen, setViewModalOpen] = useState(false);
   const [viewDetails, setViewDetails] = useState(null);
   const [selectedMonthData, setSelectedMonthData] = useState([]);
   const [selectedMonthLabel, setSelectedMonthLabel] = useState("");
+  const [selectedExportRange, setSelectedExportRange] = useState(null);
+  const [selectedFiscalYearStart, setSelectedFiscalYearStart] = useState(() =>
+    getFiscalYearStart()
+  );
   const axios = useAxiosPrivate();
 
   const { data: coWorkingData = [], isLoading: isCoWorkingLoading } = useQuery({
@@ -35,7 +113,7 @@ const Collections = () => {
   };
 
   const kraColumn = [
-    { field: "srno", headerName: "Sr No", width: 100 },
+    { field: "srNo", headerName: "Sr No", width: 100 },
     {
       field: "clientName",
       headerName: "Client",
@@ -59,29 +137,10 @@ const Collections = () => {
       field: "status",
       headerName: "Status",
       flex: 1,
-      cellRenderer: (params) => {
-        const statusColorMap = {
-          Paid: { backgroundColor: "#90EE90", color: "#006400" }, // Light green bg, dark green font
-          Unpaid: { backgroundColor: "#FFEBEE", color: "#B71C1C" }, // Light red bg, dark red font
-        };
-
-        const { backgroundColor, color } = statusColorMap[
-          params.data.rentStatus
-        ] || {
-          backgroundColor: "gray",
-          color: "white",
-        };
-
-        return (
-          <Chip
-            label={params.data.rentStatus}
-            style={{
-              backgroundColor,
-              color,
-            }}
-          />
-        );
-      },
+       cellRenderer: (params) => (
+        <StatusChip status={params.value || params.data.rentStatus} />
+      ),
+      //cellRenderer: (params) => <StatusChip status={params.value || params.data.rentStatus} />,
     },
   ];
 
@@ -93,19 +152,30 @@ const Collections = () => {
     );
   }, [coWorkingData]);
 
-  const barGraphData = useMemo(() => {
-    const paid = [];
-    const unpaid = [];
-    const tooltipMeta = [];
+  const fiscalGraphData = useMemo(() => {
+    const fiscalYearMonths = getFiscalYearMonths(selectedFiscalYearStart);
+    const fyBuckets = fiscalYearMonths.map((month) => ({
+      month,
+      paid: 0,
+      unpaid: 0,
+      paidAmount: 0,
+      dueAmount: 0,
+      tooltipMeta: null,
+    }));
 
     sortedData.forEach((entry) => {
+       if (getFiscalYearStartFromMonth(entry.month) !== selectedFiscalYearStart) {
+        return;
+      }
       let paidClients = 0;
       let unpaidClients = 0;
       let paidAmount = 0;
+       let dueAmount = 0;
 
       entry.clients?.forEach((c) => {
         if (c.rentStatus === "Unpaid") {
           unpaidClients++;
+          dueAmount += c.revenue || 0;
         } else {
           paidClients++;
           paidAmount += c.revenue || 0;
@@ -113,29 +183,60 @@ const Collections = () => {
       });
 
       const total = paidClients + unpaidClients || 1;
-      paid.push(Math.round((paidClients / total) * 100));
-      unpaid.push(Math.round((unpaidClients / total) * 100));
+      const targetMonthIndex = fiscalYearMonths.indexOf(entry.month);
+      if (targetMonthIndex === -1) return;
 
-      tooltipMeta.push({
+      fyBuckets[targetMonthIndex] = {
         month: entry.month,
-        paidClients,
-        unpaidClients,
-        total,
-        paidAmount,
-      });
+        paid: Math.round((paidClients / total) * 100),
+        unpaid: Math.round((unpaidClients / total) * 100),
+         paidAmount,
+        dueAmount,
+        tooltipMeta: {
+          month: entry.month,
+          paidClients,
+          unpaidClients,
+          total,
+          paidAmount,
+        },
+      };
     });
 
-    return {
+  return {
       chartData: [
-        { name: "Collected", data: paid },
-        { name: "Due", data: unpaid },
+        { name: "Collected", data: fyBuckets.map((item) => item.paid) },
+        { name: "Due", data: fyBuckets.map((item) => item.unpaid) },
       ],
-      tooltipMeta,
+      tooltipMeta: fyBuckets.map((item) => item.tooltipMeta),
+      paidTotal: fyBuckets.reduce((sum, item) => sum + item.paidAmount, 0),
+      dueTotal: fyBuckets.reduce((sum, item) => sum + item.dueAmount, 0),
     };
+  }, [selectedFiscalYearStart, sortedData]);
+
+  const latestDataFiscalYearStart = useMemo(() => {
+    const fiscalYearStarts = sortedData
+      .map((entry) => getFiscalYearStartFromMonth(entry.month))
+      .filter((yearStart) => yearStart !== null);
+
+    return fiscalYearStarts.length ? Math.max(...fiscalYearStarts) : null;
   }, [sortedData]);
 
-  const barValues = barGraphData.chartData.map((item) => item.data);
+   useEffect(() => {
+    if (latestDataFiscalYearStart !== null) {
+      setSelectedFiscalYearStart(latestDataFiscalYearStart);
+    }
+  }, [latestDataFiscalYearStart]);
+
+  const selectedFiscalYear = formatFiscalYear(selectedFiscalYearStart);
+  const selectedFiscalYearMonths = useMemo(
+    () => getFiscalYearMonths(selectedFiscalYearStart),
+    [selectedFiscalYearStart]
+  );
+  const selectedGraph = fiscalGraphData;
+
+  const barValues = selectedGraph.chartData.map((item) => item.data);
   const completed = barValues[0].reduce((sum, item) => item + sum, 0);
+  const due = barValues[1].reduce((sum, item) => item + sum, 0);
 
   const barGraphOptions = {
     chart: {
@@ -156,7 +257,7 @@ const Collections = () => {
       formatter: (val) => `${val}%`,
     },
     xaxis: {
-      categories: sortedData.map((item) => item.month),
+       categories: selectedFiscalYearMonths,
     },
     yaxis: {
       max: 100,
@@ -188,7 +289,7 @@ const Collections = () => {
 
     tooltip: {
       custom: function ({ seriesIndex, dataPointIndex }) {
-        const meta = barGraphData.tooltipMeta[dataPointIndex];
+        const meta = selectedGraph.tooltipMeta[dataPointIndex];
         if (!meta) return "";
 
         const { month, paidClients, unpaidClients, total, paidAmount } = meta;
@@ -212,27 +313,42 @@ const Collections = () => {
 
   const flatClientData = useMemo(() => {
     return coWorkingData.flatMap((monthObj) =>
-      monthObj.clients.map((client, index) => ({
+      (monthObj.clients || []).map((client, index) => ({
         srno: index + 1,
+        month: monthObj.month,
+        monthLabel: dayjs(`01-${monthObj.month}`, "DD-MMM-YY").format("MMM-YYYY"),
+        monthSortKey: dayjs(`01-${monthObj.month}`, "DD-MMM-YY").valueOf(),
         ...client,
+        status: client.rentStatus || "-",
         date: client.rentDate,
       }))
     );
   }, [coWorkingData]);
 
+  const monthWiseExportData = useMemo(() => {
+    return [...flatClientData].sort((a, b) => {
+      if (a.monthSortKey !== b.monthSortKey) {
+        return a.monthSortKey - b.monthSortKey;
+      }
+      return (a.srno || 0) - (b.srno || 0);
+    });
+  }, [flatClientData]);
+
   const grandTotal = flatClientData.reduce(
     (acc, client) => acc + (client.revenue || 0),
     0
   );
-  const handleMonthChange = (monthLabel) => {
-    setSelectedMonthLabel(monthLabel);
+  const handleMonthChange = (total, filteredRows = [], range = null) => {
+    if (range?.startDate) {
+      setSelectedMonthLabel(dayjs(range.startDate).format("MMM-YYYY"));
+    } else if (filteredRows.length > 0) {
+      setSelectedMonthLabel(dayjs(filteredRows[0].date).format("MMM-YYYY"));
+    } else {
+      setSelectedMonthLabel("");
+    }
 
-    const matchingData = flatClientData.filter((item) => {
-      const itemMonth = dayjs(item.date).format("MMM-YYYY");
-      return itemMonth === monthLabel;
-    });
-
-    setSelectedMonthData(matchingData);
+    setSelectedExportRange(range);
+    setSelectedMonthData(filteredRows);
   };
 
   const currentMonthTotal = useMemo(() => {
@@ -242,6 +358,90 @@ const Collections = () => {
     );
   }, [selectedMonthData]);
 
+   const selectedCollectionMonthTitle = useMemo(() => {
+    const selectedMonth = selectedMonthLabel
+      ? dayjs(selectedMonthLabel, "MMM-YYYY")
+      : dayjs();
+
+    return selectedMonth.isValid()
+      ? `CO-WORKING COLLECTIONS - ${selectedMonth.format("MMMM").toUpperCase()}`
+      : "COLLECTIONS";
+  }, [selectedMonthLabel]);
+
+  const buildExportFileName = (range) => {
+    const start = range?.startDate ? dayjs(range.startDate) : null;
+    const end = range?.endDate ? dayjs(range.endDate) : null;
+
+    if (!start || !end || !start.isValid() || !end.isValid()) {
+      return `collections-${selectedMonthLabel || "selected-month"}.csv`;
+    }
+
+    const startLabel = start.format("MMM");
+    const endLabel = end.format("MMM");
+    const yearLabel = end.format("YYYY");
+
+    if (start.format("MMM-YYYY") === end.format("MMM-YYYY")) {
+      return `collections-${startLabel}-${yearLabel}.csv`;
+    }
+
+    return `collections-${startLabel}-${endLabel}-${yearLabel}.csv`;
+  };
+
+  const handleExport = () => {
+    const exportRows =
+      selectedMonthData.length > 0 ? selectedMonthData : monthWiseExportData;
+
+    if (!exportRows.length) return;
+
+    const headers = [
+      "Sr No",
+      "Client Name",
+      "Channel",
+      "Total Term",
+      "Rent Status",
+      "No. of Desks",
+      "Desk Rate",
+      "Revenue",
+      "Rent Date",
+      "Past Due Date",
+      "Annual Increment",
+      "Next Increment Date",
+    ];
+    const rows = exportRows.map((client, index) => [
+      index + 1,
+      client.clientName || "",
+      client.channel || "",
+      client.totalTerm != null ? `${client.totalTerm} months` : "",
+      client.status || client.rentStatus || "",
+      client.noOfDesks != null ? client.noOfDesks : "",
+      client.deskRate != null ? `INR ${inrFormat(client.deskRate)}` : "",
+      client.revenue != null ? `INR ${inrFormat(client.revenue)}` : "",
+      client.rentDate ? humanDate(client.rentDate) : "",
+      client.pastDueDate ? humanDate(client.pastDueDate) : "",
+      client.annualIncrement != null ? `${client.annualIncrement}%` : "0%",
+      client.nextIncrementDate ? humanDate(client.nextIncrementDate) : "",
+    ]);
+
+    const csvContent = [
+      headers.join(","),
+      ...rows.map((row) =>
+        row
+          .map((cell) => `"${String(cell).replace(/"/g, '""')}"`)
+          .join(",")
+      ),
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = buildExportFileName(selectedExportRange);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   if (isCoWorkingLoading) {
     return <div>Loading...</div>;
   }
@@ -250,38 +450,70 @@ const Collections = () => {
     <div className="flex flex-col gap-8">
       <WidgetSection
         layout={1}
-        title={"COLLECTIONS"}
-        titleLabel={"FY 2024-25"}
-        TitleAmount={`INR ${inrFormat(grandTotal)}`}
+        title={"CO-WORKING COLLECTIONS"}
+         titleLabel={selectedFiscalYear}
+        TitleAmount={`INR ${inrFormat(selectedGraph.paidTotal)}`}
         border
       >
-        <BarGraph data={barGraphData.chartData} options={barGraphOptions} />
+        <BarGraph data={selectedGraph.chartData} options={barGraphOptions} />
+
+        <div className="flex justify-center items-center mt-4">
+          <div className="flex items-center gap-4">
+            <SecondaryButton
+              title={<MdNavigateBefore />}
+              handleSubmit={() =>
+                setSelectedFiscalYearStart((prev) => prev - 1)
+              }
+            />
+            <div className="text-primary text-content font-semibold">
+              {selectedFiscalYear}
+            </div>
+            <SecondaryButton
+              title={<MdNavigateNext />}
+              handleSubmit={() =>
+                setSelectedFiscalYearStart((prev) => prev + 1)
+              }
+            />
+          </div>
+        </div>
 
         <hr />
         <WidgetSection layout={2}>
           <DataCard
             title={"Collected"}
             // description={`Current Month: ${sortedData[0]?.month || "N/A"}`}
-            description={`Total : INR ${inrFormat(grandTotal)}`}
+             description={`Total : INR ${inrFormat(selectedGraph.paidTotal)}`}
             data={`${(completed / 12).toFixed(0) || 0}%`}
           />
           <DataCard
             title={"Due"}
             // description={`Current Month: ${sortedData[0]?.month || "N/A"}`}
-            description={`Total : INR 0`}
-            data={`${barGraphData[1]?.data?.[0] || 0}%`}
+            description={`Total : INR ${inrFormat(selectedGraph.dueTotal)}`}
+            data={`${(due / 12).toFixed(0) || 0}%`}
           />
         </WidgetSection>
-      </WidgetSection>
+      </WidgetSection>  
 
-      <WidgetTable
-        data={flatClientData}
-        columns={kraColumn}
-        dateColumn="date"
-        totalKey="revenue"
-        tableTitle={"Collections"}
-        handleSubmit={() => console.log("Export triggered")}
-      />
+      <WidgetSection
+        border
+        title={selectedCollectionMonthTitle}
+        TitleAmount={`INR ${inrFormat(currentMonthTotal)}`}
+      >
+        <div className="flex justify-end px-4 pt-4">
+          <PrimaryButton title="Export" handleSubmit={handleExport} />
+        </div>
+
+        <WidgetTable
+          data={flatClientData}
+          columns={kraColumn}
+          dateColumn="date"
+          totalKey="revenue"
+          tableTitle={""}
+          border={false}
+          onMonthChange={handleMonthChange}
+          handleSubmit={() => console.log("Export triggered")}
+        />
+      </WidgetSection>
 
 
       {viewDetails && (
@@ -332,7 +564,8 @@ const Collections = () => {
             />
             <DetalisFormatted
               title="Annual Increment"
-              detail={`${viewDetails.annualIncrement}%`}
+              //detail={`${viewDetails.annualIncrement}%`}
+              detail={`${viewDetails.annualIncrement ?? 0}%`}
             />
             <DetalisFormatted
               title="Next Increment Date"

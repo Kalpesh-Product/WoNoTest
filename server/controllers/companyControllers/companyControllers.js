@@ -1,9 +1,6 @@
 const sharp = require("sharp");
 const mongoose = require("mongoose");
-const {
-  handleFileUpload,
-  handleFileDelete,
-} = require("../../config/cloudinaryConfig");
+const { handleFileUpload, handleFileDelete } = require("../../config/s3Config");
 const Company = require("../../models/hr/Company");
 const {
   updateWorkLocationStatus,
@@ -16,9 +13,10 @@ const CustomError = require("../../utils/customErrorlogs");
 const buildHierarchy = require("../../utils/generateHierarchy");
 const UserData = require("../../models/hr/UserData");
 const Unit = require("../../models/locations/Unit");
-const Attandance = require("../../models/hr/Attendance");
-const Events = require("../../models/events/Events");
-const Leaves = require("../../models/hr/Leaves");
+const buildDateFilter = require("../../utils/dateFilter");
+const {
+  getCompanyAttandancesService,
+} = require("../../services/companyAttendance");
 
 const addCompany = async (req, res, next) => {
   const logPath = "hr/HrLog";
@@ -53,7 +51,7 @@ const addCompany = async (req, res, next) => {
         "Missing required fields",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
 
@@ -69,6 +67,20 @@ const addCompany = async (req, res, next) => {
       websiteURL,
       linkedinURL,
       employeeType,
+      totalMeetingCredits: 0,
+      meetingCreditBalance: 0,
+      meetingCreditBalanceHistory: [
+        {
+          monthStartDate: new Date(
+            new Date().getFullYear(),
+            new Date().getMonth(),
+            1,
+          ),
+          remainingCredit: 0,
+          consumedCredit: 0,
+        },
+      ],
+      lastCreditReset: new Date(),
     });
 
     // Save the company to the database
@@ -97,7 +109,7 @@ const addCompany = async (req, res, next) => {
       next(error);
     } else {
       next(
-        new CustomError(error.message, logPath, logAction, logSourceKey, 500)
+        new CustomError(error.message, logPath, logAction, logSourceKey, 500),
       );
     }
   }
@@ -138,7 +150,7 @@ const addCompanyLogo = async (req, res, next) => {
 
       if (foundCompany.companyLogo.logoId) {
         const response = await handleFileDelete(
-          foundCompany.companyLogo.logoId
+          foundCompany.companyLogo.logoId,
         );
 
         if (response?.result !== "ok") {
@@ -153,7 +165,7 @@ const addCompanyLogo = async (req, res, next) => {
               "companyLogo.logoId": "",
               "companyLogo.logoUrl": "",
             },
-          }
+          },
         )
           .lean()
           .exec();
@@ -162,7 +174,7 @@ const addCompanyLogo = async (req, res, next) => {
       const base64Image = `data:image/webp;base64,${buffer.toString("base64")}`;
       const uploadResult = await handleFileUpload(
         base64Image,
-        `${foundCompany.companyName}/logo`
+        `${foundCompany.companyName}/logo`,
       );
 
       imageId = uploadResult.public_id;
@@ -174,7 +186,7 @@ const addCompanyLogo = async (req, res, next) => {
     const newCompanyLogo = await Company.findByIdAndUpdate(
       { _id: company },
       { companyLogo },
-      { new: true }
+      { new: true },
     );
 
     if (!newCompanyLogo) {
@@ -182,7 +194,7 @@ const addCompanyLogo = async (req, res, next) => {
         "Couldn't add company logo",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
 
@@ -207,7 +219,7 @@ const addCompanyLogo = async (req, res, next) => {
       next(error);
     } else {
       next(
-        new CustomError(error.message, logPath, logAction, logSourceKey, 500)
+        new CustomError(error.message, logPath, logAction, logSourceKey, 500),
       );
     }
   }
@@ -218,7 +230,7 @@ const getCompanyLogo = async (req, res, next) => {
     const companyId = req.userData.company;
 
     const company = await Company.findById({ _id: companyId }).select(
-      "companyLogo"
+      "companyLogo",
     );
 
     if (!company) {
@@ -297,7 +309,7 @@ const getCompanyData = async (req, res, next) => {
             ...dep._doc,
             admin: manager ? `${manager.firstName} ${manager.lastName}` : null,
           };
-        })
+        }),
       );
 
       return res
@@ -328,7 +340,7 @@ const updateActiveStatus = async (req, res, next) => {
         "Missing required field: field",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
 
@@ -337,7 +349,7 @@ const updateActiveStatus = async (req, res, next) => {
         "Status should be a boolean",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
 
@@ -346,7 +358,7 @@ const updateActiveStatus = async (req, res, next) => {
         "Invalid company ID provided",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
 
@@ -363,7 +375,7 @@ const updateActiveStatus = async (req, res, next) => {
         "Invalid field provided",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
 
@@ -373,7 +385,7 @@ const updateActiveStatus = async (req, res, next) => {
         "Couldn't update status",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
 
@@ -399,7 +411,7 @@ const updateActiveStatus = async (req, res, next) => {
       next(error);
     } else {
       next(
-        new CustomError(error.message, logPath, logAction, logSourceKey, 500)
+        new CustomError(error.message, logPath, logAction, logSourceKey, 500),
       );
     }
   }
@@ -434,43 +446,37 @@ const getHierarchy = async (req, res, next) => {
 const getCompanyAttandances = async (req, res, next) => {
   try {
     const { company } = req;
-    const companyAttandances = await Attandance.find({ company })
-      .populate({ path: "user", select: "firstName lastName empId startDate" })
-      .lean()
-      .exec();
+    const requestDateFilter = req.query?.dateFilter ||
+      req.query?.filters || {
+        startDate:
+          req.query?.["dateFilter[startDate]"] ||
+          req.query?.["filters[startDate]"] ||
+          req.query?.startDate,
+        endDate:
+          req.query?.["dateFilter[endDate]"] ||
+          req.query?.["filters[endDate]"] ||
+          req.query?.endDate,
+      };
+    const hasDateFilter = Boolean(
+      requestDateFilter?.startDate || requestDateFilter?.endDate,
+    );
+    const payload = await getCompanyAttandancesService({
+      company,
+      employeeId: req.query?.employeeId,
+      page: req.query?.page,
+      limit: req.query?.limit,
+      ...(hasDateFilter && {
+        dateFilter: buildDateFilter({
+          startDate: requestDateFilter.startDate,
+          endDate: requestDateFilter.endDate,
+          field: "inTime",
+        }),
+      }),
+    });
 
-    let sundays = 0;
-    let year = new Date().getFullYear().toString();
-    for (let month = 0; month < 12; month++) {
-      for (let day = 1; day <= 31; day++) {
-        const date = new Date(year, month, day);
-        if (date.getMonth() !== month) break; // invalid date
-        if (date.getDay() === 0) sundays++; // 0 = Sunday
-      }
-    }
-    const holidays = await Events.find({ company, type: "Holiday" })
-      .lean()
-      .exec();
-
-    const allLeaves = await Leaves.find({ company })
-      .populate({
-        path: "takenBy",
-        select: "firstName lastName startDate",
-      })
-      .lean()
-      .exec();
-    const workingDays = 365 - (holidays.length + sundays);
-    res
-      .status(200)
-      .json({ companyAttandances, workingDays, holidays, allLeaves });
+    return res.status(200).json(payload);
   } catch (error) {
-    if (error instanceof CustomError) {
-      next(error);
-    } else {
-      next(
-        new CustomError(error.message, logPath, logAction, logSourceKey, 500)
-      );
-    }
+    return next(error);
   }
 };
 
@@ -480,8 +486,16 @@ const updateCompanySubItem = async (req, res) => {
   const logAction = "Update Company Data";
   const logSourceKey = "companyData";
   try {
-    const { type, itemId, name, isActive, startTime, endTime, isDeleted } =
-      req.body;
+    const {
+      type,
+      itemId,
+      name,
+      policyType,
+      isActive,
+      startTime,
+      endTime,
+      isDeleted,
+    } = req.body;
     if (!type || !itemId)
       return res.status(400).json({ message: "type, and itemId are required" });
 
@@ -490,7 +504,7 @@ const updateCompanySubItem = async (req, res) => {
         "Invalid document type. Allowed values: sop, policies, shift,employeeTypes",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
 
@@ -513,18 +527,50 @@ const updateCompanySubItem = async (req, res) => {
     item = foundCompany[key].id(itemId);
     if (item) {
       if (name !== undefined) item.name = name;
+      if (policyType !== undefined && type === "policies") {
+        if (!["Leave", "Holiday", "None"].includes(policyType)) {
+          return res.status(400).json({ message: "Invalid policy type" });
+        }
+        item.policyType = policyType;
+      }
       if (isActive !== undefined) item.isActive = isActive;
 
       if (isDeleted !== undefined) item.isDeleted = isDeleted;
       if (type === "shifts") {
+        let parsedStartTime = item.startTime;
+        let parsedEndTime = item.endTime;
+
         if (startTime) {
-          const parsedStartTime = new Date(startTime);
-          item.startTime = parsedStartTime;
+          parsedStartTime = new Date(startTime);
+          if (isNaN(parsedStartTime)) {
+            return res.status(400).json({ message: "Invalid startTime" });
+          }
         }
+
         if (endTime) {
-          const parsedEndTime = new Date(endTime);
-          item.endTime = parsedEndTime;
+          parsedEndTime = new Date(endTime);
+          if (isNaN(parsedEndTime)) {
+            return res.status(400).json({ message: "Invalid endTime" });
+          }
         }
+
+        // Only validate if both exist
+        if (parsedStartTime && parsedEndTime) {
+          const diffHours =
+            (parsedEndTime.getTime() - parsedStartTime.getTime()) /
+            (1000 * 60 * 60);
+
+          const adjustedHours = diffHours < 0 ? diffHours + 24 : diffHours;
+
+          if (adjustedHours <= 0 || adjustedHours > 16) {
+            return res.status(400).json({
+              message: `Invalid shift duration: Provided duration is ${adjustedHours.toFixed(2)} hours.`,
+            });
+          }
+        }
+
+        item.startTime = parsedStartTime;
+        item.endTime = parsedEndTime;
       }
       item.updatedAt = new Date();
       updated = true;
@@ -542,6 +588,112 @@ const updateCompanySubItem = async (req, res) => {
   }
 };
 
+//Appends departmnet ticket issues
+const addDepartmentTicketIssues = async (req, res) => {
+  try {
+    const { company } = req;
+    const { departments } = req.body;
+
+    if (!departments || !Array.isArray(departments)) {
+      return res.status(400).json({
+        message: "Departments array is required",
+      });
+    }
+
+    const companyDoc = await Company.findById(company);
+
+    if (!companyDoc) {
+      return res.status(404).json({ message: "Company not found" });
+    }
+
+    for (const deptPayload of departments) {
+      const { departmentId, issues } = deptPayload;
+
+      if (!departmentId || !Array.isArray(issues)) continue;
+
+      const dept = companyDoc.selectedDepartments.find(
+        (d) => d.department.toString() === departmentId,
+      );
+
+      if (!dept) continue;
+
+      for (const issue of issues) {
+        const exists = dept.ticketIssues.some(
+          (existing) =>
+            existing.title.toLowerCase() === issue.title.toLowerCase(),
+        );
+
+        if (!exists) {
+          dept.ticketIssues.push({
+            title: issue.title,
+            priority: issue.priority || "High",
+          });
+        }
+      }
+    }
+
+    await companyDoc.save();
+
+    return res.status(200).json({
+      message: "Ticket issues added successfully",
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      message: "Something went wrong",
+    });
+  }
+};
+
+//Replaces departmnet ticket issues completely
+// const addDepartmentTicketIssues = async (req, res) => {
+//   try {
+//     const { company } = req;
+//     const { departments } = req.body;
+
+//     if (!departments || !Array.isArray(departments)) {
+//       return res.status(400).json({
+//         message: "Departments array is required",
+//       });
+//     }
+
+//     const companyDoc = await Company.findById(company);
+
+//     if (!companyDoc) {
+//       return res.status(404).json({ message: "Company not found" });
+//     }
+
+//     for (const deptPayload of departments) {
+//       const { departmentId, issues } = deptPayload;
+
+//       if (!departmentId || !Array.isArray(issues)) continue;
+
+//       const dept = companyDoc.selectedDepartments.find(
+//         (d) => d.department.toString() === departmentId,
+//       );
+
+//       if (!dept) continue;
+
+//       // 🔥 Replace existing ticket issues completely
+//       dept.ticketIssues = issues.map((issue) => ({
+//         title: issue.title,
+//         priority: issue.priority || "High",
+//       }));
+//     }
+
+//     await companyDoc.save();
+
+//     return res.status(200).json({
+//       message: "Ticket issues replaced successfully",
+//     });
+//   } catch (error) {
+//     console.error(error);
+//     return res.status(500).json({
+//       message: "Something went wrong",
+//     });
+//   }
+// };
+
 module.exports = {
   addCompany,
   addCompanyLogo,
@@ -552,4 +704,5 @@ module.exports = {
   getHierarchy,
   getCompanyAttandances,
   updateCompanySubItem,
+  addDepartmentTicketIssues,
 };

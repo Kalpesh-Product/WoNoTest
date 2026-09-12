@@ -9,33 +9,48 @@ const FrontendFinLayout = () => {
   const navigate = useNavigate();
 
   // Map routes to tabs
-const tabs = [
-  {
-    label: "Budget",
-    path: "budget",
-    permission: PERMISSIONS.FRONTEND_BUDGET.value,
+  const tabs = [
+    {
+      label: "Budget",
+      path: "budget",
+      permission: PERMISSIONS.FRONTEND_BUDGET.value,
+    },
+     {
+      label: "Budget History",
+      path: "budget-history",
+      permission: PERMISSIONS.FRONTEND_BUDGET_HISTORY.value,
+    },
+    {
+      label: "Payment Schedule",
+      path: "payment-schedule",
+      permission: PERMISSIONS.FRONTEND_PAYMENT_SCHEDULE.value,
+    },
+    {
+      label: "Voucher",
+      path: "voucher",
+      permission: PERMISSIONS.FRONTEND_VOUCHER.value,
+    },
+    {
+    label: "Reject Voucher",
+    path: "reject-voucher",
+    permission: PERMISSIONS.FRONTEND_REJECT_VOUCHER.value,
   },
-  {
-    label: "Payment Schedule",
-    path: "payment-schedule",
-    permission: PERMISSIONS.FRONTEND_PAYMENT_SCHEDULE.value,
-  },
-  {
-    label: "Voucher",
-    path: "voucher",
-    permission: PERMISSIONS.FRONTEND_VOUCHER.value,
-  },
-];
+      {
+      label: "Voucher History",
+      path: "voucher-history",
+      permission: PERMISSIONS.FRONTEND_VOUCHER_HISTORY.value,
+    },
+  ];
 
 
   // Redirect to "view-employees" if the current path is "/hr-dashboard/compliances"
-  useEffect(() => {
-    if (location.pathname === "/app/dashboard/frontend-dashboard/finance") {
-      navigate("/app/dashboard/frontend-dashboard/finance/budget", {
-        replace: true,
-      });
-    }
-  }, [location, navigate]);
+  // useEffect(() => {
+  //   if (location.pathname === "/app/dashboard/frontend-dashboard/finance") {
+  //     navigate("/app/dashboard/frontend-dashboard/finance/budget", {
+  //       replace: true,
+  //     });
+  //   }
+  // }, [location, navigate]);
 
   // Determine whether to show the tabs
   const showTabs = !location.pathname.includes("budget/");
@@ -46,7 +61,7 @@ const tabs = [
   );
 
   return (
-      <TabLayout
+    <TabLayout
       basePath="/app/dashboard/frontend-dashboard/finance"
       defaultTabPath="budget"
       tabs={tabs}

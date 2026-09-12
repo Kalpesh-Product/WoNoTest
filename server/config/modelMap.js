@@ -31,14 +31,16 @@ const modelKeyGroups = {
   ],
   Unit: ["locationId", "location", "unitId", "unit"],
 
-  //Agreement Ids
+  //Agreement IDs
   agreements: ["agreementId"],
+
+  //Category IDs
+  Category: ["categoryId"],
+  SubCategory: ["subCategoryId"],
 
   //Asset IDs
   Asset: ["assetId"],
   AssignAsset: ["assigneddAssetId"],
-  AssetCategory: ["categoryId"],
-  SubCategory: ["subCategoryId"],
 
   //Attendance IDs
   Attendance: ["attendanceId"],
@@ -51,7 +53,7 @@ const modelKeyGroups = {
   Building: ["buildingId"],
 
   //Company IDs
-  Company: ["departmentId"],
+  // Company: ["departmentId"],
 
   //Event IDs
   Event: ["id"],
@@ -108,6 +110,8 @@ const modelKeyGroups = {
   Vendor: ["vendorId"],
 
   // Add more models as needed
+  //Report IDs
+  Report: ["id"],
 };
 
 // Flatten into a key → model map

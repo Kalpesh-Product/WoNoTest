@@ -1,7 +1,8 @@
-import React, { useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import AgTable from "../../../components/AgTable";
 import { Chip, CircularProgress } from "@mui/material";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { useDispatch, useSelector } from "react-redux";
 import useAxiosPrivate from "../../../hooks/useAxiosPrivate";
 import humanDate from "../../../utils/humanDateForamt";
 import humanTime from "../../../utils/humanTime";
@@ -10,26 +11,154 @@ import MuiModal from "../../../components/MuiModal";
 import DetalisFormatted from "../../../components/DetalisFormatted";
 import { MdOutlineRemoveRedEye } from "react-icons/md";
 import YearWiseTable from "../../../components/Tables/YearWiseTable";
+import { formatDateTimeFields } from "../../../utils/formatDateTime";
+import StatusChip from "../../../components/StatusChip";
+import dayjs from "dayjs";
+import {
+  DEFAULT_PAGE_SIZE,
+  PAGE_SIZE_OPTIONS,
+} from "../../../constants/pagination";
+import useAuth from "../../../hooks/useAuth";
+import { setSelectedDepartment } from "../../../redux/slices/performanceSlice";
+
+const toUtcDayBoundary = (value, endOfDay = false) => {
+  const date = dayjs(value);
+
+  return new Date(
+    Date.UTC(
+      date.year(),
+      date.month(),
+      date.date(),
+      endOfDay ? 23 : 0,
+      endOfDay ? 59 : 0,
+      endOfDay ? 59 : 0,
+      endOfDay ? 999 : 0,
+    ),
+  ).toISOString();
+};
 
 const AssignedTaskReports = () => {
   const axios = useAxiosPrivate();
+  const dispatch = useDispatch();
+  const { auth } = useAuth();
+  const deptId = useSelector((state) => state.performance.selectedDepartment);
+  const currentDepartmentId = auth?.user?.departments?.[0]?._id;
+  const effectiveDeptId = deptId || currentDepartmentId;
 
   const [openModal, setOpenModal] = useState(false);
   const [selectedTask, setSelectedTask] = useState([]);
+  const [pagination, setPagination] = useState({ page: 1, limit: DEFAULT_PAGE_SIZE, total: 0 });
+  const initialDateRange = useMemo(
+    () => ({
+      startDate: dayjs().startOf("month").toDate(),
+      endDate: dayjs().endOf("month").toDate(),
+      key: "selection",
+    }),
+    [],
+  );
+  const [selectedTaskRange, setSelectedTaskRange] = useState(initialDateRange);
+  React.useEffect(() => {
+    if (!deptId && currentDepartmentId) {
+      dispatch(setSelectedDepartment(currentDepartmentId));
+    }
+  }, [currentDepartmentId, deptId, dispatch]);
+  React.useEffect(() => {
+    setPagination((current) =>
+      current.page === 1 ? current : { ...current, page: 1 },
+    );
+  }, [effectiveDeptId]);
 
   const { data: taskList = [], isLoading } = useQuery({
-    queryKey: ["assigned-tasks"],
+    queryKey: [
+      "department-tasks",
+      "report",
+      effectiveDeptId,
+      selectedTaskRange.startDate,
+      selectedTaskRange.endDate,
+      pagination.page,
+      pagination.limit,
+    ],
+    placeholderData: keepPreviousData,
     queryFn: async () => {
-      const response = await axios.get("/api/tasks/get-my-assigned-tasks");
-      return response.data;
+      if (!effectiveDeptId) return [];
+
+       const response = await axios.get("/api/tasks/get-tasks", {
+        params: {
+          dept: effectiveDeptId,
+          report: true,
+          startDate: toUtcDayBoundary(selectedTaskRange.startDate),
+          endDate: toUtcDayBoundary(selectedTaskRange.endDate, true),
+          page: pagination.page,
+          limit: pagination.limit,
+        },
+      });
+      const responsePagination = response.data.pagination;
+
+      setPagination((current) => ({
+        page: Number(responsePagination?.page) || current.page,
+        limit: Number(responsePagination?.limit) || current.limit,
+        total: Number(responsePagination?.total) || 0,
+      }));
+
+     return response.data.data || [];
     },
+    enabled: Boolean(effectiveDeptId),
   });
 
   const handleViewDetails = (params) => {
-    setSelectedTask(params);
+    setSelectedTask(
+      formatDateTimeFields({
+        ...params,
+        startTime: params?.assignedDate,
+      }),
+    );
     setOpenModal(true);
   };
-  console.log("selectedTask : ", selectedTask);
+
+  const formatAssignedTo = (assignedTo) => {
+    if (!assignedTo) return "";
+
+    const currentUserId = auth?.user?._id;
+    const currentUserName =
+      [
+        auth?.user?.firstName,
+        auth?.user?.lastName,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .trim() || auth?.user?.name || "";
+
+    if (Array.isArray(assignedTo)) {
+      return assignedTo
+        .map((member) =>
+          typeof member === "string"
+            ? member === currentUserId && currentUserName
+              ? currentUserName
+              : member
+            : [
+                member?.firstName,
+                member?.lastName,
+              ]
+                .filter(Boolean)
+                .join(" "),
+        )
+        .filter(Boolean)
+        .join(", ");
+    }
+
+    if (typeof assignedTo === "string") {
+      return assignedTo === currentUserId && currentUserName
+        ? currentUserName
+        : assignedTo;
+    }
+
+    return [
+      assignedTo?.firstName,
+      assignedTo?.lastName,
+    ]
+      .filter(Boolean)
+      .join(" ");
+  };
 
   const myTaskReportsColumns = [
     { field: "srNo", headerName: "Sr No", width: 100 },
@@ -37,67 +166,145 @@ const AssignedTaskReports = () => {
       field: "taskName",
       headerName: "Task",
       width: 250,
-      cellRenderer: (params) => (
-        <span
-          className="text-primary underline cursor-pointer"
-          onClick={() => handleViewDetails(params.data)}
-        >
-          {params.value}
-        </span>
-      ),
     },
-    { field: "assignedBy", headerName: "Assigned By", width: 300 },
+    { field: "assignedBy", headerName: "Assigned By", width: 300,hide: true  },
+    { field: "assignedTo", headerName: "Assign To", width: 300},
+    { field: "completedBy", headerName: "Completed By", width: 300 },
+    { field: "startDate", headerName: "Start Date" },
+    // { field: "startTime", headerName: "Start Time" },
     { field: "assignedDate", headerName: "Assigned Date" },
     { field: "dueDate", headerName: "Due Date" },
-    { field: "completedDate", headerName: "Completed Date" },
+    {
+      field: "dueTime",
+      headerName: "Due Time",
+    },
+    {
+      field: "completedDate",
+      headerName: "Completed Date",
+    },
     {
       field: "completedTime",
       headerName: "Completed Time",
-      cellRenderer: (params) => humanTime(params.value),
     },
     { field: "department", headerName: "Department" },
-    // { field: "endDate", headerName: "End Date" },
-    // {
-    //   field: "actions",
-    //   headerName: "Actions",
-    //   cellRenderer: (params) => (
-    //     <div className="p-2 mb-2 flex gap-2">
-    //       <span
-    //         className="text-primary hover:underline text-content cursor-pointer"
-    //         onClick={() => handleViewDetails(params)}
-    //       >
-    //         View Details
-    //       </span>
-    //     </div>
-    //   ),
-    // },
+    {
+      field: "status",
+      headerName: "Status",
+      pinned: "right",
+      width: 130,
+      minWidth: 130,
+      cellRenderer: (params) => (
+        <StatusChip status={params.value} />
+      ),
+    },
+    {
+      field: "action",
+      headerName: "Action",
+      pinned: "right",
+      width: 100,
+      minWidth: 100,
+      maxWidth: 100,
+      lockPinned: true,
+      suppressMovable: true,
+      cellRenderer: (params) => (
+        <button
+          type="button"
+          title="View Task Details"
+          onClick={() => handleViewDetails(params.data)}
+          className="h-8 w-8 flex items-center justify-center"
+        >
+          <MdOutlineRemoveRedEye size={22} color="#111827" />
+        </button>
+      ),
+    },
+    { field: "comment", headerName: "Comment", hide: true },
   ];
+
+  const currentMonthLabel = (
+    selectedTaskRange?.startDate ? dayjs(selectedTaskRange.startDate) : dayjs()
+  ).format("MMMM");
+
+   const handleTaskRangeChange = useCallback(({ selectedRange }) => {
+    if (!selectedRange?.startDate || !selectedRange?.endDate) return;
+    setSelectedTaskRange((prev) => {
+      const prevStart = prev?.startDate ? dayjs(prev.startDate).valueOf() : null;
+      const prevEnd = prev?.endDate ? dayjs(prev.endDate).valueOf() : null;
+      const nextStart = selectedRange?.startDate
+        ? dayjs(selectedRange.startDate).valueOf()
+        : null;
+      const nextEnd = selectedRange?.endDate
+        ? dayjs(selectedRange.endDate).valueOf()
+        : null;
+
+      if (prevStart === nextStart && prevEnd === nextEnd) {
+        return prev;
+      }
+
+      return selectedRange;
+    });
+  setPagination((current) =>
+      current.page === 1 ? current : { ...current, page: 1 },
+    );
+  }, []);
 
   return (
     <div className="flex flex-col gap-8">
       <PageFrame>
         <YearWiseTable
           exportData
+          taskExportDateTimeFormatting
           search={true}
           dateColumn={"assignedDate"}
-          tableTitle={"Assigned Tasks Reports"}
+         initialDateRange={initialDateRange}
+          tableTitle={`Department Tasks Reports - ${currentMonthLabel}`}
           data={
             isLoading
               ? []
               : taskList.map((task, index) => ({
-                  srNo: index + 1,
-                  ...task,
-                  taskName: task.taskName,
-                  assignedDate: task.assignedDate,
-                  dueDate: task.dueDate,
-                  completedDate: task.completedDate,
-                  completedTime: task.completedDate,
-                  assignedBy: `${task.assignedBy.firstName} ${task.assignedBy.lastName}`,
-                  department: task.department?.name,
-                  description: task.description,
-                }))
+                srNo: (pagination.page - 1) * pagination.limit + index + 1,
+                ...task,
+                taskName: task.taskName,
+                startDate: task.assignedDate,
+                startTime: task.assignedDate,
+                assignedDate: task.assignedDate,
+                dueDate: task.dueDate,
+                dueTime: task.dueTime,
+                completedDate: task.completedDate,
+                completedTime: task.completedDate,
+                assignedBy: task.assignedBy
+                  ? [
+                    task.assignedBy.firstName,
+                    task.assignedBy.middleName,
+                    task.assignedBy.lastName,
+                  ]
+                    .filter(Boolean)
+                    .join(" ")
+                  : "",
+                assignedTo: formatAssignedTo(task.assignedTo),
+                completedBy: task.completedBy,
+                department: task.department?.name || task.department,
+                description: task.description,
+                status: task.status,
+                comment: task.comment,
+              }))
           }
           columns={myTaskReportsColumns}
+          onDateFilterChange={handleTaskRangeChange}
+          serverPagination
+          pageSizeOptions={PAGE_SIZE_OPTIONS}
+          paginationPageSize={pagination.limit}
+          paginationPage={pagination.page}
+          paginationTotal={pagination.total}
+          onPaginationPageChange={(page) =>
+            setPagination((current) => ({ ...current, page }))
+          }
+          onPaginationPageSizeChange={(limit) =>
+            setPagination((current) =>
+              current.limit === limit
+                ? current
+                : { ...current, page: 1, limit },
+            )
+          }
         />
       </PageFrame>
 
@@ -109,6 +316,10 @@ const AssignedTaskReports = () => {
       >
         {selectedTask && (
           <div className="grid grid-cols-1 gap-4">
+            <DetalisFormatted
+              title="Sr No"
+              detail={selectedTask.srNo}
+            />
             <DetalisFormatted
               title="Task Name"
               detail={selectedTask.taskName}
@@ -122,31 +333,55 @@ const AssignedTaskReports = () => {
               detail={selectedTask.assignedBy}
             />
             <DetalisFormatted
+              title="Assign To"
+              detail={selectedTask.assignedTo || "-"}
+            />
+            <DetalisFormatted
+              title="Completed By"
+              detail={selectedTask.completedBy}
+            />
+            <DetalisFormatted
+              title="Start Date"
+              detail={selectedTask.startDate}
+            />
+            {/* <DetalisFormatted
+              title="Start Time"
+              detail={selectedTask.startTime}
+            /> */}
+            <DetalisFormatted
               title="Assigned Date"
-              detail={humanDate(selectedTask.assignedDate)}
+              detail={selectedTask.assignedDate}
             />
             <DetalisFormatted
               title="Due Date"
-              detail={humanDate(selectedTask.dueDate)}
+              detail={selectedTask.dueDate}
+            />
+            <DetalisFormatted
+              title="Due Time"
+              detail={selectedTask.dueTime}
             />
             <DetalisFormatted
               title="Completed Date"
-              detail={humanDate(selectedTask.completedDate)}
+              detail={selectedTask.completedDate}
             />
             <DetalisFormatted
               title="Completed Time"
-              detail={humanTime(selectedTask.completedTime)}
+              detail={selectedTask.completedTime}
             />
+
             <DetalisFormatted
               title="Department"
               detail={selectedTask.department}
             />
-            <DetalisFormatted title="Priority" detail={selectedTask.priority} />
+            {/* <DetalisFormatted title="Priority" detail={selectedTask.priority} /> */}
             <DetalisFormatted
               title="Status"
               detail={selectedTask.status || "—"}
             />
-            <DetalisFormatted title="Remarks" detail={selectedTask.remarks} />
+            <DetalisFormatted
+              title="Comment"
+              detail={selectedTask.comment || "-"}
+            />
           </div>
         )}
       </MuiModal>

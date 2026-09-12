@@ -1,0 +1,166 @@
+import React, { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
+import { PERMISSIONS } from "../../constants/permissions";
+import useAxiosPrivate from "../../hooks/useAxiosPrivate";
+import useUserPermissions from "../../hooks/useUserPermissions";
+//import useAuth from "../../hooks/useAuth";
+
+const staticReportModules = [
+   {
+    title: "CAFE",
+    subtitle: "Cafe Reports",
+    route: "../reports-section/cafe",
+    permission: PERMISSIONS.REPORTS_CAFE.value,
+  },
+  {
+    title: "LEGAL",
+    subtitle: "Legal Reports",
+    route: "../reports-section/legal",
+    permission: PERMISSIONS.REPORTS_LEGAL.value,
+  },
+  {
+    title: "TICKETS",
+    subtitle: "Ticket Reports",
+    route: "../reports-section/ticket",
+    permission: PERMISSIONS.REPORTS_TICKETS.value,
+  },
+  {
+    title: "MEETINGS",
+    subtitle: "Meeting Reports",
+    route: "../reports-section/meeting",
+    permission: PERMISSIONS.REPORTS_MEETINGS.value,
+  },
+  {
+    title: "VISITORS",
+    subtitle: "Visitor Reports",
+    route: "../reports-section/visitor",
+    permission: PERMISSIONS.REPORTS_VISITORS.value,
+  },
+  {
+    title: "ASSETS",
+    subtitle: "Asset Reports",
+    route: "../reports-section/asset",
+    permission: PERMISSIONS.REPORTS_ASSETS?.value,
+  },
+  {
+    title: "TASKS",
+    subtitle: "Task Reports",
+    route: "../reports-section/task",
+    permission: PERMISSIONS.REPORTS_TASKS?.value,
+  },
+  {
+    title: "PERFORMANCE",
+    subtitle: "Performance Reports",
+    route: "../reports-section/performance",
+    permission: PERMISSIONS.REPORTS_PERFORMANCE?.value,
+  },
+  {
+    title: "PRINTOUT",
+    subtitle: "Printout Reports",
+    route: "../reports-section/printout",
+    permission: PERMISSIONS.REPORTS_PRINTOUT?.value,
+  },
+];
+
+const ReportsSection = () => {
+  const navigate = useNavigate();
+  const axios = useAxiosPrivate();
+  const { permissions } = useUserPermissions();
+
+  const { data: departments = [] } = useQuery({
+    queryKey: ["report-departments"],
+    queryFn: async () => {
+      const response = await axios.get("/api/departments/get-departments");
+      return Array.isArray(response?.data) ? response.data : [];
+    },
+  });
+
+  const departmentCards = useMemo(() => {
+    if (!Array.isArray(departments)) return [];
+
+    return departments
+      .filter((department) => department?.name && department?.isActive !== false)
+       .filter(
+        (department) =>
+          !["cafe", "legal"].includes(
+            String(department.name).trim().toLowerCase(),
+          ),
+      )
+      .filter(
+        (department, index, arr) =>
+          arr.findIndex(
+            (candidate) =>
+              String(candidate?.name || "")
+                .trim()
+                .toLowerCase() ===
+              String(department?.name || "")
+                .trim()
+                .toLowerCase(),
+          ) === index,
+      )
+      .map((department) => {
+        const departmentName = String(department.name).trim();
+        const moduleKey = departmentName.toLowerCase();
+
+        return {
+          title: departmentName.toUpperCase(),
+          subtitle: `${departmentName} Reports`,
+          route: `../reports-section/${moduleKey}`,
+          permission: `reports_${moduleKey.replace(/\s+/g, "_")}`,
+        };
+      });
+  }, [departments]);
+  // const { permissions } = useUserPermissions();
+  // const { auth } = useAuth();
+  // const userDepartments = useMemo(() => {
+  //   if (!Array.isArray(auth?.user?.departments)) return [];
+
+  //   return auth.user.departments
+  //     .filter((dept) => dept?._id && dept?.name)
+  //     .filter(
+  //       (dept, index, arr) =>
+  //         arr.findIndex((candidate) => candidate?._id === dept?._id) === index,
+  //     );
+  // }, [auth?.user?.departments]);
+
+  // const departmentCards = userDepartments.map((department) => {
+  //   const moduleKey = String(department.name).trim().toLowerCase();
+
+  //   return {
+  //     title: String(department.name).toUpperCase(),
+  //     subtitle: `${department.name} Reports`,
+  //     route: `../reports-section/${moduleKey}`,
+  //     permission: null,
+  //   };
+  // });
+
+  const allModules = [...departmentCards, ...staticReportModules];
+
+  const visibleReportModules = allModules.filter(
+    (module) => !module.permission || permissions.includes(module.permission),
+  );
+
+  return (
+    <div className="bg-[#f5f5f5] p-4 min-h-full">
+      <div className="py-4 border-b-default border-borderGray mb-8">
+        <h1 className="text-title text-primary font-pmedium">Reports</h1>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        {visibleReportModules.map((module) => (
+          <button
+            key={`${module.title}-${module.route}`}
+            onClick={() => navigate(module.route)}
+            className="text-left p-4 rounded-md shadow-md border border-gray-200 bg-white transition hover:bg-gray-50"
+          >
+            <p className="text-subtitle font-pmedium">{module.title}</p>
+            <p className="text-content mt-3">{module.subtitle}</p>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+export default ReportsSection;

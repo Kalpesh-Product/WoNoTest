@@ -8,7 +8,10 @@ const {
   getAssignees,
   checkPassword,
   updatePassword,
-  getEmployeePoliciesByEmpId
+  updateEmployeePasswordByEmpId,
+  updateEmployeeBankDetails,
+  updateEmployeePayrollCompensation,
+  getEmployeePoliciesByEmpId,
 } = require("../controllers/userControllers/userControllers");
 const upload = require("../config/multerConfig");
 const {
@@ -22,7 +25,17 @@ router.get("/assignees", getAssignees);
 router.get("/fetch-single-user/:empid", fetchSingleUser);
 router.post("/check-password", checkPassword);
 router.post("/update-password", updatePassword);
-router.patch("/update-single-user",upload.single("profilePic"), updateProfile);
+router.post("/update-password/:empid", updateEmployeePasswordByEmpId);
+router.patch("/:userId/bank-details", updateEmployeeBankDetails);
+router.patch(
+  "/:userId/payroll-compensation",
+  updateEmployeePayrollCompensation,
+);
+router.patch(
+  "/update-single-user/:userId",
+  upload.single("profilePic"),
+  updateProfile,
+);
 router.post("/bulk-insert-users", upload.single("users"), bulkInsertUsers);
 router.get("/policies/:employeeId", getEmployeePoliciesByEmpId);
 

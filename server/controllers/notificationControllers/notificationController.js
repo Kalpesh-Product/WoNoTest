@@ -88,4 +88,49 @@ const markSingleNotificationAsRead = async (req, res, next) => {
   }
 };
 
-module.exports = { getNotifications, markSingleNotificationAsRead };
+
+const markAllNotificationsAsRead = async (req, res, next) => {
+  const userId = req.user;
+
+  if (!mongoose.Types.ObjectId.isValid(userId)) {
+    return res
+      .status(400)
+      .json({ success: false, message: "Invalid User ID." });
+  }
+
+  try {
+    const result = await Notification.updateMany(
+      {
+        users: {
+          $elemMatch: {
+            "userActions.whichUser": new mongoose.Types.ObjectId(userId),
+            "userActions.hasRead": { $ne: true },
+          },
+        },
+      },
+      {
+        $set: {
+          "users.$[userEntry].userActions.hasRead": true,
+        },
+      },
+      {
+        arrayFilters: [
+          {
+            "userEntry.userActions.whichUser": new mongoose.Types.ObjectId(userId),
+            "userEntry.userActions.hasRead": { $ne: true },
+          },
+        ],
+      },
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "All notifications marked as read.",
+      modifiedCount: result.modifiedCount,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+module.exports = { getNotifications, markSingleNotificationAsRead, markAllNotificationsAsRead, };

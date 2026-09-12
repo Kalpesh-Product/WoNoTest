@@ -17,13 +17,17 @@ import YearlyGraph from "../../components/graphs/YearlyGraph";
 import { PERMISSIONS } from "../../constants/permissions";
 import useAuth from "../../hooks/useAuth";
 import { configYearlyGrpah, filterPermissions } from "../../utils/accessConfig";
+import { isTodayForUser } from "../../utils/date";
 
 const TasksDashboard = () => {
   const axios = useAxiosPrivate();
   const [selectedFY, setSelectedFY] = useState(null);
   const { auth } = useAuth();
   const userPermissions = auth?.user?.permissions?.permissions || [];
-
+  const roleTitles = auth?.user?.role?.map((role) => role?.roleTitle) || [];
+  const isSuperAdminView = roleTitles.some((roleTitle) =>
+    ["Master Admin", "Super Admin"].includes(roleTitle),
+  );
   //------------------------PAGE ACCESS START-------------------//
   const cardsConfig = [
     {
@@ -140,16 +144,119 @@ const TasksDashboard = () => {
   const allTasksQuery = useQuery({
     queryKey: ["allTasks"],
     queryFn: async () => {
-      try {
-        const response = await axios.get(`/api/tasks/get-all-tasks`);
-        return response.data;
-      } catch (error) {
-        throw new Error(error.response.data.message);
+      const response = await axios.get("/api/tasks/get-all-tasks", {
+        headers: {
+          "Cache-Control": "no-cache",
+          Pragma: "no-cache",
+        },
+      });
+      return response.data;
+    },
+    staleTime: 0, // data becomes stale immediately
+    cacheTime: 0, // throw it away when unused
+    refetchOnMount: true, // refetch on component mount
+    refetchOnWindowFocus: true, // refetch when tab gains focus
+  });
+
+  useEffect(() => {
+    if (!allTasksQuery.isLoading) {
+      console.log("[TASKS] All tasks from API:", allTasksQuery.data);
+    }
+  }, [allTasksQuery.isLoading, allTasksQuery.data]);
+
+  const allTasks = allTasksQuery.isLoading ? [] : allTasksQuery.data;
+
+  const departmentTasks = allTasks.filter(
+    (task) => task.taskType === "Department"
+  );
+
+  const isCurrentMonthTask = (dateValue) => {
+    if (!dateValue) return false;
+
+    const parsedDefault = dayjs(dateValue);
+    if (parsedDefault.isValid()) {
+      return parsedDefault.isSame(dayjs(), "month");
+    }
+
+    if (typeof dateValue === "string") {
+      const [day, month, year] = dateValue.split("-");
+      if (day && month && year) {
+        const parsedManual = dayjs(`${year}-${month}-${day}`);
+        return parsedManual.isValid() && parsedManual.isSame(dayjs(), "month");
       }
+    }
+
+    return false;
+  };
+
+  const currentMonthDepartmentTasks = departmentTasks.filter((task) =>
+    isCurrentMonthTask(task.assignedDate)
+  );
+
+
+  const myPendingTasksQuery = useQuery({
+    queryKey: ["dashboardMyPendingTasks"],
+    queryFn: async () => {
+      const response = await axios.get("/api/tasks/my-tasks?flag=pending");
+      return response.data;
     },
   });
 
-  const { series, rawCounts } = normalizeDataByMonth(allTasksQuery.data || []);
+  const myCompletedTasksQuery = useQuery({
+    queryKey: ["dashboardMyCompletedTasks"],
+    queryFn: async () => {
+      const response = await axios.get("/api/tasks/get-my-completed-tasks");
+      return response.data;
+    },
+  });
+
+  const myPendingTasks = myPendingTasksQuery.isLoading
+    ? []
+    : myPendingTasksQuery.data || [];
+  const myCompletedTasks = myCompletedTasksQuery.isLoading
+    ? []
+    : myCompletedTasksQuery.data || [];
+  const currentUserId = auth?.user?._id;
+  const visibleMyPendingTasks = myPendingTasks.filter((task) => {
+    const ownerId =
+      task?.assignedBy?._id ||
+      task?.assignedBy?.id ||
+      task?.assignedBy ||
+      "";
+
+    return (
+      String(ownerId) === String(currentUserId) &&
+      isCurrentMonthTask(task?.assignedDate)
+    );
+  });
+
+  const visibleMyCompletedTasks = myCompletedTasks.filter((task) => {
+    const ownerId =
+      task?.assignedBy?._id ||
+      task?.assignedBy?.id ||
+      task?.assignedBy ||
+      "";
+
+    return (
+      String(ownerId) === String(currentUserId) &&
+      isCurrentMonthTask(task?.assignedDate)
+    );
+  });
+
+
+  useEffect(() => {
+    console.log("[TASKS] Department-only tasks:", departmentTasks);
+    console.log("[TASKS] Department task count:", departmentTasks.length);
+  }, [departmentTasks]);
+
+  // const { series, rawCounts } = normalizeDataByMonth(allTasksQuery.data || []);
+   const overallAverageGraphTasks = allTasks.filter(
+    (task) =>
+      task.taskType === "Department" &&
+      ["Pending", "Completed"].includes(task.status)
+  );
+
+  const { series, rawCounts } = normalizeDataByMonth(overallAverageGraphTasks);
 
   const handleYearChange = (fy) => {
     setSelectedFY(fy);
@@ -202,11 +309,11 @@ const TasksDashboard = () => {
 
         return `
       <div style="padding: 10px; font-family: Poppins-Regular; font-size: 13px;">
-        <div style="margin : 10px 0"><strong>Month:</strong> ${month}</div>
-        <div><strong>Total Tasks:</strong> ${counts.total}</div>
-        <div><strong>Completed:</strong> ${counts.completed}</div>
+        <div style="margin : 10px 0"><strong>Month :</strong> ${month}</div>
+        <div><strong>Total Tasks :</strong> ${counts.total}</div>
+        <div><strong>Completed :</strong> ${counts.completed}</div>
         <hr style="margin : 10px 0" />
-        <div><strong>Remaining:</strong> ${counts.remaining}</div>
+        <div><strong>Pending :</strong> ${counts.remaining}</div>
       </div>
     `;
       },
@@ -242,6 +349,21 @@ const TasksDashboard = () => {
     },
   });
 
+  useEffect(() => {
+    const total = departmentTasks.length;
+    const pending = departmentTasks.filter(
+      (t) => t.status === "Pending"
+    ).length;
+    const completed = departmentTasks.filter(
+      (t) => t.status === "Completed"
+    ).length;
+
+    console.log("[TASKS CARD COUNTS]");
+    console.log("Dept. Total Tasks:", total);
+    console.log("Dept. Pending Tasks:", pending);
+    console.log("Dept. Completed Tasks:", completed);
+  }, [departmentTasks]);
+
   //----------------------------------------------------------------------------------------------------------//
 
   // const priorityTasks = [
@@ -268,24 +390,40 @@ const TasksDashboard = () => {
   //   { taskName: "Test Emergency Lights", type: "Monthly", endTime: "04:15 PM" },
   //   { taskName: "Calibrate Sensors", type: "Monthly", endTime: "01:00 PM" },
   // ];
+  const currDate = new Date();
+  const currentYear = new Date().getFullYear();
 
   const today = dayjs().startOf("day");
   const recentlyAddedTasksData = isTaskListLoading
     ? []
     : taskList
 
-        .filter((task) => dayjs(task.assignedDate).isSame(today, "day"))
-        .map((task, index) => ({
-          id: index + 1,
-          taskName: task.taskName,
-          department: task.department || "N/A",
-          status: task.status,
-          assignedBy: `${task.assignedBy?.firstName || ""} ${
-            task.assignedBy?.lastName || ""
-          }`,
-          assignedDate: humanDate(task.assignedDate),
-          dueDate: humanDate(task.dueDate),
-        }));
+        .filter((task) => isTodayForUser(task?.assignedDate))
+        .sort((a, b) => {
+          const getStatusOrder = (status) =>
+            String(status || "").toLowerCase() === "pending" ? 0 : 1;
+
+          return getStatusOrder(a?.status) - getStatusOrder(b?.status);
+        })
+
+        .map((task, index) => {
+          const taskType = task.taskType ?? task.assignmentType ?? "Self";
+
+          return {
+            id: index + 1,
+            taskName: task.taskName,
+            taskType,
+            department: task.department || "N/A",
+            status: task.status,
+            assignedBy: `${task.assignedBy?.firstName || ""} ${
+              task.assignedBy?.lastName || ""
+            }`,
+            assignedDate: humanDate(task.assignedDate),
+            dueDate: task.dueDate
+              ? `${humanDate(task.dueDate)}, ${humanTime(task.dueTime)}`
+              : "N/A",
+          };
+        });
 
   const priorityTasks = allTasksQuery.isLoading
     ? []
@@ -340,11 +478,13 @@ const TasksDashboard = () => {
 
   const completedTasks = allTasksQuery.isLoading
     ? 0
-    : allTasksQuery.data.filter((task) => task.status === "Completed").length;
+    : departmentTasks.filter((task) => task.status === "Completed").length; //Only Department Task
+    // : allTasksQuery.data.filter((task) => task.status === "Completed").length; (For My Task + Department task)
 
   const pendingTasks = allTasksQuery.isLoading
     ? 0
-    : allTasksQuery.data.filter((task) => task.status === "Pending").length;
+    : departmentTasks.filter((task) => task.status === "Pending").length;
+    //: allTasksQuery.data.filter((task) => task.status === "Pending").length;
 
   const totalTasks = completedTasks + pendingTasks;
 
@@ -430,16 +570,15 @@ const TasksDashboard = () => {
     }, {});
 
     return Object.entries(departmentMap).map(([department, data]) => ({
-      label: `${department} (${((data.pending / data.total) * 100).toFixed(
-        1
-      )}%)`,
+       label: department,
       value: data.pending,
     }));
   };
 
   const departmentPendingStats = allTasksQuery.isLoading
     ? []
-    : calculateDepartmentPendingStats(allTasksQuery.data);
+   // : calculateDepartmentPendingStats(allTasksQuery.data);
+   : calculateDepartmentPendingStats(departmentTasks);
 
   const tasks = allTasksQuery.isLoading ? [] : allTasksQuery.data;
 
@@ -469,9 +608,9 @@ const TasksDashboard = () => {
   };
 
   //Overall task completeion graph data
-  const allTasks = [
-    /* your full task data array here */
-  ];
+  // const allTasks = [
+  //   /* your full task data array here */
+  // ];
 
   const financialMonths = [
     "Apr-24",
@@ -571,29 +710,38 @@ const TasksDashboard = () => {
   ];
 
   const myTodayMeetingsData = !meetingsQuery.isLoading
-    ? meetingsQuery.data.map((meeting, index) => {
-        return {
-          id: index + 1,
-          meeting: meeting.subject,
-          location: meeting.roomName,
-          participants:
-            meeting?.participants?.length > 0
-              ? meeting.participants.map((participant) => ({
-                  name: participant.email,
-                  avatar:
-                    "https://ui-avatars.com/api/?name=Alice+Johnson&background=random",
-                }))
-              : [],
-          time: humanTime(meeting.startTime),
-        };
-      })
+    ? meetingsQuery.data
+        .filter((meeting) => {
+          // const meetingDate = meeting?.date || meeting?.startTime;
+          // if (!meetingDate) return false;
+          // const parsedMeetingDate = dayjs(meetingDate);
+          // if (!parsedMeetingDate.isValid()) return false;
+          // return parsedMeetingDate.isSame(today, "day");
+          return isTodayForUser(meeting?.date || meeting?.startTime);
+        })
+        .map((meeting, index) => {
+          return {
+            id: index + 1,
+            meeting: meeting.subject,
+            location: meeting.roomName,
+            participants:
+              meeting?.participants?.length > 0
+                ? meeting.participants.map((participant) => ({
+                    name: participant.email,
+                    avatar:
+                      "https://ui-avatars.com/api/?name=Alice+Johnson&background=random",
+                  }))
+                : [],
+            time: humanTime(meeting.startTime),
+          };
+        })
     : [];
 
   const availableFYs = Array.from(new Set(series.map((s) => s.group)));
 
   useEffect(() => {
     if (availableFYs.length > 0 && !selectedFY) {
-      setSelectedFY(availableFYs[0]); // Default to first FY (e.g., "FY 2024-25")
+      setSelectedFY(availableFYs[availableFYs.length - 1]); // Default to first FY (e.g., "FY 2024-25")
     }
   }, [availableFYs, selectedFY]);
 
@@ -602,16 +750,45 @@ const TasksDashboard = () => {
       ? rawCounts[selectedFY].reduce((sum, m) => sum + m.total, 0)
       : 0;
 
+  const currentMonthLabel = dayjs().format("MMMM");
+
   //---------------------------------------------
   // 📌 TASKS Dashboard Widget Configs
   //---------------------------------------------
 
-  const dataCardConfigs = [
+  const myTaskCardConfigs = [
+    {
+      key: "TASKS_MY_TOTAL_TASKS",
+      title: "Total",
+      dataType: "my-all",
+      description: `My Tasks - ${currentMonthLabel}`,
+      route: "/app/tasks/my-tasks",
+      permission: PERMISSIONS.TASKS_MY_TASKS.value,
+    },
+    {
+      key: "TASKS_MY_PENDING_TASKS",
+      title: "Total",
+      dataType: "my-pending",
+      description: `My Pending Tasks - ${currentMonthLabel}`,
+      route: "/app/tasks/my-tasks",
+      permission: PERMISSIONS.TASKS_MY_TASKS.value,
+    },
+    {
+      key: "TASKS_MY_COMPLETED_TASKS",
+      title: "Total",
+      dataType: "my-completed",
+      description: `My Completed Tasks - ${currentMonthLabel}`,
+      route: "/app/tasks/my-tasks",
+      permission: PERMISSIONS.TASKS_MY_TASKS.value,
+    },
+  ];
+
+  const departmentTaskCardConfigs = [
     {
       key: "TASKS_TOTAL_TASKS",
       title: "Total",
       dataType: "all", // you can use this to switch logic when mapping
-      description: "Dept. Tasks",
+      description: `Dept. Tasks - ${currentMonthLabel}`,
       route: "/app/tasks/department-tasks",
       permission: PERMISSIONS.TASKS_TOTAL_DEPARTMENT_TASKS.value,
     },
@@ -619,7 +796,7 @@ const TasksDashboard = () => {
       key: "TASKS_PENDING_TASKS",
       title: "Total",
       dataType: "pending",
-      description: "Dept. Pending Tasks",
+      description: `Dept. Pending Tasks - ${currentMonthLabel}`,
       route: "/app/tasks/department-tasks",
       permission: PERMISSIONS.TASKS_TOTAL_DEPARTMENT_PENDING_TASKS.value,
     },
@@ -627,15 +804,58 @@ const TasksDashboard = () => {
       key: "TASKS_COMPLETED_TASKS",
       title: "Total",
       dataType: "completed",
-      description: "Dept. Completed Tasks",
+      description: `Dept. Completed Tasks - ${currentMonthLabel}`,
       route: "/app/tasks/department-tasks",
       permission: PERMISSIONS.TASKS_TOTAL_DEPARTMENT_COMPLETED_TASKS.value,
     },
   ];
 
-  const allowedDataCards = dataCardConfigs.filter(
+  const allowedMyTaskCards = myTaskCardConfigs.filter(
     (card) => !card.permission || userPermissions.includes(card.permission)
   );
+  const allowedDepartmentTaskCards = departmentTaskCardConfigs.filter(
+    (card) => !card.permission || userPermissions.includes(card.permission)
+  );
+  
+  const getTaskCardCount = (dataType) => {
+    if (dataType === "my-all") {
+      return visibleMyPendingTasks.filter((task) => task.status === "Pending")
+        .length + visibleMyCompletedTasks.length;
+    }
+    if (dataType === "my-pending") {
+      return visibleMyPendingTasks.filter((task) => task.status === "Pending")
+        .length;
+    }
+    if (dataType === "my-completed") {
+      return visibleMyCompletedTasks.length;
+    }
+    if (dataType === "all") {
+      return currentMonthDepartmentTasks.length;
+    }
+    if (dataType === "pending") {
+      return currentMonthDepartmentTasks.filter(
+        (task) => task.status === "Pending",
+      ).length;
+    }
+    if (dataType === "completed") {
+      return currentMonthDepartmentTasks.filter(
+        (task) => task.status === "Completed",
+      ).length;
+    }
+
+    return 0;
+  };
+  //     return departmentTasks.length;
+  //   }
+  //   if (dataType === "pending") {
+  //     return departmentTasks.filter((task) => task.status === "Pending").length;
+  //   }
+  //   if (dataType === "completed") {
+  //     return departmentTasks.filter((task) => task.status === "Completed").length;
+  //   }
+
+  //   return 0;
+  // };
 
   //---------------------------------------------
   // ✅ 1. Yearly Graph Config
@@ -650,7 +870,7 @@ const TasksDashboard = () => {
       responsiveResize: true,
       chartId: "bargraph-hr-expense",
       title: "OVERALL AVERAGE TASKS COMPLETION",
-      titleAmountLabel: "Total Tasks",
+      titleAmountLabel: "TOTAL TASKS",
       titleAmount: totalTasksForYear,
       onYearChange: { handleYearChange },
     },
@@ -670,13 +890,15 @@ const TasksDashboard = () => {
     },
     {
       key: PERMISSIONS.TASKS_TOTAL_DEPARTMENT_PENDING_TASKS.value,
-      title: "Department-wise Pending Tasks",
+      title: "Overall Department Pending Tasks",
       dataKey: "departmentPendingStats",
       optionsKey: "departmentPendingOptions",
     },
   ];
   const allowedPieCharts = pieChartConfigs.filter(
-    (card) => !card.key || userPermissions.includes(card.key)
+    //(card) => !card.key || userPermissions.includes(card.key)
+     (card) =>
+      isSuperAdminView || !card.key || userPermissions.includes(card.key),
   );
 
   //---------------------------------------------
@@ -690,7 +912,7 @@ const TasksDashboard = () => {
       },
       meeting: {
         key: PERMISSIONS.TASKS_MY_MEETINGS_TODAY.value,
-        title: "My Meetings Today",
+        title: "My Today's Meetings",
       },
     },
   ];
@@ -757,35 +979,30 @@ const TasksDashboard = () => {
     //---------------------------------------------
     // All other widgets from config
     //---------------------------------------------
+     {
+      layout: allowedMyTaskCards.length,
+      widgets: allowedMyTaskCards.map((config) => (
+        <DataCard
+          key={config.key}
+          title={config.title}
+          data={getTaskCardCount(config.dataType)}
+          description={config.description}
+          route={config.route}
+        />
+      )),
+    },
     {
-      layout: allowedDataCards.length,
-      widgets: allowedDataCards.map((config) => {
-        let dataCount = 0;
+      layout: allowedDepartmentTaskCards.length,
+      widgets: allowedDepartmentTaskCards.map((config) => (
+        <DataCard
+          key={config.key}
+          title={config.title}
+          data={getTaskCardCount(config.dataType)}
+          description={config.description}
+          route={config.route}
+        />
+      )),
 
-        if (config.dataType === "all") {
-          dataCount = allTasksQuery.isLoading ? 0 : allTasksQuery.data.length;
-        } else if (config.dataType === "pending") {
-          dataCount = allTasksQuery.isLoading
-            ? 0
-            : allTasksQuery.data.filter((task) => task.status === "Pending")
-                .length;
-        } else if (config.dataType === "completed") {
-          dataCount = allTasksQuery.isLoading
-            ? 0
-            : allTasksQuery.data.filter((task) => task.status === "Completed")
-                .length;
-        }
-
-        return (
-          <DataCard
-            key={config.key}
-            title={config.title}
-            data={dataCount}
-            description={config.description}
-            route={config.route}
-          />
-        );
-      }),
     },
     {
       layout: allowedPieCharts.length,
@@ -795,6 +1012,7 @@ const TasksDashboard = () => {
             data={pieChartDataMap[config.dataKey]}
             options={pieChartOptionsMap[config.optionsKey]}
             height={325}
+            centerAlign
           />
         </WidgetSection>
       )),
@@ -803,13 +1021,22 @@ const TasksDashboard = () => {
       layout: allowedTables.length,
       widgets: allowedTables.map((config) => (
         <WidgetSection key={config.key} layout={2} padding>
-          <MuiTable
+          {/* <MuiTable
             key={config.length}
             scroll
             rowsToDisplay={4}
             Title={config.priority.title}
             rows={priorityTasks}
             columns={priorityTasksColumns}
+          /> */}
+          <MuiTable
+            Title="My Today's Tasks"
+            columns={recentlyAddedTasksCol}
+            rows={recentlyAddedTasksData}
+            rowKey="id"
+            rowsToDisplay={10}
+            scroll={true}
+            className="h-full"
           />
 
           <MuiTable
@@ -824,22 +1051,22 @@ const TasksDashboard = () => {
         </WidgetSection>
       )),
     },
-    {
-      layout: allowedRecentlyAdded.length,
-      widgets: allowedRecentlyAdded.map((config) => (
-        <WidgetSection key={config.key} layout={1} padding>
-          <MuiTable
-            Title={config.title}
-            columns={recentlyAddedTasksCol}
-            rows={recentlyAddedTasksData}
-            rowKey="id"
-            rowsToDisplay={10}
-            scroll={true}
-            className="h-full"
-          />
-        </WidgetSection>
-      )),
-    },
+    // {
+    //   layout: allowedRecentlyAdded.length,
+    //   widgets: allowedRecentlyAdded.map((config) => (
+    //     <WidgetSection key={config.key} layout={1} padding>
+    //       <MuiTable
+    //         Title={config.title}
+    //         columns={recentlyAddedTasksCol}
+    //         rows={recentlyAddedTasksData}
+    //         rowKey="id"
+    //         rowsToDisplay={10}
+    //         scroll={true}
+    //         className="h-full"
+    //       />
+    //     </WidgetSection>
+    //   )),
+    // },
   ];
 
   return (

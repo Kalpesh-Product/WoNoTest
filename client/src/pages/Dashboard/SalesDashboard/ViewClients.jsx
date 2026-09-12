@@ -34,7 +34,7 @@ const ViewClients = () => {
     fetchSourceIfEmpty();
   }, [clientsData, dispatch]);
 
-  const { data = [], isLoading } = useQuery({
+  const { data = [] } = useQuery({
     queryKey: ["clientDetails"],
     queryFn: async () => {
       try {
@@ -45,43 +45,146 @@ const ViewClients = () => {
       }
     },
   });
-  const unifiedClients = useMemo(() => {
-  if (!data || typeof data !== "object") return [];
 
-  return Object.entries(data).flatMap(([key, clients]) => {
-    const clientType = key.replace(/Clients$/, ""); // e.g., "coworkingClients" → "coworking"
-    return clients.map((client) => ({
-      ...client,
-      clientType, // dynamically tagged
-    }));
+  const { data: coWorkingClients = [] } = useQuery({
+    queryKey: ["view-clients-co-working"],
+    queryFn: async () => {
+      const response = await axios.get("/api/sales/co-working-clients");
+      return Array.isArray(response.data) ? response.data : [];
+    },
   });
-}, [data]);
 
-console.log("data ", unifiedClients);
+  const unifiedClients = useMemo(() => {
+    if (!data || typeof data !== "object") return [];
+
+    return Object.entries(data).flatMap(([key, clients]) => {
+      const clientType = key.replace(/Clients$/, ""); // e.g., "coworkingClients" → "coworking"
+      return clients.map((client) => ({
+        ...client,
+        clientType, // dynamically tagged
+      }));
+    });
+  }, [data]);
+
+  console.log("data ", unifiedClients);
+
+  const isOpenDeskVisitor = (visitor) => {
+    const purpose = (visitor?.purposeOfVisit || "").trim().toLowerCase();
+    const isDayPass =
+      purpose === "half-day pass" ||
+      purpose === "full-day pass" ||
+      purpose === "half day pass" ||
+      purpose === "full day pass";
+
+    return isDayPass || Boolean(visitor?.convertedFromInternal);
+  };
+
+  const externalVisitors = useMemo(
+    () =>
+      unifiedClients.filter(
+        (client) => (client.visitorFlag || "").trim().toLowerCase() === "client"
+      ),
+    [unifiedClients]
+  );
+
+  const coWorkingStatusSummary = useMemo(() => {
+    const active = coWorkingClients.filter((client) => client?.isActive).length;
+    return {
+      active,
+      inactive: Math.max(0, coWorkingClients.length - active),
+    };
+  }, [coWorkingClients]);
+
+  const virtualOfficeClients = Array.isArray(data?.virtualOfficeClients)
+    ? data.virtualOfficeClients
+    : [];
+
+  const virtualOfficeStatusSummary = useMemo(() => {
+    const active = virtualOfficeClients.filter((client) =>
+      typeof client?.isActive === "boolean"
+        ? client.isActive
+        : Boolean(client?.clientStatus)
+    ).length;
+
+    return {
+      active,
+      inactive: Math.max(0, virtualOfficeClients.length - active),
+    };
+  }, [virtualOfficeClients]);
+
+  const externalMeetingVisitors = useMemo(
+    () =>
+      externalVisitors.filter((visitor) => {
+        const purpose = (visitor.purposeOfVisit || "").trim().toLowerCase();
+        return purpose === "meeting room booking";
+      }),
+    [externalVisitors]
+  );
+
+  const externalMeetingStatusSummary = useMemo(() => {
+    const active = externalMeetingVisitors.filter((visitor) => visitor?.isActive).length;
+    return {
+      active,
+      inactive: Math.max(0, externalMeetingVisitors.length - active),
+    };
+  }, [externalMeetingVisitors]);
+
+  const openDeskVisitors = useMemo(
+    () => externalVisitors.filter((visitor) => isOpenDeskVisitor(visitor)),
+    [externalVisitors]
+  );
+
+  const openDeskStatusSummary = useMemo(() => {
+    const active = openDeskVisitors.filter((visitor) => visitor?.isActive).length;
+    return {
+      active,
+      inactive: Math.max(0, openDeskVisitors.length - active),
+    };
+  }, [openDeskVisitors]);
+
   const clientCounts = {
-    coWorking : data?.coworkingClients?.length,
-    virtualOfficeClients :  data?.virtualOfficeClients?.length,
-    meetingClients : data?.meetingClients?.length,
-  }
+    coWorking: coWorkingClients.length,
+    virtualOfficeClients: virtualOfficeClients.length,
+    externalMeetings: externalMeetingVisitors.length,
+    openDesk: openDeskVisitors.length,
+  };
 
   const verticalsData = [
     {
       id: 1,
       name: "Co-Working",
       value: clientCounts.coWorking,
+      statusSummary: coWorkingStatusSummary,
       route: "/app/dashboard/sales-dashboard/mix-bag/clients/co-working",
     },
     {
       id: 2,
       name: "Virtual-Office",
       value: clientCounts.virtualOfficeClients,
+      statusSummary: virtualOfficeStatusSummary,
       route: "/app/dashboard/sales-dashboard/mix-bag/clients/virtual-office",
     },
+    // {
+    //   id: 3,
+    //   name: "External Client",
+    //   value: clientCounts.externalClients,
+    //   route: "/app/dashboard/sales-dashboard/mix-bag/external-client",
+    // },
     {
       id: 3,
-      name: "Meetings",
-      value: clientCounts.meetingClients,
-      route: " ",
+      name: "External Meetings",
+      value: clientCounts.externalMeetings,
+      statusSummary: externalMeetingStatusSummary,
+      route: "/app/dashboard/sales-dashboard/mix-bag/external-client/meetings/external-companies",
+      // permission: PERMISSIONS.SALES_EXTERNAL_CLIENT_MEETINGS_COMPANIES.value,
+    },
+    {
+      id: 4,
+      name: "Open Desk",
+      value: clientCounts.openDesk,
+      statusSummary: openDeskStatusSummary,
+      route: "/app/dashboard/sales-dashboard/mix-bag/external-client/open-desk/external-companies",
+      // permission: PERMISSIONS.SALES_EXTERNAL_CLIENT_OPEN_DESK_COMPANIES.value,
     },
   ];
 
@@ -96,19 +199,77 @@ console.log("data ", unifiedClients);
         .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
         .join("-");
 
-    clientsArray.forEach((client) => {
-      const date = client.startDate ? new Date(client.startDate) : null;
+    const serviceMapping = {
+      coworking: "Coworking",
+      virtualOffice: "Virtualoffice",
+      externalMeeting: "External Meetings",
+      openDesk: "Open Desk",
+      workation: "Workations",
+      coliving: "Co-Living",
+    };
 
-      const formattedDate = date ? date.toISOString().split("T")[0] : "N/A";
-      const month = date
+    clientsArray.forEach((client) => {
+      let rawServiceName = client.clientType || "Unknown";
+
+      // Dynamically detect type from serviceName if it's under coworkingClients
+      if (rawServiceName === "meeting") {
+        const purpose = (client.purposeOfVisit || "").trim().toLowerCase();
+        if (purpose === "meeting room booking") {
+          rawServiceName = "externalMeeting";
+        } else if (purpose === "half-day pass" || purpose === "full-day pass") {
+          rawServiceName = "openDesk";
+        }
+      }
+
+      if (rawServiceName === "coworking" && client.service?.serviceName) {
+        const sName = client.service.serviceName.toLowerCase();
+        if (sName.includes("workation")) {
+          rawServiceName = "workation";
+        } else if (sName.includes("living") || sName.includes("coliving")) {
+          rawServiceName = "coliving";
+        }
+      }
+
+      const formattedServiceName =
+        serviceMapping[rawServiceName] || toTitleCase(rawServiceName);
+
+      let date = null;
+      if (rawServiceName === "coworking") {
+        date = client.startDate ? new Date(client.startDate) : null;
+      } else if (rawServiceName === "virtualOffice") {
+        date = client.termStartDate
+          ? new Date(client.termStartDate)
+          : client.rentDate
+            ? new Date(client.rentDate)
+            : null;
+      } else if (
+        rawServiceName === "externalMeeting" ||
+        rawServiceName === "openDesk"
+      ) {
+        date = client.dateOfVisit
+          ? new Date(client.dateOfVisit)
+          : client.scheduledDate
+            ? new Date(client.scheduledDate)
+            : null;
+      } else {
+        date = client.startDate || client.dateOfVisit || client.termStartDate
+          ? new Date(client.startDate || client.dateOfVisit || client.termStartDate)
+          : null;
+      }
+
+      const formattedDate = date && !isNaN(date.getTime()) ? date.toISOString().split("T")[0] : "N/A";
+      const month = date && !isNaN(date.getTime())
         ? date.toLocaleString("default", { month: "long" })
         : "Unknown";
 
-      const rawServiceName = client.clientType || "Unknown";
-      const formattedServiceName = toTitleCase(rawServiceName);
+      const clientName =
+        client.clientName ||
+        (client.firstName
+          ? `${client.firstName} ${client.lastName || ""}`
+          : "Unknown");
 
       const transformedClient = {
-        client: client.clientName || "Unknown",
+        client: clientName,
         typeOfClient: formattedServiceName,
         date: formattedDate,
       };
@@ -136,20 +297,29 @@ console.log("data ", unifiedClients);
           data={transformedData}
           hideAccordion
           additionalData={`CLIENTS : ${unifiedClients.length}`}
-        />
+        >
+          <div className="border-b border-borderGray px-4 pb-4">
+            <h2 className="text-mobileTitle lg:text-widgetTitle text-primary font-pmedium uppercase">
+              Overall Clients
+            </h2>
+          </div>
+          <div className="pt-4">
+          <WidgetSection
+            layout={verticalsData.length <= 2 ? verticalsData.length : 2}
+          >
+            {verticalsData.map((item) => (
+              <DataCard
+                key={item.id}
+                data={item.value}
+                title={item.name}
+                statusSummary={item.statusSummary}
+                route={item.route}
+              />
+            ))}
+          </WidgetSection>
+          </div>
+        </UniqueClients>
       </div>
-      <WidgetSection
-        layout={verticalsData.length <= 3 ? verticalsData.length : 3}
-      >
-        {verticalsData.map((item) => (
-          <DataCard
-            key={item.id}
-            data={item.value}
-            title={item.name}
-            route={item.route}
-          />
-        ))}
-      </WidgetSection>
     </div>
   );
 };

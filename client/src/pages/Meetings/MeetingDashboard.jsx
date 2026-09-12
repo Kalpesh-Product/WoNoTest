@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { RiArchiveDrawerLine, RiPagesLine } from "react-icons/ri";
 import { MdFormatListBulleted } from "react-icons/md";
 import { CgProfile } from "react-icons/cg";
@@ -28,7 +28,8 @@ const MeetingDashboard = () => {
   const axios = useAxiosPrivate();
   const navigate = useNavigate();
   const { auth } = useAuth();
-  const [selectedFY, setSelectedFY] = useState("FY 2024-25");
+  const [selectedFY, setSelectedFY] = useState("FY 2025-26");
+  const [currentTime, setCurrentTime] = useState(dayjs());
   const userPermissions = auth?.user?.permissions?.permissions || [];
 
   //------------------------PAGE ACCESS-------------------//
@@ -53,9 +54,11 @@ const MeetingDashboard = () => {
       const response = await axios.get("/api/meetings/get-meetings");
       return response.data;
     },
+    refetchInterval: 30000,
+    refetchOnWindowFocus: true,
   });
 
-  const now = dayjs();
+  // const now = dayjs();
 
   const { data: roomsData = [], isLoading: isRoomLoading } = useQuery({
     queryKey: ["rooms"],
@@ -63,7 +66,27 @@ const MeetingDashboard = () => {
       const response = await axios.get("/api/meetings/get-rooms");
       return response.data;
     },
+    refetchInterval: 30000,
+    refetchOnWindowFocus: true,
   });
+
+  const activeRoomsData = useMemo(
+    () => roomsData.filter((room) => room.isActive === true),
+    [roomsData],
+  );
+
+  const activeRoomNames = useMemo(
+    () => new Set(activeRoomsData.map((room) => room.name)),
+    [activeRoomsData],
+  );
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentTime(dayjs());
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, []);
 
   const { data: holidaysData = [], isLoading: isHolidaysLoading } = useQuery({
     queryKey: ["holidays"],
@@ -114,7 +137,7 @@ const MeetingDashboard = () => {
     {
       key: "reviews",
       title: "Reviews",
-      route: "/app/meetings/reviews",
+      route: "/app/meetings/client-review",
       icon: <RiPagesLine />,
       onlyTop: true,
     },
@@ -161,31 +184,17 @@ const MeetingDashboard = () => {
     return 0; // Default to 0 if no valid duration format is found
   };
 
-  // Total duration in hours
-  const totalDurationInHours = calculateTotalDurationInHours(meetingsData);
   // Fetch internal meetings
-  const { data: meetingsInternal = [] } = useQuery({
-    queryKey: ["meetings"],
-    queryFn: async () => {
-      const response = await axios.get("/api/meetings/get-meetings");
-      const filtered = response.data.filter(
-        (item) => item.meetingType === "Internal"
-      );
-      return filtered;
-    },
-  });
+  const meetingsInternal = useMemo(
+    () => meetingsData.filter((item) => item.meetingType === "Internal"),
+    [meetingsData],
+  );
 
   // Fetch external meetings
-  const { data: meetingsExternal = [] } = useQuery({
-    queryKey: ["meetingsExternal"],
-    queryFn: async () => {
-      const response = await axios.get("/api/meetings/get-meetings");
-      const filtered = response.data.filter(
-        (item) => item.meetingType === "External"
-      );
-      return filtered;
-    },
-  });
+  const meetingsExternal = useMemo(
+    () => meetingsData.filter((item) => item.meetingType === "External"),
+    [meetingsData],
+  );
 
   const meetingColumns = [
     { id: "id", label: "Sr No", align: "left" },
@@ -200,15 +209,17 @@ const MeetingDashboard = () => {
     { id: "endTime", label: "End Time", align: "left" },
   ];
 
-  const fyStart = dayjs("2025-04-01");
-  const fyEnd = dayjs("2026-03-31");
+  // const fyStart = dayjs("2025-04-01");
+  // const fyEnd = dayjs("2026-03-31");
+  const currentMonth = dayjs();
+  const currentMonthLabel = currentMonth.format("MMM-YY");
 
   const months = [];
   const monthlyVisitorMap = {};
 
   for (let i = 0; i < 12; i++) {
-    const month = fyStart.add(i, "month");
-    const label = month.format("MMM-YY"); // e.g., "Apr-25"
+    const month = currentMonth.subtract(11 - i, "month");
+    const label = month.format("MMM-YY"); // e.g., "Apr-26"
     months.push(label);
     monthlyVisitorMap[label] = 0;
   }
@@ -226,20 +237,16 @@ const MeetingDashboard = () => {
     ([type, count]) => ({
       label: type,
       count,
-    })
+    }),
   );
 
   // Populate the map
   visitorsData.forEach((visitor) => {
     const visitDate = dayjs(visitor.dateOfVisit);
-    if (
-      visitDate.isAfter(fyStart.subtract(1, "day")) &&
-      visitDate.isBefore(fyEnd.add(1, "day"))
-    ) {
-      const label = visitDate.format("MMM-YY");
-      if (monthlyVisitorMap[label] !== undefined) {
-        monthlyVisitorMap[label]++;
-      }
+    if (!visitDate.isValid()) return;
+    const label = visitDate.format("MMM-YY");
+    if (monthlyVisitorMap[label] !== undefined) {
+      monthlyVisitorMap[label]++;
     }
   });
 
@@ -306,16 +313,34 @@ const MeetingDashboard = () => {
 
   const meetings = [];
   // To check the number of times a meeting room is booked based on timings
-  const durationCount = {};
+  const durationBuckets = ["15", "30", "60", "90", "120", "Others"];
+  const durationCount = durationBuckets.reduce((acc, bucket) => {
+    acc[bucket] = 0;
+    return acc;
+  }, {});
+
   meetingsData.forEach((meeting) => {
-    durationCount[meeting.duration] =
-      (durationCount[meeting.duration] || 0) + 1;
+    const durationInMinutes = parseDuration(meeting.duration || "0m");
+
+    if (durationInMinutes <= 15) {
+      durationCount["15"] += 1;
+    } else if (durationInMinutes <= 30) {
+      durationCount["30"] += 1;
+    } else if (durationInMinutes <= 60) {
+      durationCount["60"] += 1;
+    } else if (durationInMinutes <= 90) {
+      durationCount["90"] += 1;
+    } else if (durationInMinutes <= 120) {
+      durationCount["120"] += 1;
+    } else {
+      durationCount.Others += 1;
+    }
   });
 
   // Convert to Pie Chart Data Format
-  const meetingPieData = Object.entries(durationCount).map(([time, count]) => ({
-    label: time,
-    value: count,
+  const meetingPieData = durationBuckets.map((bucket) => ({
+    label: bucket,
+    value: durationCount[bucket],
   }));
 
   const meetingPieOptions = {
@@ -360,30 +385,36 @@ const MeetingDashboard = () => {
   // ];
 
   // 🔁 Transform API response into availabilityRooms format
-  const availabilityRooms = roomsData.map((room, index) => {
-    const roomName = room.name;
+  const availabilityRooms = useMemo(
+    () =>
+      roomsData
+        .filter((room) => room.isActive)
+        .map((room, index) => {
+          const roomName = room.name;
 
-    // Check if any current meeting is ongoing for this room
-    const hasOngoingMeeting = meetingsData.some((meeting) => {
-      return (
-        meeting.roomName === roomName &&
-        now.isAfter(dayjs(meeting.startTime)) &&
-        now.isBefore(dayjs(meeting.endTime))
-      );
-    });
+          // Check if any current meeting is ongoing for this room
+          const hasOngoingMeeting = meetingsData.some((meeting) => {
+            return (
+              meeting.roomName === roomName &&
+              currentTime.isAfter(dayjs(meeting.startTime)) &&
+              currentTime.isBefore(dayjs(meeting.endTime))
+            );
+          });
 
-    return {
-      roomID: index + 1,
-      roomName,
-      status: hasOngoingMeeting ? "Unavailable" : "Available",
-    };
-  });
+          return {
+            roomID: index + 1,
+            roomName,
+            status: hasOngoingMeeting ? "Unavailable" : "Available",
+          };
+        }),
+    [roomsData, meetingsData, currentTime],
+  );
 
   const availableRooms = availabilityRooms.filter(
-    (r) => r.status === "Available"
+    (r) => r.status === "Available",
   );
   const unavailableRooms = availabilityRooms.filter(
-    (r) => r.status === "Unavailable"
+    (r) => r.status === "Unavailable",
   );
 
   const RoomPieData = [
@@ -410,7 +441,7 @@ const MeetingDashboard = () => {
 
   const CustomLegend = (
     <div>
-      <div className="h-64 px-4 overflow-y-scroll">
+      <div className="h-[320px] px-4 overflow-y-scroll">
         {availabilityRooms
           .sort((a, b) => (a.status === "Available" ? 1 : -1))
           .map((room, index) => (
@@ -511,37 +542,49 @@ const MeetingDashboard = () => {
   // Map: label → duration
   const monthMap = new Map();
 
-  meetingsData.forEach((meeting) => {
-    const date = new Date(meeting.date);
-    const label =
-      date.toLocaleString("default", { month: "short" }) +
-      "-" +
-      date.getFullYear().toString().slice(-2);
+  meetingsData
+    .filter((meeting) => activeRoomNames.has(meeting.roomName))
+    .forEach((meeting) => {
+      const date = new Date(meeting.date);
+      const label =
+        date.toLocaleString("default", { month: "short" }) +
+        "-" +
+        date.getFullYear().toString().slice(-2);
 
-    const durationMinutes = parseInt(meeting.duration);
-    const durationHours = durationMinutes / 60;
+      const durationMinutes = parseDuration(meeting.duration || "0m");
+      const durationHours = durationMinutes / 60;
 
-    const current = monthMap.get(label) || 0;
-    monthMap.set(label, current + durationHours);
-  });
+      const current = monthMap.get(label) || 0;
+      monthMap.set(label, current + durationHours);
+    });
 
   const monthlyBookedHours = {};
   for (let label of fullMonthLabels) {
     monthlyBookedHours[label] = monthMap.get(label) || 0;
   }
 
+  // Capacity assumptions used for utilization/occupancy calculations.
+  const WORKING_HOURS_PER_DAY = 9;
+  const countWeekdaysInMonth = (year, monthIndex) => {
+    const lastDay = new Date(year, monthIndex + 1, 0).getDate();
+    let bookableDays = 0;
+
+    for (let day = 1; day <= lastDay; day++) {
+      const weekday = new Date(year, monthIndex, day).getDay();
+      if (weekday >= 1 && weekday <= 6) bookableDays += 1; // Mon-Sat
+    }
+
+    return bookableDays;
+  };
+
   // 🔁 Group data by FY
   const groupedDataMap = new Map();
   const bookedHoursByFY = new Map();
   const totalBookedHours = Object.values(monthlyBookedHours).reduce(
     (acc, hours) => acc + hours,
-    0
+    0,
   );
   const [fyBookedHours, setFYBookedHours] = useState(totalBookedHours);
-  const workinghoursPerDay = 1;
-  const workingDays = 5;
-  const totalBookableHours =
-    roomsData.length * workinghoursPerDay * workingDays;
 
   fullMonthLabels.forEach((label) => {
     const [monthAbbr, yearSuffix] = label.split("-");
@@ -550,18 +593,29 @@ const MeetingDashboard = () => {
 
     const fyStartYear = monthIndex < 3 ? fullYear - 1 : fullYear;
     const fyLabel = `FY ${fyStartYear}-${String(
-      (fyStartYear + 1) % 100
+      (fyStartYear + 1) % 100,
     ).padStart(2, "0")}`;
 
     if (!groupedDataMap.has(fyLabel)) groupedDataMap.set(fyLabel, []);
     if (!bookedHoursByFY.has(fyLabel)) bookedHoursByFY.set(fyLabel, 0);
 
     const bookedHours = monthlyBookedHours[label];
+    const workingDays = countWeekdaysInMonth(fullYear, monthIndex);
+    const totalBookableHoursForMonth =
+      activeRoomsData.length * WORKING_HOURS_PER_DAY * workingDays;
+
+    const utilizationPercent =
+      totalBookableHoursForMonth > 0
+        ? (bookedHours / totalBookableHoursForMonth) * 100
+        : 0;
+
     bookedHoursByFY.set(fyLabel, bookedHoursByFY.get(fyLabel) + bookedHours);
 
     groupedDataMap.get(fyLabel).push({
       x: label,
-      y: (bookedHours / totalBookableHours) * 100,
+      y: utilizationPercent,
+      bookedHours,
+      totalBookableHoursForMonth,
     });
   });
 
@@ -570,8 +624,15 @@ const MeetingDashboard = () => {
     ([group, data]) => ({
       group,
       data,
-    })
+    }),
   );
+
+  console.log("[MeetingDashboard][AvgUtilization][FYSeries]", {
+    fullMonthLabels,
+    monthlyBookedHours,
+    bookedHoursByFY: Object.fromEntries(bookedHoursByFY.entries()),
+    averageBookingSeries,
+  });
 
   const averageBookingOptions = {
     chart: {
@@ -603,7 +664,7 @@ const MeetingDashboard = () => {
             "default",
             {
               month: "long",
-            }
+            },
           );
           const year = new Date(monthMeetings[0].date).getFullYear();
 
@@ -613,9 +674,11 @@ const MeetingDashboard = () => {
         },
       },
     },
-    xaxis: { categories: BookingMonths },
+    xaxis: { categories: fullMonthLabels },
     yaxis: {
+      min: 0,
       max: 100,
+      tickAmount: 4, // 100 / 4 = 25 per step → 0, 25, 50, 75, 100, 125, 150, 175, 200
       title: { text: "Utilization (%)" },
       labels: {
         formatter: (value) => Math.round(value),
@@ -623,7 +686,7 @@ const MeetingDashboard = () => {
     },
     dataLabels: {
       enabled: true,
-      formatter: (val) => Math.round(val) + "%",
+      formatter: (val) => val.toFixed(1) + "%",
       style: {
         fontSize: "11px",
         colors: ["#ffff"],
@@ -638,25 +701,141 @@ const MeetingDashboard = () => {
         columnWidth: "40%",
       },
     },
+    // tooltip: {
+    //   enabled: true, // or false to disable
+    //   y: {
+    //     formatter: function (val, { seriesIndex, dataPointIndex, w }) {
+    //       const monthLabel = w.config.xaxis.categories?.[dataPointIndex];
+    //       const actualHours = Number(monthlyBookedHours?.[monthLabel]) || 0;
+    //       console.log("[MeetingDashboard][AvgUtilization][Tooltip]", {
+    //         monthLabel,
+    //         seriesIndex,
+    //         dataPointIndex,
+    //         utilizationPercent: val,
+    //         actualHours,
+    //       });
+    //       return `${actualHours.toFixed(0)} hrs`;
+    //     },
+    //     title: {
+    //       formatter: () => "Total hours : ", // 🔥 Hides "Series 1"
+    //     },
+    //   },
+    //   x: {
+    //     formatter: function (val) {
+    //       return `Month: ${val}`; // Customizes "May-25"
+    //     },
+    //   },
+    // },
     tooltip: {
-      enabled: true, // or false to disable
-      y: {
-        formatter: function (val) {
-          return `${((val / 100) * totalBookableHours).toFixed(0)} hrs`; // Custom text, like "12 hrs"
-        },
-        title: {
-          formatter: () => "Total hours : ", // 🔥 Hides "Series 1"
-        },
+      enabled: true,
+      custom: function ({ seriesIndex, dataPointIndex, w }) {
+        const monthLabel = w.config.xaxis.categories?.[dataPointIndex];
+        const actualHours = Number(monthlyBookedHours?.[monthLabel]) || 0;
+
+        const [monthAbbr, yearSuffix] = (monthLabel || "").split("-");
+        const fullYear = parseInt("20" + yearSuffix);
+        const monthIndex = new Date(`${monthAbbr} 1, ${fullYear}`).getMonth();
+
+        // ✅ Same formula used in groupedDataMap
+        const workingDays = countWeekdaysInMonth(fullYear, monthIndex);
+        const totalAvailableHours =
+          activeRoomsData.length * WORKING_HOURS_PER_DAY * workingDays;
+
+        // const calcHours = (buildingName) =>
+        //   meetingsData
+        //     .filter((m) => {
+        //       const date = new Date(m.date);
+        //       const mAbbr = date.toLocaleString("default", { month: "short" });
+        //       const mYear = date.getFullYear().toString().slice(-2);
+        //       return (
+        //         mAbbr === monthAbbr &&
+        //         mYear === yearSuffix &&
+        //         m.location?.building?.buildingName === buildingName
+        //       );
+        //     })
+        //     .reduce(
+        //       (sum, m) => sum + parseDuration(m.duration || "0m") / 60,
+        //       0,
+        //     );
+
+        const calcHours = (buildingName) =>
+          meetingsData
+            .filter((m) => {
+              const date = new Date(m.date);
+              // ✅ Use same label-building logic as monthMap
+              const mLabel =
+                date.toLocaleString("default", { month: "short" }) +
+                "-" +
+                date.getFullYear().toString().slice(-2);
+              return (
+                activeRoomNames.has(m.roomName) &&
+                mLabel === monthLabel && // ✅ compare full label, not split parts
+                m.location?.building?.buildingName === buildingName
+              );
+            })
+            .reduce(
+              (sum, m) => sum + parseDuration(m.duration || "0m") / 60,
+              0,
+            );
+
+        const stcHours = calcHours("Sunteck Kanaka");
+        const dtcHours = calcHours("Dempo Trade Centre");
+
+        const stcPct =
+          actualHours > 0 ? ((stcHours / actualHours) * 100).toFixed(1) : 0;
+        const dtcPct =
+          actualHours > 0 ? ((dtcHours / actualHours) * 100).toFixed(1) : 0;
+        const unaccounted = actualHours - stcHours - dtcHours;
+
+        return `
+  <div style="padding: 8px 12px; font-family: Poppins-Regular; font-size: 12px; line-height: 1.8;">
+    
+    <!-- ✅ Replace "Month: Apr-26" with utilization % -->
+    <div style="display:flex; justify-content:space-between; gap:24px;">
+    <span><b>${(((stcHours + dtcHours) / totalAvailableHours) * 100).toFixed(1)}%</b></span>
+      <span style="color:#555;">Utilization</span>
+    </div>
+<hr/>
+    <!-- ✅ Numbers on left, labels on right -->
+    <div style="display:flex; justify-content:space-between; gap:24px;">
+      <span><b>${totalAvailableHours.toFixed(0)} hrs</b></span>
+      <span style="color:#555;">Total Monthly Hours</span>
+    </div>
+    <hr/>
+    <div style="display:flex; justify-content:space-between; gap:24px;">
+      <span><b>${actualHours.toFixed(1)} hrs</b></span>
+      <span style="color:#555;">Total Consumed Hours</span>
+    </div>
+    <hr/>
+    <div style="display:flex; justify-content:space-between; gap:24px;">
+      <span><b>${stcHours.toFixed(1)} hrs</b></span>
+      <span style="color:#555;">STC</span>
+    </div>
+    <hr/>
+    <div style="display:flex; justify-content:space-between; gap:24px;">
+      <span><b>${dtcHours.toFixed(1)} hrs</b></span>
+      <span style="color:#555;">DTC</span>
+    </div>
+
+  </div>
+`;
       },
-      x: {
-        formatter: function (val) {
-          return `Month: ${val}`; // Customizes "May-25"
-        },
-      },
+      x: { show: false },
     },
   };
 
-  const bookedHours = meetingsData.reduce((acc, room) => {
+  const meetingsInCurrentMonth = meetingsData.filter(
+    (meeting) =>
+      dayjs(meeting.date).isValid() &&
+      dayjs(meeting.date).isSame(currentMonth, "month"),
+  );
+  const cancelledMeetingsInCurrentMonthCount = meetingsData.filter(
+    (meeting) =>
+      meeting.meetingStatus === "Cancelled" &&
+      dayjs(meeting.date).isValid() &&
+      dayjs(meeting.date).isSame(currentMonth, "month"),
+  ).length;
+  const bookedHours = meetingsInCurrentMonth.reduce((acc, room) => {
     const name = room.roomName;
     const hours = parseInt(room.duration) / 60 || 0;
 
@@ -678,10 +857,20 @@ const MeetingDashboard = () => {
 
   const rooms = roomNames;
 
-  // Calculate occupancy percentage
+  const currentMonthWorkingDays = countWeekdaysInMonth(
+    currentMonth.year(),
+    currentMonth.month(),
+  );
+  const roomBookableHoursInCurrentMonth =
+    WORKING_HOURS_PER_DAY * currentMonthWorkingDays;
+
+  // Calculate occupancy percentage per room for current month.
   const processedRoomsData = Object.keys(actualBookedHours).map((room) => ({
     x: room,
-    y: (actualBookedHours[room] / totalBookableHours) * 100,
+    y:
+      roomBookableHoursInCurrentMonth > 0
+        ? (actualBookedHours[room] / roomBookableHoursInCurrentMonth) * 100
+        : 0,
   }));
 
   const averageOccupancySeries = [
@@ -898,10 +1087,10 @@ const MeetingDashboard = () => {
     },
     {
       key: "reviews",
-      title: "Reviews",
-      route: "/app/meetings/reviews",
+      title: "Data",
+      route: "/app/meetings/client-credit",
       icon: <RiPagesLine />,
-      permission: PERMISSIONS.MEETINGS_REVIEWS.value,
+      permission: PERMISSIONS.MEETINGS_DATA_CARD.value,
     },
     {
       key: "settings",
@@ -912,7 +1101,7 @@ const MeetingDashboard = () => {
     },
   ];
   const allowedCards = cardsConfig.filter(
-    (card) => !card.permission || userPermissions.includes(card.permission)
+    (card) => !card.permission || userPermissions.includes(card.permission),
   );
 
   const pieChartsConfig = [
@@ -930,7 +1119,7 @@ const MeetingDashboard = () => {
   ];
   const allowedPieCharts = pieChartsConfig.filter(
     (widget) =>
-      !widget.permission || userPermissions.includes(widget.permission)
+      !widget.permission || userPermissions.includes(widget.permission),
   );
 
   const donutChartConfig = [
@@ -953,14 +1142,17 @@ const MeetingDashboard = () => {
 
   const allowedDonutCharts = donutChartConfig.filter(
     (widget) =>
-      !widget.permission || userPermissions.includes(widget.permission)
+      !widget.permission || userPermissions.includes(widget.permission),
   );
+
+  const currentMonthDurationInHours =
+    calculateTotalDurationInHours(meetingsInCurrentMonth);
 
   const dataCardConfigs = [
     {
       key: "hoursBooked",
       title: "Total",
-      data: totalDurationInHours.toFixed(0),
+      data: currentMonthDurationInHours.toFixed(0),
       description: "Hours Booked",
       route: "reports",
       permission: PERMISSIONS.MEETINGS_HOURS_BOOKED.value,
@@ -968,7 +1160,7 @@ const MeetingDashboard = () => {
     {
       key: "uniqueBookings",
       title: "Total",
-      data: meetingsData.length || 0,
+      data: meetingsInCurrentMonth.length || 0,
       description: "Unique Bookings",
       route: "reports",
       permission: PERMISSIONS.MEETINGS_UNIQUE_BOOKINGS.value,
@@ -977,33 +1169,37 @@ const MeetingDashboard = () => {
       key: "bizNestBookings",
       title: "Total",
       data:
-        meetingsData.filter((item) => item.meetingType === "Internal").length ||
-        0,
+        meetingsInCurrentMonth.filter(
+          (item) =>
+            item.meetingType === "Internal" && item.client === "BIZNest",
+        ).length || 0,
       description: "BIZ Nest Bookings",
       route: "reports",
+      onClick: () => navigate("reports?source=biz-nest"),
       permission: PERMISSIONS.MEETINGS_BIZ_NEST_BOOKINGS.value,
     },
     {
       key: "guestBookings",
       title: "Total",
-      data: meetingsData.filter((item) => item.meetingType === "External")
+      data: meetingsInCurrentMonth.filter((item) => item.meetingType === "External")
         .length,
       description: "Guest Bookings",
       route: "reports",
+      onClick: () => navigate("reports?source=guest-bookings"),
       permission: PERMISSIONS.MEETINGS_GUEST_BOOKINGS.value,
     },
     {
       key: "averageHoursBooked",
       title: "Average",
       data:
-        meetingsData.length > 0
+        meetingsInCurrentMonth.length > 0
           ? (
-              meetingsData.reduce((sum, item) => {
+              meetingsInCurrentMonth.reduce((sum, item) => {
                 const duration = parseInt(item.duration?.replace("m", ""));
                 return isNaN(duration) ? sum : sum + duration;
               }, 0) /
               60 /
-              meetingsData.length
+              meetingsInCurrentMonth.length
             ).toFixed(2)
           : 0,
       description: "Hours Booked",
@@ -1013,21 +1209,23 @@ const MeetingDashboard = () => {
     {
       key: "hoursCancelled",
       title: "Total",
-      data:
-        meetingsData
-          .filter((item) => item.meetingStatus === "Cancelled")
-          .reduce(
-            (sum, item) => sum + parseInt(item.duration.replace("m", "")),
-            0
-          ) / 60,
+      data: cancelledMeetingsInCurrentMonthCount || 0,
+      // data:
+      //   meetingsData
+      //     .filter((item) => item.meetingStatus === "Cancelled")
+      //     .reduce(
+      //       (sum, item) => sum + parseInt(item.duration.replace("m", "")),
+      //       0,
+      //     ) / 60,
       description: "Hours Cancelled",
       route: "reports",
+      onClick: () => navigate("reports?source=cancelled"),
       permission: PERMISSIONS.MEETINGS_HOURS_CANCELLED.value,
     },
   ];
 
   const allowedDataCards = dataCardConfigs.filter(
-    (card) => !card.permission || userPermissions.includes(card.permission)
+    (card) => !card.permission || userPermissions.includes(card.permission),
   );
 
   const meetingGraphsConfigs = [
@@ -1038,15 +1236,21 @@ const MeetingDashboard = () => {
       data: averageBookingSeries,
       options: averageBookingOptions,
       onYearChange: (fyLabel) => {
+        const normalized = fyLabel.trim();
+
+        const matchKey = Array.from(bookedHoursByFY.keys()).find(
+          (key) => key.trim() === normalized,
+        );
+
         setSelectedFY(fyLabel);
-        setFYBookedHours(bookedHoursByFY.get(fyLabel) || 0);
+        setFYBookedHours(bookedHoursByFY.get(matchKey) || 0);
       },
       permission: PERMISSIONS.MEETINGS_AVERAGE_ROOM_UTILIZATION.value,
     },
   ];
 
   const allowedMeetingGraphs = meetingGraphsConfigs.filter((graph) =>
-    userPermissions.includes(graph.permission)
+    userPermissions.includes(graph.permission),
   );
 
   const barGraphsConfig = [
@@ -1054,9 +1258,7 @@ const MeetingDashboard = () => {
       key: "externalGuestsVisited",
       permission: PERMISSIONS.MEETINGS_EXTERNAL_GUESTS_VISITED.value,
       title: "External Guests Visited",
-      titleLabel: `${new Date().toLocaleString("default", {
-        month: "short",
-      })}-${new Date().getFullYear().toString().slice(-2)}`,
+      titleLabel: currentMonthLabel,
       data: externalGuestsData,
       options: externalGuestsOptions,
     },
@@ -1064,15 +1266,13 @@ const MeetingDashboard = () => {
       key: "averageOccupancy",
       permission: PERMISSIONS.MEETINGS_AVERAGE_OCCUPANCY.value,
       title: "Average Occupancy Of Rooms in %",
-      titleLabel: `${new Date().toLocaleString("default", {
-        month: "short",
-      })}-${new Date().getFullYear().toString().slice(-2)}`,
+      titleLabel: currentMonthLabel,
       data: averageOccupancySeries,
       options: averageOccupancyOptions,
     },
   ];
   const allowedBarGraphs = barGraphsConfig.filter((graph) =>
-    userPermissions.includes(graph.permission)
+    userPermissions.includes(graph.permission),
   );
 
   const tablesConfig = [
@@ -1110,7 +1310,7 @@ const MeetingDashboard = () => {
     },
   ];
   const allowedTables = tablesConfig.filter((table) =>
-    userPermissions.includes(table.permission)
+    userPermissions.includes(table.permission),
   );
 
   const specialGraphsConfig = [
@@ -1136,7 +1336,7 @@ const MeetingDashboard = () => {
     },
   ];
   const allowedSpecialGraphs = specialGraphsConfig.filter((graph) =>
-    userPermissions.includes(graph.permission)
+    userPermissions.includes(graph.permission),
   );
 
   const meetingsWidgets = [
@@ -1197,6 +1397,7 @@ const MeetingDashboard = () => {
           data={card.data}
           description={card.description}
           route={card.route}
+          onClick={card.onClick}
         />
       )),
     },
@@ -1247,9 +1448,10 @@ const MeetingDashboard = () => {
               options={graph.options}
               height={graph.height}
               width={graph.width}
+              centerAlign
             />
           </WidgetSection>
-        )
+        ),
       ),
     },
     {
@@ -1262,21 +1464,22 @@ const MeetingDashboard = () => {
             title={item.title}
             border={item.border}
           >
-            {/* <PieChartMui
-          title={item.title}
-          data={item.data}
-          options={item.options}
-        /> */}
-            <div className="flex flex-row">
-              <PieChartMui
-                title={item.title}
-                data={item.data}
-                options={item.options}
-              />
+            <div className="relative flex items-center justify-center">
+              {/* CHART – perfectly centered */}
+              <div className="w-[400px] h-[320px]">
+                <PieChartMui
+                  data={item.data}
+                  options={item.options}
+                  width={320}
+                  height={320}
+                />
+              </div>
 
-              {/* Render custom legend if available */}
+              {/* LEGEND – stays on right */}
               {item.customLegend && (
-                <div className="mt-4">{item.customLegend}</div>
+                <div className="absolute right-0 max-h-[320px] overflow-y-auto">
+                  {item.customLegend}
+                </div>
               )}
             </div>
           </WidgetSection>
@@ -1289,14 +1492,16 @@ const MeetingDashboard = () => {
             titleLabel={item.titleLabel}
             title={item.title}
           >
-            <DonutChart
-              series={item.series}
-              labels={item.labels}
-              colors={item.colors}
-              centerLabel={item.centerLabel}
-              tooltipValue={item.tooltipValue}
-              width={item.width}
-            />
+            <div className="flex justify-center">
+              <DonutChart
+                series={item.series}
+                labels={item.labels}
+                colors={item.colors}
+                centerLabel={item.centerLabel}
+                tooltipValue={item.tooltipValue}
+                width={item.width}
+              />
+            </div>
           </WidgetSection>
         )),
       ],
@@ -1306,13 +1511,15 @@ const MeetingDashboard = () => {
   return (
     <div>
       <div>
-        {meetingsWidgets.map((widget, index) => (
-          <div>
-            <WidgetSection key={index} layout={widget.layout}>
-              {widget?.widgets}
-            </WidgetSection>
-          </div>
-        ))}
+        {meetingsWidgets
+          .filter((widget) => widget.widgets && widget.widgets.length > 0)
+          .map((widget, index) => (
+            <div key={index}>
+              <WidgetSection layout={widget.layout}>
+                {widget.widgets}
+              </WidgetSection>
+            </div>
+          ))}
       </div>
     </div>
   );

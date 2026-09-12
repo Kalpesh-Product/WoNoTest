@@ -6,6 +6,7 @@ const {
   getAssets,
   getAssetsWithDepartments,
   bulkInsertAssets,
+  bulkAssignedAssets,
 } = require("../controllers/assetsControllers/assetsControllers");
 const {
   addSubCategory,
@@ -27,26 +28,39 @@ const {
 } = require("../controllers/assetsControllers/assignAssetController");
 
 // Asset Management Routes
-router.post("/create-asset", upload.single("asset-image"), addAsset);
+router.post(
+  "/create-asset",
+  upload.fields([
+    { name: "asset-image", maxCount: 1 },
+    { name: "assetImage", maxCount: 1 },
+    { name: "warrantyDocument", maxCount: 1 },
+  ]),
+  addAsset,
+);
 router.patch(
   "/update-asset/:assetId",
   upload.fields([
     { name: "assetImage", maxCount: 1 },
     { name: "warrantyDocument", maxCount: 1 },
   ]),
-  editAsset
+  editAsset,
 );
 router.get("/get-assets", getAssets);
 router.get("/get-assets-with-departments", getAssetsWithDepartments);
-router.post("/create-asset-category", addAssetCategory);
-router.post("/create-asset-subcategory", addSubCategory);
+router.post("/create-category", addAssetCategory);
+router.post("/create-subcategory", addSubCategory);
 router.post(
   "/bulk-insert-assets/:department",
   upload.single("assets"),
-  bulkInsertAssets
+  bulkInsertAssets,
 );
-router.patch("/update-asset-category", updateCategory);
-router.patch("/update-asset-subcategory", updateSubCategory);
+router.post(
+  "/bulk-assign-assets/:department",
+  upload.single("assigned-assets"),
+  bulkAssignedAssets,
+);
+router.patch("/update-category", updateCategory);
+router.patch("/update-subcategory", updateSubCategory);
 router.get("/get-category", getCategory);
 router.get("/get-subcategory", getSubCategory);
 

@@ -1,20 +1,20 @@
 const mongoose = require("mongoose");
 const Lead = require("../../models/sales/Lead");
 const Unit = require("../../models/locations/Unit");
+const CustomError = require("../../utils/customErrorlogs");
+const { createLog } = require("../../utils/moduleLogs");
 const { Readable } = require("stream");
 const csvParser = require("csv-parser");
 const fs = require("fs");
 const path = require("path");
+const ClientService = require("../../models/sales/ClientService");
+const { fetchLeadReportService } = require("../../services/reports/lead");
 
 const createLead = async (req, res, next) => {
-  const logPath = "sales/SalesLog";
-  const logAction = "Create Lead";
-  const logSourceKey = "lead";
-
-  const { user, ip, company } = req;
+  const { company } = req;
 
   try {
-    const {
+    let {
       dateOfContact,
       companyName,
       serviceCategory,
@@ -27,6 +27,7 @@ const createLead = async (req, res, next) => {
       designation,
       contactNumber,
       emailAddress,
+      source,
       leadSource,
       period,
       openDesks,
@@ -37,84 +38,134 @@ const createLead = async (req, res, next) => {
       remarksComments,
       lastFollowUpDate,
     } = req.body;
-    const { company } = req;
+
+    // Required fields
+    const requiredFields = {
+      dateOfContact,
+      companyName,
+      serviceCategory,
+      leadStatus,
+      proposedLocations,
+      officeInGoa,
+      pocName,
+      contactNumber,
+      leadSource,
+      openDesks,
+      cabinDesks,
+      totalDesks,
+      clientBudget,
+      startDate,
+    };
+
+    for (const [key, value] of Object.entries(requiredFields)) {
+      if (
+        value === undefined ||
+        value === null ||
+        value === "" ||
+        (Array.isArray(value) && value.length === 0)
+      ) {
+        throw new CustomError(`${key} is required`);
+      }
+    }
+
+    const trimmedCompanyName = companyName.trim();
+    const trimmedEmailAddress = emailAddress
+      ? emailAddress.trim().toLowerCase()
+      : undefined;
+
+    const duplicateConditions = [
+      { companyName: { $regex: new RegExp(`^${trimmedCompanyName}$`, "i") } },
+    ];
+
+    if (trimmedEmailAddress) {
+      duplicateConditions.push({ emailAddress: trimmedEmailAddress });
+    }
+
+    const companyExists = await Lead.findOne({
+      company,
+      $or: duplicateConditions,
+    });
+
+    if (companyExists) {
+      throw new CustomError(
+        "Lead already exists, verify the company name and email address",
+      );
+    }
+
+    const leadData = {
+      company,
+      dateOfContact,
+      companyName: companyName.trim(),
+      serviceCategory,
+      leadStatus,
+      proposedLocations,
+      sector,
+      headOfficeLocation,
+      officeInGoa,
+      pocName,
+      designation,
+      contactNumber,
+      emailAddress,
+      source,
+      leadSource,
+      period,
+      openDesks,
+      cabinDesks,
+      totalDesks,
+      clientBudget,
+      startDate,
+      remarksComments,
+      lastFollowUpDate,
+    };
+
+    // Remove optional empty ObjectId fields
+    if (!leadData.serviceCategory) delete leadData.serviceCategory;
 
     if (
-      !dateOfContact ||
-      !companyName ||
-      !serviceCategory ||
-      !leadStatus ||
-      !proposedLocations ||
-      !sector ||
-      !headOfficeLocation ||
-      officeInGoa === undefined ||
-      !pocName ||
-      !designation ||
-      !contactNumber ||
-      !emailAddress ||
-      !leadSource ||
-      !period ||
-      !totalDesks ||
-      !clientBudget ||
-      !startDate
+      !leadData.proposedLocations ||
+      leadData.proposedLocations.length === 0
     ) {
-      throw new CustomError(
-        "All required fields must be provided",
-        logPath,
-        logAction,
-        logSourceKey
-      );
+      delete leadData.proposedLocations;
     }
 
-    const currDate = new Date();
-    if (new Date(startDate) < currDate) {
-      throw new CustomError(
-        "Start date must be a future date",
-        logPath,
-        logAction,
-        logSourceKey
-      );
-    }
+    // Remove optional empty string fields
+    [
+      "sector",
+      "headOfficeLocation",
+      "designation",
+      "emailAddress",
+      "source",
+      "period",
+      "remarksComments",
+      "lastFollowUpDate",
+    ].forEach((field) => {
+      if (
+        leadData[field] === "" ||
+        leadData[field] === undefined ||
+        leadData[field] === null
+      ) {
+        delete leadData[field];
+      }
+    });
 
-    const leadExists = await Lead.findOne({ emailAddress });
-    if (leadExists) {
-      throw new CustomError(
-        "Lead already exists",
-        logPath,
-        logAction,
-        logSourceKey
-      );
-    }
+    const lead = await Lead.create(leadData);
 
-    if (!mongoose.Types.ObjectId.isValid(proposedLocations)) {
-      throw new CustomError(
-        "Invalid proposed location ID",
-        logPath,
-        logAction,
-        logSourceKey
-      );
-    }
+    return res.status(201).json({
+      success: true,
+      message: "Lead created successfully.",
+      lead,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
 
-    const unitExists = await Unit.findOne({ _id: proposedLocations });
-    if (!unitExists) {
-      throw new CustomError(
-        "Proposed location doesn't exist",
-        logPath,
-        logAction,
-        logSourceKey
-      );
-    }
+const editLead = async (req, res, next) => {
+  const { company } = req;
 
-    if (totalDesks < 1 || clientBudget <= 0) {
-      throw new CustomError(
-        "Invalid numerical values",
-        logPath,
-        logAction,
-        logSourceKey
-      );
-    }
-
-    const lead = new Lead({
+  try {
+    let {
+      leadId,
       dateOfContact,
       companyName,
       serviceCategory,
@@ -127,6 +178,7 @@ const createLead = async (req, res, next) => {
       designation,
       contactNumber,
       emailAddress,
+      source,
       leadSource,
       period,
       openDesks,
@@ -134,48 +186,266 @@ const createLead = async (req, res, next) => {
       totalDesks,
       clientBudget,
       startDate,
-      company,
       remarksComments,
       lastFollowUpDate,
+    } = req.body;
+
+    const lead = await Lead.findById(leadId);
+
+    if (!lead) {
+      throw new CustomError("Lead not found", 404);
+    }
+
+    const requiredFields = {
+      dateOfContact,
+      companyName,
+      serviceCategory,
+      leadStatus,
+      proposedLocations,
+      officeInGoa,
+      pocName,
+      contactNumber,
+      leadSource,
+      openDesks,
+      cabinDesks,
+      totalDesks,
+      clientBudget,
+      startDate,
+    };
+
+    for (const [key, value] of Object.entries(requiredFields)) {
+      if (
+        value === undefined ||
+        value === null ||
+        value === "" ||
+        (Array.isArray(value) && value.length === 0)
+      ) {
+        throw new CustomError(`${key} is required`);
+      }
+    }
+
+    const trimmedCompanyName = companyName.trim();
+    const trimmedEmailAddress = emailAddress?.trim().toLowerCase();
+
+    const duplicateQuery = {
+      company,
+      _id: { $ne: leadId },
+      companyName: {
+        $regex: new RegExp(`^${trimmedCompanyName}$`, "i"),
+      },
+      emailAddress: trimmedEmailAddress,
+    };
+
+    const leadExists = await Lead.findOne(duplicateQuery);
+
+    if (leadExists) {
+      throw new CustomError(
+        "Lead already exists, verify the company name and email address",
+      );
+    }
+
+    const leadData = {
+      dateOfContact,
+      companyName: trimmedCompanyName,
+      serviceCategory,
+      leadStatus,
+      proposedLocations,
+      sector,
+      headOfficeLocation,
+      officeInGoa,
+      pocName,
+      designation,
+      contactNumber,
+      emailAddress: trimmedEmailAddress,
+      source,
+      leadSource,
+      period,
+      openDesks,
+      cabinDesks,
+      totalDesks,
+      clientBudget,
+      startDate,
+      remarksComments,
+      lastFollowUpDate,
+    };
+
+    if (!leadData.serviceCategory) delete leadData.serviceCategory;
+
+    if (
+      !leadData.proposedLocations ||
+      leadData.proposedLocations.length === 0
+    ) {
+      delete leadData.proposedLocations;
+    }
+
+    [
+      "sector",
+      "headOfficeLocation",
+      "designation",
+      "emailAddress",
+      "source",
+      "period",
+      "remarksComments",
+      "lastFollowUpDate",
+    ].forEach((field) => {
+      if (
+        leadData[field] === "" ||
+        leadData[field] === undefined ||
+        leadData[field] === null
+      ) {
+        delete leadData[field];
+      }
     });
 
-    await lead.save();
+    const updatedLead = await Lead.findOneAndUpdate(
+      { _id: leadId, company },
+      { $set: leadData },
+      {
+        new: true,
+        runValidators: true,
+      },
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Lead updated successfully.",
+      lead: updatedLead,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const updateCoworkingClientStatus = async (req, res, next) => {
+  const logPath = "sales/SalesLog";
+  const logAction = "Update CoworkingClient Status";
+  const logSourceKey = "client";
+
+  const { user, ip, company } = req;
+
+  try {
+    const { clientId } = req.params;
+    const { isActive } = req.body;
+
+    // ✅ Validate ID
+    if (!mongoose.Types.ObjectId.isValid(clientId)) {
+      throw new CustomError(
+        "Invalid client ID",
+        logPath,
+        logAction,
+        logSourceKey,
+      );
+    }
+
+    // ✅ Validate boolean strictly
+    if (typeof isActive !== "boolean") {
+      throw new CustomError(
+        "isActive must be true or false",
+        logPath,
+        logAction,
+        logSourceKey,
+      );
+    }
+
+    const existingClient = await CoworkingClient.findOne({
+      _id: clientId,
+      company,
+    });
+
+    if (!existingClient) {
+      throw new CustomError(
+        "Client not found",
+        logPath,
+        logAction,
+        logSourceKey,
+      );
+    }
+
+    const oldStatus = existingClient.isActive;
+
+    // No-op protection
+    if (oldStatus === isActive) {
+      return res.status(200).json({
+        message: `Client is already ${isActive ? "active" : "inactive"}`,
+      });
+    }
+
+    existingClient.isActive = isActive;
+    await existingClient.save();
 
     await createLog({
       path: logPath,
       action: logAction,
-      remarks: "Lead created successfully",
+      remarks: `Client marked as ${isActive ? "Active" : "Inactive"}`,
       status: "Success",
-      user: user,
-      ip: ip,
-      company: company,
+      user,
+      ip,
+      company,
       sourceKey: logSourceKey,
-      sourceId: lead._id,
-      changes: lead,
+      sourceId: existingClient._id,
+      changes: {
+        isActive: {
+          before: oldStatus,
+          after: isActive,
+        },
+      },
     });
 
-    return res.status(201).json({ message: "Lead created successfully" });
+    return res.status(200).json({
+      message: `Client ${isActive ? "activated" : "deactivated"} successfully`,
+    });
   } catch (error) {
     if (error instanceof CustomError) {
       next(error);
     } else {
       next(
-        new CustomError(error.message, logPath, logAction, logSourceKey, 500)
+        new CustomError(error.message, logPath, logAction, logSourceKey, 500),
       );
     }
   }
 };
 
+// const getLeads = async (req, res, next) => {
+//   try {
+//     const { company } = req;
+//     const leads = await Lead.find({ company }).populate([
+//       {
+//         path: "serviceCategory",
+//         select: "serviceName",
+//       },
+//       {
+//         path: "proposedLocations",
+//         select: "unitNo unitName building",
+//         model: "Unit",
+//         populate: {
+//           path: "building",
+//           select: "buildingName",
+//           model: "Building",
+//         },
+//       },
+//     ]);
+
+//     if (!leads.length) {
+//       return res.status(404).json({ message: "No leads found" });
+//     }
+//     res.status(200).json(leads);
+//   } catch (error) {
+//     next(error);
+//   }
+// };
+
 const getLeads = async (req, res, next) => {
   try {
-    const { company } = req;
-    const leads = await Lead.find({ company }).populate(
-      "serviceCategory proposedLocations"
-    );
+    const leads = await fetchLeadReportService({
+      company: req.company,
+      query: { ...req.query },
+    });
+
     if (!leads.length) {
       return res.status(404).json({ message: "No leads found" });
     }
-    res.status(200).json(leads);
+
+    return res.status(200).json(leads);
   } catch (error) {
     next(error);
   }
@@ -194,17 +464,19 @@ const bulkInsertLeads = async (req, res, next) => {
     const unitsMap = new Map(units.map((u) => [u.unitNo, u._id]));
 
     const services = await ClientService.find().lean();
+
     const servicesMap = new Map(
-      services.map((s) => [s.name.toLowerCase(), s._id])
+      services.map((s) => [s.serviceName.toLowerCase(), s._id]),
     );
 
     const newLeads = [];
     const stream = Readable.from(file.buffer.toString("utf-8").trim());
-
+    let rowCount = 0;
     stream
       .pipe(csvParser())
       .on("data", async (row) => {
         try {
+          rowCount++;
           const proposedLocationsRaw = row["Proposed Location"] || "";
           const proposedLocations = proposedLocationsRaw
             .split(/[,/]/)
@@ -215,6 +487,14 @@ const bulkInsertLeads = async (req, res, next) => {
 
           const rawService = row["Sales Category"]?.trim().toLowerCase();
           const serviceCategoryId = rawService && servicesMap.get(rawService);
+          const rawBudget = row["Client Budget"]?.trim();
+
+          let clientBudget = 0;
+
+          if (rawBudget && rawBudget !== "-") {
+            const parsed = parseFloat(rawBudget);
+            clientBudget = isNaN(parsed) ? 0 : parsed;
+          }
 
           const lead = {
             company,
@@ -245,11 +525,7 @@ const bulkInsertLeads = async (req, res, next) => {
             totalDesks: row["Total Desks"]?.trim()
               ? parseInt(row["Total Desks"], 10)
               : null,
-            clientBudget:
-              row["Client Budget"]?.trim() === "-" ||
-              !row["Client Budget"]?.trim().length
-                ? null
-                : parseFloat(row["Client Budget"]),
+            clientBudget: clientBudget,
             remarksComments: row["Remarks/Comments"] || "",
             startDate:
               row["Start Date"]?.trim() &&
@@ -258,13 +534,15 @@ const bulkInsertLeads = async (req, res, next) => {
                 ? new Date(row["Start Date"])
                 : null,
             lastFollowUpDate:
-              row["Last Follup Date"]?.trim() && row["Last Follup Date"] !== "-"
-                ? new Date(row["Last Follup Date"])
+              row["Last Follow-up Date"]?.trim() &&
+              row["Last Follow-up Date"] !== "-"
+                ? new Date(row["Last Follow-up Date"])
                 : null,
           };
 
           newLeads.push(lead);
         } catch (err) {
+          console.error("Row Count 1st", rowCount);
           console.error("Error processing row:", err);
           return res
             .status(400)
@@ -279,6 +557,7 @@ const bulkInsertLeads = async (req, res, next) => {
             count: newLeads.length,
           });
         } catch (error) {
+          console.error("Row Count 2nd", rowCount);
           console.error("Insert error:", error);
           res.status(500).json({ message: "Error inserting leads" });
         }
@@ -288,6 +567,10 @@ const bulkInsertLeads = async (req, res, next) => {
   }
 };
 
-module.exports = bulkInsertLeads;
-
-module.exports = { createLead, getLeads, bulkInsertLeads };
+module.exports = {
+  createLead,
+  editLead,
+  updateCoworkingClientStatus,
+  getLeads,
+  bulkInsertLeads,
+};

@@ -9,20 +9,13 @@ import { useNavigate } from "react-router-dom";
 import usePageDepartment from "../../hooks/usePageDepartment";
 import { Chip } from "@mui/material";
 import humanDate from "../../utils/humanDateForamt";
+import { Country, State } from "country-state-city";
 
 const VendorTable = () => {
   const [openModal, setOpenModal] = useState(false);
   const [selectedVendor, setSelectedVendor] = useState(null);
   const department = usePageDepartment();
   const navigate = useNavigate();
-  let departmentName = department?.name || "";
-
-  if (department?.name === "Administration") {
-    departmentName = "Admin";
-  }
-  if (department?.name === "Tech") {
-    departmentName = "Frontend";
-  }
   const axios = useAxiosPrivate();
 
   const {
@@ -45,13 +38,13 @@ const VendorTable = () => {
     {
       headerName: "Sr No",
       valueGetter: (params) => params.node.rowIndex + 1,
-      width: 80,
+      width: 300,
     },
-    { field: "vendorID", headerName: "Vendor ID", width: 120 },
+    { field: "vendorID", headerName: "Vendor ID", flex: 1 },
     {
       field: "vendorName",
       headerName: "Vendor Name",
-      flex: 2,
+      flex: 1,
       cellRenderer: (params) => {
         const isEmpty = params.value === "N/A";
 
@@ -62,12 +55,7 @@ const VendorTable = () => {
               textDecoration: "underline",
               cursor: "pointer",
             }}
-            onClick={() =>
-              navigate(
-                `/app/dashboard/${departmentName}-dashboard/data/vendor/${params.data.vendorName}`,
-                { state: params.data }
-              )
-            }
+            onClick={() => navigate(`${params.data.vendorName}`, { state: params.data })}
           >
             {params.value}
           </span>
@@ -80,7 +68,8 @@ const VendorTable = () => {
     {
       field: "status",
       headerName: "Status",
-      width: 130,
+      sort: "desc",
+      flex: 1,
       cellRenderer: (params) => (
         <Chip
           label={params.value === "Inactive" ? "Inactive" : "Active"}
@@ -89,54 +78,125 @@ const VendorTable = () => {
         />
       ),
     },
+    {field: "email", headerName: "Email", flex: 1,hide: true},
+     {field: "mobile", headerName: "Mobile", flex: 1,hide: true},
+     {field: "address", headerName: "Address", flex: 1,hide: true},
+     {field: "pinCode", headerName: "Pin Code", flex: 1,hide: true},
+     {field: "panIdNo", headerName: "PAN ID No", flex: 1,hide: true},
+     {field: "companyName", headerName: "Company Name", flex: 1,hide: true},
+     {field: "country", headerName: "Country", flex: 1,hide: true},
+     {field: "state", headerName: "State", flex: 1,hide: true},
+     {field: "city", headerName: "City", flex: 1,hide: true},
+     {field: "gstIn", headerName: "GSTIN", flex: 1,hide: true},
+     {field: "partyType", headerName: "Party Type", flex: 1,hide: true},
+     {field: "ifscCode", headerName: "IFSC Code", flex: 1,hide: true},
+     {field: "bankName", headerName: "Bank Name", flex: 1,hide: true},
+     {field: "branchName", headerName: "Branch Name", flex: 1,hide: true},
+     {field: "nameOnAccount", headerName: "Name on Account", flex: 1,hide: true},
+     {field: "accountNumber", headerName: "Account Number", flex: 1,hide: true},
+     {field: "onboardingDate", headerName: "Onboarding Date", flex: 1,hide: true},
   ];
+ const getCountryIsoCode = (countryValue) => {
+    if (!countryValue) return "";
+    const normalizedCountryValue = String(countryValue).trim();
+    const normalizedCountryCode = normalizedCountryValue.toUpperCase();
+    const match = Country.getAllCountries().find(
+      (country) =>
+        country.isoCode === normalizedCountryCode ||
+        country.name.toLowerCase() === normalizedCountryValue.toLowerCase()
+    );
+    return match?.isoCode || "";
+  };
+
+  const getCountryName = (countryValue) => {
+    const countryIsoCode = getCountryIsoCode(countryValue);
+    if (!countryIsoCode) return countryValue;
+
+    return (
+      Country.getAllCountries().find(
+        (country) => country.isoCode === countryIsoCode
+      )?.name || countryValue
+    );
+  };
+
+  const getStateName = (countryValue, stateValue) => {
+    if (!stateValue) return stateValue;
+    const countryIsoCode = getCountryIsoCode(countryValue);
+    if (!countryIsoCode) return stateValue;
+    const normalizedStateValue = String(stateValue).trim();
+    const normalizedStateCode = normalizedStateValue.toUpperCase();
+
+    return (
+      State.getStatesOfCountry(countryIsoCode).find(
+        (stateItem) =>
+          stateItem.isoCode === normalizedStateCode ||
+          stateItem.name.toLowerCase() === normalizedStateValue.toLowerCase()
+      )?.name || stateValue
+    );
+  };
 
   const rows = isVendorFetchingPending
     ? []
     : data?.map((vendor, index) => ({
-        id: index + 1,
-        vendorMongoId: vendor._id,
-        vendorID: vendor._id.slice(-4).toUpperCase(),
-        vendorName: vendor.name
-          ? vendor.name.includes("/")
-            ? vendor.name.split("/").join("-")
-            : vendor.name
-          : "N/A",
+      id: index + 1,
+      vendorMongoId: vendor._id,
+      vendorID: vendor._id.slice(-4).toUpperCase(),
+      vendorName: vendor.name
+        ? vendor.name.includes("/")
+          ? vendor.name.split("/").join("-")
+          : vendor.name
+        : "N/A",
 
-        address: vendor.address,
-        state: vendor.state,
-        country: vendor.country,
-        partyType: vendor?.partyType,
-        status: vendor.status,
-        departmentId: vendor.departmentId,
-        company: vendor.company,
-        email: vendor.email,
-        mobile: vendor.mobile,
-        companyName: vendor.companyName,
-        onboardingDate: humanDate(vendor.onboardingDate),
-        city: vendor.city,
-        pinCode: vendor.pinCode,
-        panIdNo: vendor.panIdNo,
-        gstIn: vendor.gstIn,
-        ifscCode: vendor.ifscCode,
-        bankName: vendor.bankName,
-        branchName: vendor.branchName,
-        nameOnAccount: vendor.nameOnAccount,
-        accountNumber: vendor.accountNumber,
-      })) || [];
+      address: vendor.address,
+      state: getStateName(vendor.country, vendor.state),
+      stateCode: vendor.state,
+      country: getCountryName(vendor.country),
+      countryCode: vendor.country,
+      partyType: vendor?.partyType,
+      status: vendor.status,
+      departmentId: vendor.departmentId,
+      company: vendor.company,
+      email: vendor.email,
+      mobile: vendor.mobile,
+      companyName: vendor.companyName,
+      onboardingDate: humanDate(vendor.onboardingDate),
+      city: vendor.city,
+      pinCode: vendor.pinCode,
+      panIdNo: vendor.panIdNo,
+      gstIn: vendor.gstIn,
+      ifscCode: vendor.ifscCode,
+      bankName: vendor.bankName,
+      branchName: vendor.branchName,
+      nameOnAccount: vendor.nameOnAccount,
+      accountNumber: vendor.accountNumber,
+    })) || [];
 
   return (
-    <div>
+    // <div>
+    //   <PageFrame>
+    //     <AgTable
+    //       search={true}
+    //       searchColumn={"Vendor"}
+    //       tableTitle={"List of Vendors"}
+    //       data={rows}
+    //       columns={vendorColumns}
+    //       buttonTitle={"Add Vendor"}
+    //       handleClick={() => navigate("vendor-onboard")}
+    //     />
+      <div className="flex flex-col gap-8">
       <PageFrame>
-        <AgTable
-          search={true}
-          searchColumn={"Vendor"}
-          tableTitle={"List of Vendors"}
-          data={rows}
-          columns={vendorColumns}
-          buttonTitle={"Add Vendor"}
-          handleClick={() => navigate("vendor-onboard")}
-        />
+        <div className="h-[65vh] overflow-y-auto pr-2 sm:pr-4">
+          <AgTable
+            search={true}
+            searchColumn={"Vendor"}
+            tableTitle={"List of Vendors"}
+            data={rows}
+            columns={vendorColumns}
+            buttonTitle={"Add Vendor"}
+            handleClick={() => navigate("vendor-onboard")}
+            exportData
+          />
+        </div>
       </PageFrame>
       <MuiModal
         open={openModal}

@@ -1,6 +1,12 @@
 import { useState } from "react";
 import AgTable from "../../../../components/AgTable";
-import { Chip, TextField, IconButton, DialogActions } from "@mui/material";
+import {
+  Chip,
+  TextField,
+  IconButton,
+  DialogActions,
+  MenuItem,
+} from "@mui/material";
 import useAxiosPrivate from "../../../../hooks/useAxiosPrivate";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import MuiModal from "../../../../components/MuiModal";
@@ -30,6 +36,7 @@ const HrSettingsPolicies = () => {
     mode: "onChange",
     defaultValues: {
       policyName: "",
+      policyType: "None",
       file: null,
     },
   });
@@ -42,6 +49,7 @@ const HrSettingsPolicies = () => {
     mode: "onChange",
     defaultValues: {
       policyName: "",
+      policyType: "None",
       file: null,
     },
   });
@@ -50,7 +58,7 @@ const HrSettingsPolicies = () => {
     queryKey: ["policies"],
     queryFn: async () => {
       const response = await axios.get(
-        "/api/company/get-company-documents/policies"
+        "/api/company/get-company-documents/policies",
       );
       return response.data.policies;
     },
@@ -63,7 +71,7 @@ const HrSettingsPolicies = () => {
         formData,
         {
           headers: { "Content-Type": "multipart/form-data" },
-        }
+        },
       );
       return response.data;
     },
@@ -82,7 +90,7 @@ const HrSettingsPolicies = () => {
     mutationFn: async (payload) => {
       const response = await axios.patch(
         `/api/company/update-company-data`,
-        payload
+        payload,
       );
       return response.data;
     },
@@ -101,25 +109,24 @@ const HrSettingsPolicies = () => {
     const formData = new FormData();
     formData.append("documentName", data.policyName);
     formData.append("type", "policy");
+    formData.append("policyType", data.policyType || "None");
     formData.append("document", data.file);
     addPolicyMutation.mutate(formData);
   };
 
   const handleEdit = (row) => {
     setSelectedPolicy(row);
-    reset({ policyName: row.policyname });
+    reset({
+      policyName: row.policyname,
+      policyType: row.policyType || "None",
+    });
     setModalType("edit");
     setOpenModal(true);
   };
 
-  const handleInactive = (row) => {
+  const handleStatus = (row) => {
     setSelectedPolicy(row);
-    setModalType("inactive");
-    setOpenModal(true);
-  };
-  const handleActive = (row) => {
-    setSelectedPolicy(row);
-    setModalType("inactive");
+    setModalType("status");
     setOpenModal(true);
   };
 
@@ -129,25 +136,17 @@ const HrSettingsPolicies = () => {
       itemId: selectedPolicy.mongoId,
       oldDocumentName: selectedPolicy.policyname,
       name: data.policyName,
+      policyType: data.policyType || "None",
     });
   };
 
-  const handleMarkInactive = () => {
+  const handleMarkStatus = (status) => {
     updatePolicyMutation.mutate({
       type: "policies",
       itemId: selectedPolicy.mongoId,
       oldDocumentName: selectedPolicy.policyname,
       newDocumentName: null,
-      isActive: false,
-    });
-  };
-  const handleMarkActive = () => {
-    updatePolicyMutation.mutate({
-      type: "policies",
-      itemId: selectedPolicy.mongoId,
-      oldDocumentName: selectedPolicy.policyname,
-      newDocumentName: null,
-      isActive: true,
+      isActive: status ? false : true,
     });
   };
 
@@ -174,6 +173,11 @@ const HrSettingsPolicies = () => {
       width: 150,
     },
     {
+      field: "policyType",
+      headerName: "TYPE",
+      width: 130,
+    },
+    {
       field: "updatedDate",
       headerName: "Updated Date",
       width: 150,
@@ -181,6 +185,7 @@ const HrSettingsPolicies = () => {
     {
       field: "status",
       headerName: "Status",
+      sort: "desc",
       flex: 1,
       cellRenderer: (params) => {
         const label = params.value ? "Active" : "Inactive";
@@ -198,19 +203,11 @@ const HrSettingsPolicies = () => {
         const isActive = params.data.status;
         const actions = [
           { label: "Edit", onClick: () => handleEdit(params.data) },
+          {
+            label: `Mark As ${isActive ? "Inactive" : "Active"}`,
+            onClick: () => handleStatus(params.data),
+          },
         ];
-
-        if (isActive === true) {
-          actions.push({
-            label: "Mark As Inactive",
-            onClick: () => handleInactive(params.data),
-          });
-        } else if (isActive === false) {
-          actions.push({
-            label: "Mark As Active",
-            onClick: () => handleActive(params.data), // You probably want a separate handler here
-          });
-        }
 
         return <ThreeDotMenu rowId={params.data.id} menuItems={actions} />;
       },
@@ -227,7 +224,7 @@ const HrSettingsPolicies = () => {
         buttonTitle="Add Policy"
         handleClick={() => {
           setModalType("add");
-          reset({ policyName: "", file: null });
+          addReset({ policyName: "", policyType: "None", file: null });
           setOpenModal(true);
         }}
         columns={columns}
@@ -236,6 +233,7 @@ const HrSettingsPolicies = () => {
           mongoId: policy._id,
           policyname: policy.name,
           policyLink: policy.documentLink,
+          policyType: policy.policyType || "None",
           status: policy.isActive,
           uploadedDate: humanDate(policy.createdAt),
           updatedDate: humanDate(policy.updatedAt),
@@ -248,9 +246,9 @@ const HrSettingsPolicies = () => {
         title={
           modalType === "edit"
             ? "Edit Policy Name"
-            : modalType === "inactive"
-            ? "Mark Policy As Inactive"
-            : "Add New Policy"
+            : modalType === "status"
+              ? `Mark Policy As ${selectedPolicy?.status ? "Inactive" : "Active"}`
+              : "Add New Policy"
         }
       >
         {modalType === "add" && (
@@ -275,6 +273,26 @@ const HrSettingsPolicies = () => {
                   error={!!addErrors?.policyName}
                   helperText={addErrors?.policyName?.message}
                 />
+              )}
+            />
+            <Controller
+              name="policyType"
+              control={addControl}
+              rules={{ required: "Policy Type is required" }}
+              render={({ field }) => (
+                <TextField
+                  {...field}
+                  label="Policy Type"
+                  size="small"
+                  select
+                  fullWidth
+                  error={!!addErrors?.policyType}
+                  helperText={addErrors?.policyType?.message}
+                >
+                  <MenuItem value="Leave">Leave</MenuItem>
+                  <MenuItem value="Holiday">Holiday</MenuItem>
+                  <MenuItem value="None">None</MenuItem>
+                </TextField>
               )}
             />
             <Controller
@@ -324,7 +342,7 @@ const HrSettingsPolicies = () => {
         {modalType === "edit" && (
           <form
             onSubmit={handleSubmit(
-              modalType === "edit" ? handleUpdatePolicy : handleAddPolicy
+              modalType === "edit" ? handleUpdatePolicy : handleAddPolicy,
             )}
             className="flex flex-col gap-4"
           >
@@ -347,6 +365,26 @@ const HrSettingsPolicies = () => {
                 />
               )}
             />
+            <Controller
+              name="policyType"
+              control={control}
+              rules={{ required: "Policy Type is required" }}
+              render={({ field }) => (
+                <TextField
+                  {...field}
+                  label="Policy Type"
+                  size="small"
+                  select
+                  fullWidth
+                  error={!!errors?.policyType}
+                  helperText={errors?.policyType?.message}
+                >
+                  <MenuItem value="Leave">Leave</MenuItem>
+                  <MenuItem value="Holiday">Holiday</MenuItem>
+                  <MenuItem value="None">None</MenuItem>
+                </TextField>
+              )}
+            />
 
             <PrimaryButton
               title={modalType === "edit" ? "Update Policy" : "Add Policy"}
@@ -360,32 +398,17 @@ const HrSettingsPolicies = () => {
             />
           </form>
         )}
-        {modalType === "inactive" && (
+        {modalType === "status" && (
           <div className="space-y-4">
             <p>
               Are you sure you want to mark <b>{selectedPolicy?.policyname}</b>{" "}
-              as inactive?
+              as {selectedPolicy?.status ? "Inactive" : "Active"}?
             </p>
             <DialogActions>
               <PrimaryButton
                 title="Confirm"
-                handleSubmit={handleMarkInactive}
+                handleSubmit={() => handleMarkStatus(selectedPolicy?.status)}
               />
-              <PrimaryButton
-                title="Cancel"
-                handleSubmit={() => setOpenModal(false)}
-              />
-            </DialogActions>
-          </div>
-        )}
-        {modalType === "active" && (
-          <div className="space-y-4">
-            <p>
-              Are you sure you want to mark <b>{selectedPolicy?.policyname}</b>{" "}
-              as active
-            </p>
-            <DialogActions>
-              <PrimaryButton title="Confirm" handleSubmit={handleMarkActive} />
               <PrimaryButton
                 title="Cancel"
                 handleSubmit={() => setOpenModal(false)}

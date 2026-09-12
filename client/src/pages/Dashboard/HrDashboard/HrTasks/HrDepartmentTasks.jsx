@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { useLocation } from "react-router-dom";
+import React, { useMemo, useState } from "react";
+import { useLocation, useParams } from "react-router-dom";
 import NormalBarGraph from "../../../../components/graphs/NormalBarGraph";
 import AgTable from "../../../../components/AgTable";
 import { Chip } from "@mui/material";
@@ -11,12 +11,111 @@ import { MdNavigateBefore, MdNavigateNext } from "react-icons/md";
 import useAxiosPrivate from "../../../../hooks/useAxiosPrivate";
 import { useQuery } from "@tanstack/react-query";
 import dateToHyphen from "../../../../utils/dateToHyphen";
+const SHORT_MONTHS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
+
+const getCurrentFiscalStartYear = () => {
+  const now = new Date();
+  const month = now.getMonth();
+  return month >= 3 ? now.getFullYear() : now.getFullYear() - 1;
+};
+
+const getFiscalMonths = (startYear) => {
+  const months = [];
+  for (let i = 0; i < 12; i += 1) {
+    const date = new Date(startYear, 3 + i, 1);
+    const shortMonth = SHORT_MONTHS[date.getMonth()];
+    const shortYear = String(date.getFullYear()).slice(2);
+    months.push(`${shortMonth}-${shortYear}`);
+  }
+  return months;
+};
+
+const getFiscalStartYearFromDate = (date) => {
+  const month = date.getMonth();
+  return month >= 3 ? date.getFullYear() : date.getFullYear() - 1;
+};
+const formatAssignedUser = (value, userIdToNameMap = new Map()) => {
+  if (!value) return "-";
+
+  if (Array.isArray(value)) {
+    const formattedUsers = value
+      .map((item) => formatAssignedUser(item, userIdToNameMap))
+      .filter((name) => name && name !== "-");
+
+    return formattedUsers.length ? formattedUsers.join(", ") : "-";
+  }
+
+  if (typeof value === "string") {
+    const normalized = value.trim();
+    const isObjectId = /^[a-f\d]{24}$/i.test(normalized);
+    if (isObjectId) return userIdToNameMap.get(normalized) || normalized;
+    return normalized || "-";
+  }
+
+  const source = value.assignee || value.user || value.userId || value;
+  const firstName = source.firstName || "";
+  const middleName = source.middleName || "";
+  const lastName = source.lastName || "";
+  const fullName = `${firstName} ${middleName} ${lastName}`.replace(/\s+/g, " ").trim();
+
+  if (fullName) return fullName;
+
+  if (source?._id && userIdToNameMap.has(source._id)) {
+    return userIdToNameMap.get(source._id);
+  }
+
+  return source.name || source.email || "-";
+};
+
 
 const HrDepartmentTasks = () => {
   const location = useLocation();
+  const { department: departmentParam } = useParams();
   const axios = useAxiosPrivate()
-  const { month, department, tasks, year } = location.state || {};
+  const { department: departmentFromState, tasks } = location.state || {};
+  const department = departmentFromState || departmentParam;
+ // const { month, department, tasks, year } = location.state || {};
   // const tasksRawData = useSelector((state) => state.hr.tasksRawData);
+
+   const { data: usersDirectory = [] } = useQuery({
+    queryKey: ["hrTaskUsersDirectory"],
+    queryFn: async () => {
+      const response = await axios.get("/api/users/fetch-users");
+      return Array.isArray(response.data) ? response.data : [];
+    },
+  });
+
+  const userIdToNameMap = useMemo(() => {
+    const map = new Map();
+
+    usersDirectory.forEach((user) => {
+      if (!user?._id) return;
+      const fullName = [user.firstName, user.middleName, user.lastName]
+        .filter(Boolean)
+        .join(" ")
+        .trim();
+
+      if (fullName) {
+        map.set(user._id, fullName);
+      }
+    });
+
+    return map;
+  }, [usersDirectory]);
+
   const { data: tasksRawData = [], isLoading: isTasksLoading } = useQuery({
     queryKey: ["tasksRawData"],
     queryFn: async () => {
@@ -55,58 +154,99 @@ const HrDepartmentTasks = () => {
     Nov: "November",
     Dec: "December",
   };
-  const fyMonths = [
-    "Apr-25",
-    "May-25",
-    "Jun-25",
-    "Jul-25",
-    "Aug-25",
-    "Sep-25",
-    "Oct-25",
-    "Nov-25",
-    "Dec-25",
-    "Jan-26",
-    "Feb-26",
-    "Mar-26",
-  ];
-  const initialShortMonth = Object.keys(fullMonthNames).find(
-    (key) => fullMonthNames[key] === month
+   const currentFiscalStartYear = getCurrentFiscalStartYear();
+  const [overviewFiscalStartYear, setOverviewFiscalStartYear] = useState(
+    currentFiscalStartYear
   );
 
-  const initialMonthIndex = fyMonths.findIndex((m) =>
-    m.startsWith(initialShortMonth)
+  const overviewFyMonths = useMemo(
+    () => getFiscalMonths(overviewFiscalStartYear),
+    [overviewFiscalStartYear]
+  );
+
+  const overviewFiscalYearLabel = `FY ${overviewFiscalStartYear}-${String(
+    overviewFiscalStartYear + 1
+  ).slice(2)}`;
+
+  const currentDate = new Date();
+  const currentMonthLabel = `${SHORT_MONTHS[currentDate.getMonth()]}-${String(
+    currentDate.getFullYear()
+  ).slice(2)}`;
+
+  const [detailsFiscalStartYear, setDetailsFiscalStartYear] = useState(
+    getFiscalStartYearFromDate(currentDate)
+  );
+
+  const detailsFyMonths = useMemo(
+    () => getFiscalMonths(detailsFiscalStartYear),
+    [detailsFiscalStartYear]
+  );
+
+  const initialMonthIndex = detailsFyMonths.findIndex(
+    (m) => m === currentMonthLabel
   );
 
   const [selectedMonthIndex, setSelectedMonthIndex] = useState(
     initialMonthIndex !== -1 ? initialMonthIndex : 0
   );
 
-  const selectedMonth = fyMonths[selectedMonthIndex];
-  const shortMonth = selectedMonth.split("-")[0];
+ const selectedMonth = detailsFyMonths[selectedMonthIndex];
+    const [shortMonth, shortYear] = selectedMonth.split("-");
+   const selectedMonthDisplay = `${fullMonthNames[shortMonth].toUpperCase()} - 20${shortYear}`;
 
-  if (!department || !tasks?.length) {
-    return <div className="">No tasks found for this department.</div>;
-  }
+  // if (!department || !tasks?.length) {
+  //   return <div className="">No tasks found for this department.</div>;
+  // }
   const filteredData = tasksRawData.filter(
     (item) => item.department === department
   );
-  const departmentName = filteredData[0]?.department;
-  const tasksData = filteredData[0]?.tasks;
+  // const departmentName = filteredData[0]?.department;
+  // const tasksData = filteredData[0]?.tasks;
 
-  const handlePrevMonth = () => {
+    const departmentName = filteredData[0]?.department || department || "Department";
+  const rawTasksData = filteredData[0]?.tasks || tasks || [];
+  const tasksData = rawTasksData.filter(
+    (task) => task?.taskType === "Department"
+  );
+
+ const handlePrevMonth = () => {
     if (selectedMonthIndex > 0) {
       setSelectedMonthIndex((prev) => prev - 1);
+      return;
     }
+
+    setDetailsFiscalStartYear((prev) => prev - 1);
+    setSelectedMonthIndex(11);
   };
 
   const handleNextMonth = () => {
-    if (selectedMonthIndex < fyMonths.length - 1) {
+    if (selectedMonthIndex < detailsFyMonths.length - 1) {
       setSelectedMonthIndex((prev) => prev + 1);
+      return;
     }
+
+    setDetailsFiscalStartYear((prev) => prev + 1);
+    setSelectedMonthIndex(0);
+  };
+
+   const handlePrevFiscalYear = () => {
+    setOverviewFiscalStartYear((prev) => {
+      const updatedYear = prev - 1;
+      setDetailsFiscalStartYear(updatedYear);
+      return updatedYear;
+    });
+  };
+
+  const handleNextFiscalYear = () => {
+    setOverviewFiscalStartYear((prev) => {
+      const updatedYear = prev + 1;
+      setDetailsFiscalStartYear(updatedYear);
+      return updatedYear;
+    });
   };
 
   const monthlyMap = {};
-  fyMonths.forEach((label) => {
+  overviewFyMonths.forEach((label) => {
     monthlyMap[label] = { total: 0, achieved: 0 };
   });
 
@@ -128,8 +268,8 @@ const HrDepartmentTasks = () => {
   const graphData = [
     {
       name: "Completed Tasks",
-      group: `${departmentName} - ${month}`,
-      data: fyMonths.map((label) => {
+      group: `${departmentName} - ${selectedMonthDisplay}`,
+    data: overviewFyMonths.map((label) => {
         const { total, achieved } = monthlyMap[label] || {
           total: 0,
           achieved: 0,
@@ -143,9 +283,9 @@ const HrDepartmentTasks = () => {
       }),
     },
     {
-      name: "Remaining Tasks",
-      group: `${departmentName} - ${month}`,
-      data: fyMonths.map((label) => {
+      name: "Pending Tasks",
+      group: `${departmentName} - ${selectedMonthDisplay}`,
+      data: overviewFyMonths.map((label) => {
         const { total, achieved } = monthlyMap[label] || {
           total: 0,
           achieved: 0,
@@ -184,7 +324,7 @@ const HrDepartmentTasks = () => {
     },
     xaxis: {
       title: { text: "Months" },
-      categories: fyMonths,
+        categories: overviewFyMonths,
     },
     yaxis: {
       title: { text: "Completion (%)" },
@@ -222,7 +362,7 @@ const HrDepartmentTasks = () => {
             <hr style="margin: 6px 0; border-top: 1px solid #ddd"/>
     
             <div style="display: flex; justify-content: space-between;">
-              <span>Remaining Tasks</span>
+              <span>Pending Tasks</span>
               <span>${remaining}</span>
             </div>
           </div>
@@ -284,10 +424,17 @@ const HrDepartmentTasks = () => {
 
   const filteredTasks = tasksData.filter((task) => {
     const [day, month, year] = task.assignedDate.split("-").map(Number);
-    const taskMonth =
-      fyMonths[(new Date(year, month - 1, day).getMonth() + 9) % 12];
-    return taskMonth === selectedMonth;
+       const taskDate = new Date(year, month - 1, day);
+    const taskMonthLabel = `${SHORT_MONTHS[taskDate.getMonth()]}-${String(
+      taskDate.getFullYear()
+    ).slice(2)}`;
+
+    return taskMonthLabel === selectedMonth;
   });
+
+  const completedFilteredTasks = filteredTasks.filter(
+    (task) => String(task.status || "").toLowerCase() === "completed"
+  );
 
   return (
     <div className="flex flex-col gap-4">
@@ -302,54 +449,69 @@ const HrDepartmentTasks = () => {
           year={false}
           height={350}
         />
+           <div className="flex justify-center items-center gap-4 pb-4">
+          <SecondaryButton
+            title={<MdNavigateBefore />}
+            handleSubmit={handlePrevFiscalYear}
+           // externalStyles="min-w-20 px-6 py-2 !bg-gray-400 !text-black font-semibold rounded-lg"
+          />
+          <div className="text-sm min-w-[80px] text-center text-primary font-semibold">
+            {overviewFiscalYearLabel}
+          </div>
+          <PrimaryButton
+            title={<MdNavigateNext />}
+            handleSubmit={handleNextFiscalYear}
+            externalStyles="min-w-20 px-6 py-2 !bg-gray-400 !text-black font-semibold rounded-lg"
+          />
+        </div>
       </WidgetSection>
 
       <WidgetSection
-        title={`Tasks details`}
+        title={`Department Completed Tasks details`}
         border
-        TitleAmount={`${fullMonthNames[shortMonth]} : ${
-          filteredTasks.length > 1
-            ? `${filteredTasks.length} Tasks`
-            : `${filteredTasks.length} Tasks`
+       TitleAmount={`${selectedMonthDisplay} : ${
+          completedFilteredTasks.length > 1
+            ? `${completedFilteredTasks.length} Tasks`
+            : `${completedFilteredTasks.length} Tasks`
         } `}
       >
         <div className="flex justify-center items-center gap-4">
           <SecondaryButton
             title={<MdNavigateBefore />}
             handleSubmit={handlePrevMonth}
-            disabled={selectedMonthIndex === 0}
+            //externalStyles="min-w-20 px-6 py-2 !bg-gray-400 !text-black font-semibold rounded-lg"
+           // disabled={selectedMonthIndex === 0}
           />
-          <div className="text-subtitle  text-center font-pmedium">
-            {selectedMonth}
+         <div className="text-sm min-w-[80px] text-center text-primary font-semibold">
+                        {selectedMonthDisplay}
           </div>
           <PrimaryButton
             title={<MdNavigateNext />}
             handleSubmit={handleNextMonth}
-            disabled={selectedMonthIndex === fyMonths.length - 1}
+            externalStyles="min-w-20 px-6 py-2 !bg-gray-400 !text-black font-semibold rounded-lg"
+           // disabled={selectedMonthIndex === fyMonths.length - 1}
           />
         </div>
-        {filteredTasks.length === 0 ? (
-          <div className="text-center flex justify-center items-center py-8 text-gray-500 h-80">
-            No data available
-          </div>
-        ) : (
-          <div>
-            <AgTable
-              tableHeight={300}
-              hideFilter
-              columns={tasksColumns}
-              data={filteredTasks.map((item, index) => ({
-                id: index + 1,
-                taskName: item.taskName,
-                assignedTo: item.assignedTo,
-                assignedBy: `${item.assignedBy?.firstName || ""} ${item.assignedBy?.lastName || ""}`,
-                assignedDate: item.assignedDate,
-                dueDate: item.dueDate,
-                status: item.status,
-              }))}
-            />
-          </div>
-        )}
+        <div>
+          <AgTable
+           key={selectedMonth}
+            tableHeight={300}
+            //hideFilter
+            search={true}
+            exportData
+            columns={tasksColumns}
+            data={completedFilteredTasks.map((item, index) => ({
+              id: index + 1,
+              taskName: item.taskName,
+              assignedTo: formatAssignedUser(item.assignedTo, userIdToNameMap),
+              assignedBy: formatAssignedUser(item.assignedBy, userIdToNameMap),
+              assignedDate: item.assignedDate,
+              dueDate: item.dueDate,
+              status: item.status,
+            }))}
+          />
+        </div>
+
       </WidgetSection>
     </div>
   );

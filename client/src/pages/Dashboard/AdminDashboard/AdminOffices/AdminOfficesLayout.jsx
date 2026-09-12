@@ -29,7 +29,7 @@ const AdminOfficesLayout = () => {
   const [clearedImageOpen, setClearedImageOpen] = useState(false);
   const [clearedFile, setClearedFile] = useState(null);
   const [tabIndex, setTabIndex] = useState(0);
-
+  const currentMonthLabel = dayjs().format("MMM-YYYY");
   const handleTabChange = (event, newValue) => {
     setTabIndex(newValue);
   };
@@ -61,10 +61,11 @@ const AdminOfficesLayout = () => {
     queryKey: ["unitDetails"],
     queryFn: async () => {
       const response = await axios.get("/api/sales/co-working-members", {
-        params: { unitId: unit },
+         params: { unitId: unit, active: true },
       });
       return response.data || {};
     },
+    enabled: !!unit,
   });
 
   const totalOccupied = Number(unitDetails?.totalOccupiedDesks) || 0;
@@ -165,7 +166,7 @@ const AdminOfficesLayout = () => {
       {tabIndex === 0 && (
         <div className=" text-center">
           <div
-            onClick={() => setImageOpen(true)}
+           // onClick={() => setImageOpen(true)}
             className="h-[32rem] w-full cursor-pointer p-4 border border-borderGray rounded-lg">
             <img
               src={unitDetails?.occupiedImage?.url || occupiedImage}
@@ -179,7 +180,7 @@ const AdminOfficesLayout = () => {
       {tabIndex === 1 && (
         <div className=" text-center">
           <div
-            onClick={() => setClearedImageOpen(true)}
+           // onClick={() => setClearedImageOpen(true)}
             className="h-[32rem] w-full cursor-pointer p-4 border border-borderGray rounded-lg">
             <img
               src={unitDetails?.clearImage?.url || clearedImagePreview}
@@ -196,14 +197,15 @@ const AdminOfficesLayout = () => {
           title="Total Desks"
           secondTitle="Total Occupancy %"
           secondData={"100%"}
-          description="Last Month : Apr-25"
+          // description="Last Month : Apr-25"
+          description={`Current Month : ${currentMonthLabel}`}
         />
         <DoubleDataCard
           data={totalActualOccupied}
           title="Occupied Desks"
           secondTitle="Occupancy %"
           secondData={`${occupancyPercent}%`}
-          description="Last Month : Apr-25"
+          description={`Current Month : ${currentMonthLabel}`}
         />
         <DoubleDataCard
           data={totalDesks - totalActualOccupied}
@@ -213,7 +215,7 @@ const AdminOfficesLayout = () => {
             ((totalDesks - totalActualOccupied) / totalDesks) *
             100
           ).toFixed(0)}%`}
-          description="Last Month : Apr-25"
+          description={`Current Month : ${currentMonthLabel}`}
         />
       </WidgetSection>
 
@@ -225,13 +227,15 @@ const AdminOfficesLayout = () => {
         <AgTable
           tableHeight={300}
           hideFilter
+          search
           columns={[
-            { field: "id", headerName: "Sr. No", width: 100 },
+            { field: "id", headerName: "Sr. No", width: 300 },
             { field: "client", headerName: "Client Name", flex: 1 },
-            { field: "occupiedDesks", headerName: "Occupied Desks" },
-            { field: "occupancyPercent", headerName: "Occupied %", cellRenderer : (params)=>(`${params.value}%`) },
+            { field: "occupiedDesks", headerName: "Occupied Desks",flex: 1 },
+            { field: "occupancyPercent", headerName: "Occupied %",flex: 1, cellRenderer : (params)=>(`${params.value}%`) },
           ]}
           data={tableData}
+          exportData
         />
       </WidgetSection>
 

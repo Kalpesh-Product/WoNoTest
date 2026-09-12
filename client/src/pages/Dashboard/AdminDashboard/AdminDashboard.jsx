@@ -39,10 +39,114 @@ const AdminDashboard = () => {
   const navigate = useNavigate();
   const axios = useAxiosPrivate();
   const department = usePageDepartment();
-  const [selectedFiscalYear, setSelectedFiscalYear] = useState("FY 2024-25");
+  const { setIsSidebarOpen } = useSidebar();
+
+  const getFiscalYearStart = (date = dayjs()) => {
+    const parsedDate = dayjs(date);
+    return parsedDate.month() >= 3 ? parsedDate.year() : parsedDate.year() - 1;
+  };
+
+  const formatFiscalYear = (startYear) =>
+    `FY ${startYear}-${String(startYear + 1).slice(-2)}`;
+
+  const getFiscalMonthIndex = (date) => {
+    const parsedDate = dayjs(date);
+    const month = parsedDate.month();
+
+    return month >= 3 ? month - 3 : month + 9;
+  };
+
+  const getAmount = (value) => {
+    if (typeof value === "number") return value;
+
+    if (typeof value === "string") {
+      const parsed = Number(value.replace(/,/g, ""));
+      return Number.isNaN(parsed) ? 0 : parsed;
+    }
+
+    return 0;
+  };
+
+  const fiscalMonths = [
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+    "Jan",
+    "Feb",
+    "Mar",
+  ];
+
+  const currentFiscalYear = formatFiscalYear(getFiscalYearStart());
+  const currentMonthStart = dayjs().startOf("month");
+  const currentMonthEnd = dayjs().endOf("month");
+  const currentMonthLabel = dayjs().format("MMMM");
+  const parseHouseKeepingJoiningDate = (value) => {
+    if (!value) {
+      return null;
+    }
+
+    if (dayjs.isDayjs(value)) {
+      return value.isValid() ? value : null;
+    }
+
+    if (value instanceof Date) {
+      const parsedDate = dayjs(value);
+      return parsedDate.isValid() ? parsedDate : null;
+    }
+
+    if (typeof value === "string") {
+      const trimmedValue = value.trim();
+
+      if (!trimmedValue) {
+        return null;
+      }
+
+      const formatCandidates = [
+        dayjs(trimmedValue),
+        dayjs(trimmedValue, "DD-MM-YYYY", true),
+        dayjs(trimmedValue, "YYYY-MM-DD", true),
+        dayjs(trimmedValue, "DD/MM/YYYY", true),
+      ];
+
+      return formatCandidates.find((date) => date.isValid()) || null;
+    }
+
+    const parsedDate = dayjs(value);
+    return parsedDate.isValid() ? parsedDate : null;
+  };
+
+  const [selectedFiscalYear, setSelectedFiscalYear] =
+    useState(currentFiscalYear);
+  const [hiddenAdminExpenseSeries, setHiddenAdminExpenseSeries] = useState({
+  actual: false,
+  projected: false,
+});  
+  const currentFiscalMonthIndexForCard =
+    dayjs().month() >= 3 ? dayjs().month() - 3 : dayjs().month() + 9;
 
   const { auth } = useAuth();
   const userPermissions = auth?.user?.permissions?.permissions || [];
+  const roleTitles = auth?.user?.role?.map((role) => role?.roleTitle) || [];
+  const isSuperAdminView = roleTitles.some((roleTitle) =>
+    ["Master Admin", "Super Admin"].includes(roleTitle),
+  );
+  const userDepartments = auth?.user?.departments || [];
+  const departmentIds = useMemo(
+    () => userDepartments.map((dept) => dept?._id).filter(Boolean),
+    [userDepartments],
+  );
+  const departmentNames = useMemo(
+    () =>
+      userDepartments.map((dept) => dept?.name?.toLowerCase()).filter(Boolean),
+    [userDepartments],
+  );
+  const hasMultipleDepartments = departmentIds.length > 1;
 
   //------------------------PAGE ACCESS START-------------------//
   const cardsConfig = [
@@ -85,7 +189,7 @@ const AdminDashboard = () => {
   ];
 
   const allowedCards = cardsConfig.filter(
-    (card) => !card.permission || userPermissions.includes(card.permission)
+    (card) => !card.permission || userPermissions.includes(card.permission),
   );
   //------------------------PAGE ACCESS END-------------------//
 
@@ -95,7 +199,7 @@ const AdminDashboard = () => {
       try {
         const response = await axios.get(
           `/api/budget/company-budget?departmentId=6798bae6e469e809084e24a4
-            `
+            `,
         );
         return response.data?.allBudgets;
       } catch (error) {
@@ -104,97 +208,118 @@ const AdminDashboard = () => {
     },
   });
   //------------------------Graph round functions-------------------//
-  const expenseSeries = useMemo(() => {
-    // Initialize monthly buckets
-    const months = Array.from({ length: 12 }, (_, index) =>
-      dayjs(`2024-04-01`).add(index, "month").format("MMM")
-    );
-
-    const fyData = {
-      "FY 2024-25": Array(12).fill(0),
-      "FY 2025-26": Array(12).fill(0),
-    };
-
-    hrFinance.forEach((item) => {
-      const date = dayjs(item.dueDate);
-      const year = date.year();
-      const monthIndex = date.month(); // 0 = Jan, 11 = Dec
-
-      if (year === 2024 && monthIndex >= 3) {
-        // Apr 2024 to Dec 2024 (month 3 to 11)
-        fyData["FY 2024-25"][monthIndex - 3] += item.actualAmount || 0;
-      } else if (year === 2025) {
-        if (monthIndex <= 2) {
-          // Jan to Mar 2025 (months 0–2)
-          fyData["FY 2024-25"][monthIndex + 9] += item.actualAmount || 0;
-        } else if (monthIndex >= 3) {
-          // Apr 2025 to Dec 2025 (months 3–11)
-          fyData["FY 2025-26"][monthIndex - 3] += item.actualAmount || 0;
-        }
-      } else if (year === 2026 && monthIndex <= 2) {
-        // Jan to Mar 2026
-        fyData["FY 2025-26"][monthIndex + 9] += item.actualAmount || 0;
-      }
-    });
-
-    return [
-      {
-        name: "total",
-        group: "FY 2024-25",
-        data: fyData["FY 2024-25"],
-      },
-      {
-        name: "total",
-        group: "FY 2025-26",
-        data: fyData["FY 2025-26"],
-      },
-    ];
-  }, [hrFinance]);
-
-  const maxExpenseValue = Math.max(
-    ...expenseSeries.flatMap((series) => series.data)
-  );
-  const roundedMax = Math.ceil((maxExpenseValue + 100000) / 100000) * 100000;
+ 
   //------------------------Graph round functions-------------------//
   //----------------------Electricity expense-----------------------//
-  const electrictyExpense = isHrFinanceLoading
-    ? 0
-    : hrFinance
-        .filter((item) => item.expanseType === "ELECTRICITY")
-        .reduce((sum, item) => sum + item.actualAmount || 0, 0);
-  console.log("electric : ", electrictyExpense);
+  const currentMonthElectricityExpense = useMemo(() => {
+    if (isHrFinanceLoading || !Array.isArray(hrFinance)) {
+      return 0;
+    }
+
+    return hrFinance
+      .filter((item) => {
+        if (item?.expanseType !== "ELECTRICITY" || !item?.dueDate) {
+          return false;
+        }
+
+        return dayjs(item.dueDate).isSame(dayjs(), "month");
+      })
+      .reduce((sum, item) => sum + (Number(item.actualAmount) || 0), 0);
+  }, [hrFinance, isHrFinanceLoading]);
+  console.log("electric : ", currentMonthElectricityExpense);
   //----------------------Electricity expense-----------------------//
   //----------------------Monthly average-----------------------//
-  const monthlyGroups = {};
+  const averageMonthlyExpense = useMemo(() => {
+    if (isHrFinanceLoading || !Array.isArray(hrFinance)) {
+      return 0;
+    }
 
-  hrFinance.forEach((item) => {
-    const dueDate = new Date(item.dueDate);
-    const monthKey = `${dueDate.getFullYear()}-${dueDate.getMonth() + 1}`; // e.g., "2024-4"
-    if (!monthlyGroups[monthKey]) monthlyGroups[monthKey] = [];
-    monthlyGroups[monthKey].push(item.actualAmount || 0);
-  });
+    const currentFyMonthlyTotals = hrFinance.reduce((acc, item) => {
+      if (!item?.dueDate || !dayjs(item.dueDate).isValid()) {
+        return acc;
+      }
 
-  const monthlyTotals = Object.values(monthlyGroups).map((amounts) =>
-    amounts.reduce((sum, val) => sum + val, 0)
-  );
+      const itemFiscalYear = formatFiscalYear(getFiscalYearStart(item.dueDate));
 
-  const averageMonthlyExpense = monthlyTotals.length
-    ? monthlyTotals.reduce((a, b) => a + b, 0) / monthlyTotals.length
-    : 0;
+      if (itemFiscalYear !== currentFiscalYear) {
+        return acc;
+      }
+
+      const monthKey = dayjs(item.dueDate).format("YYYY-MM");
+
+      if (!acc[monthKey]) {
+        acc[monthKey] = 0;
+      }
+
+      acc[monthKey] += getAmount(item.actualAmount);
+      return acc;
+    }, {});
+
+    const monthlyTotals = Object.values(currentFyMonthlyTotals);
+
+    return monthlyTotals.length
+      ? monthlyTotals.reduce((sum, value) => sum + value, 0) / monthlyTotals.length
+      : 0;
+  }, [currentFiscalYear, hrFinance, isHrFinanceLoading]);
 
   const totalOverallExpense = isHrFinanceLoading
-    ? []
+    ? 0
     : hrFinance.reduce((sum, item) => sum + item.actualAmount || 0, 0);
+
+  const expensePerSqFtTotals = useMemo(() => {
+    if (isHrFinanceLoading || !Array.isArray(hrFinance)) {
+      return { totalSqFt: 0, totalExpense: 0, perSqFtExpense: 0 };
+    }
+
+    const currentMonthBudgets = hrFinance.filter((item) => {
+      if (!item?.dueDate || !dayjs(item.dueDate).isValid()) {
+        return false;
+      }
+
+      return dayjs(item.dueDate).isSame(dayjs(), "month");
+    });
+
+    const groupedByUnit = currentMonthBudgets.reduce((acc, item) => {
+      const unit = item.unit;
+
+      if (!unit?._id) return acc;
+
+      const unitNo = unit.unitNo || "-";
+
+      if (!acc[unitNo]) {
+        acc[unitNo] = {
+          sqft: Number(unit.sqft) || 0,
+          totalExpense: 0,
+        };
+      }
+
+      acc[unitNo].totalExpense += Number(item.actualAmount) || 0;
+
+      return acc;
+    }, {});
+
+    const totals = Object.values(groupedByUnit).reduce(
+      (acc, unit) => {
+        acc.totalSqFt += unit.sqft;
+        acc.totalExpense += unit.totalExpense;
+        return acc;
+      },
+      { totalSqFt: 0, totalExpense: 0 },
+    );
+
+    const perSqFtExpense =
+      totals.totalSqFt > 0 ? totals.totalExpense / totals.totalSqFt : 0;
+
+    return { ...totals, perSqFtExpense };
+  }, [hrFinance, isHrFinanceLoading]);
+
   //----------------------Monthly average-----------------------//
   //----------------------Units data-----------------------//
   const { data: unitsData = [], isLoading: isUnitsData } = useQuery({
     queryKey: ["units-data"],
     queryFn: async () => {
       try {
-        const response = await axios.get(
-          `/api/company/fetch-simple-units
-          `
-        );
+        const response = await axios.get("/api/company/fetch-simple-units");
         return response.data;
       } catch (error) {
         throw new Error("Error fetching data");
@@ -206,6 +331,21 @@ const AdminDashboard = () => {
     : unitsData.reduce((acc, unit) => acc + (unit.sqft || 0), 0);
 
   //----------------------Units data-----------------------//
+  const { data: selectedDepartments = [] } = useQuery({
+    queryKey: ["selectedDepartments"],
+    queryFn: async () => {
+      try {
+        const response = await axios.get(
+          "api/company/get-company-data?field=selectedDepartments",
+        );
+        return Array.isArray(response.data?.selectedDepartments)
+          ? response.data.selectedDepartments
+          : [];
+      } catch (error) {
+        throw new Error("Error fetching selected departments");
+      }
+    },
+  });
 
   const { data: clientsData = [], isPending: isClientsDataPending } = useQuery({
     queryKey: ["clientsData"],
@@ -220,10 +360,41 @@ const AdminDashboard = () => {
     },
   });
 
+  const { data: holidayEvents = [] } = useQuery({
+    queryKey: ["admin-holiday-events"],
+    queryFn: async () => {
+      try {
+        const [holidaysResponse, eventsResponse] = await Promise.all([
+          axios.get("/api/events/get-holidays"),
+          axios.get("/api/events/get-events"),
+        ]);
+
+        const holidays = Array.isArray(holidaysResponse.data)
+          ? holidaysResponse.data.map((item) => ({
+              ...item,
+              type: item?.type || "holiday",
+            }))
+          : [];
+
+        const events = Array.isArray(eventsResponse.data)
+          ? eventsResponse.data.map((item) => ({
+              ...item,
+              type: item?.type || "event",
+            }))
+          : [];
+
+        return [...holidays, ...events];
+      } catch (error) {
+        console.error("Error fetching holiday and events data:", error);
+        return [];
+      }
+    },
+  });
+
   const hrBarData = transformBudgetData(!isHrFinanceLoading ? hrFinance : []);
   const totalExpense = hrBarData?.projectedBudget?.reduce(
     (sum, val) => sum + (val || 0),
-    0
+    0,
   );
 
   const { data: tasks = [], isLoading: isTasksLoading } = useQuery({
@@ -231,7 +402,7 @@ const AdminDashboard = () => {
     queryFn: async () => {
       try {
         const response = await axios.get(
-          `/api/tasks/get-tasks?dept=${department._id}`
+          `/api/tasks/get-tasks?dept=${department._id}`,
         );
         return response.data;
       } catch (error) {
@@ -240,183 +411,725 @@ const AdminDashboard = () => {
     },
   });
 
-  const { data: weeklySchedule = [], isLoading: isWeeklyScheduleLoading } =
+  const { data: tickets = [], isLoading: isTicketsLoading } = useQuery({
+    queryKey: ["admin-ticket-issues", department?._id],
+    queryFn: async () => {
+      try {
+        const response = await axios.get(
+          `/api/tickets/department-tickets/${department._id}`,
+        );
+        return Array.isArray(response.data) ? response.data : [];
+      } catch (error) {
+        throw new Error("Error fetching department tickets");
+      }
+    },
+    enabled: !!department?._id,
+  });
+
+  const { data: tasksSummary = [], isLoading: isTasksSummaryLoading } =
     useQuery({
-      queryKey: ["weeklySchedule"],
+      queryKey: ["tasks-summary"],
       queryFn: async () => {
         try {
-          const response = await axios.get(
-            `/api/weekly-unit/fetch-weekly-unit/${department._id}`
-          );
-
-          console.log("weekly schedule", weeklySchedule.length);
+          const response = await axios.get("/api/tasks/get-tasks-summary");
           return response.data;
         } catch (error) {
-          throw new Error("Error fetching data");
+          throw new Error("Error fetching tasks summary");
+        }
+      },
+      enabled: hasMultipleDepartments,
+    });
+
+  const { data: weeklySchedule = [], isLoading: isWeeklyScheduleLoading } =
+    useQuery({
+      queryKey: ["weeklySchedule", department?._id],
+      queryFn: async () => {
+        if (!department?._id) {
+          return [];
+        }
+
+        try {
+          const response = await axios.get(
+            `/api/administration/fetch-weekly-unit/${department._id}`,
+          );
+          return response.data;
+        } catch (error) {
+          console.error("Error fetching weekly schedule:", error);
+          return [];
+        }
+      },
+      enabled: !!department?._id,
+    });
+
+  const { data: houseKeepingMembers = [], isLoading: isHouseKeepingLoading } =
+    useQuery({
+      queryKey: ["housekeeping-staff"],
+      queryFn: async () => {
+        try {
+          const response = await axios.get("/api/company/housekeeping-members");
+          return Array.isArray(response.data) ? response.data : [];
+        } catch (error) {
+          console.error("Error fetching housekeeping members:", error);
+          return [];
         }
       },
     });
 
-  const expenseRawSeries = useMemo(() => {
-    // Initialize monthly buckets
-    const months = Array.from({ length: 12 }, (_, index) =>
-      dayjs(`2024-04-01`).add(index, "month").format("MMM")
-    );
-
-    const fyData = {
-      "FY 2024-25": Array(12).fill(0),
-      "FY 2025-26": Array(12).fill(0),
-    };
-
-    hrFinance.forEach((item) => {
-      const date = dayjs(item.dueDate);
-      const year = date.year();
-      const monthIndex = date.month(); // 0 = Jan, 11 = Dec
-
-      if (year === 2024 && monthIndex >= 3) {
-        // Apr 2024 to Dec 2024 (month 3 to 11)
-        fyData["FY 2024-25"][monthIndex - 3] += item.actualAmount || 0;
-      } else if (year === 2025) {
-        if (monthIndex <= 2) {
-          // Jan to Mar 2025 (months 0–2)
-          fyData["FY 2024-25"][monthIndex + 9] += item.actualAmount || 0;
-        } else if (monthIndex >= 3) {
-          // Apr 2025 to Dec 2025 (months 3–11)
-          fyData["FY 2025-26"][monthIndex - 3] += item.actualAmount || 0;
-        }
-      } else if (year === 2026 && monthIndex <= 2) {
-        // Jan to Mar 2026
-        fyData["FY 2025-26"][monthIndex + 9] += item.actualAmount || 0;
+  const {
+    data: houseKeepingAssignments = [],
+    isLoading: isHouseKeepingAssignmentsLoading,
+  } = useQuery({
+    queryKey: ["housekeeping-assignments"],
+    queryFn: async () => {
+      try {
+        const response = await axios.get("/api/company/get-housekeeping-schedule");
+        return Array.isArray(response.data?.data) ? response.data.data : [];
+      } catch (error) {
+        console.error("Error fetching housekeeping assignments:", error);
+        return [];
       }
-    });
+    },
+  });
 
-    return [
-      {
-        name: "total",
-        group: "FY 2024-25",
-        data: fyData["FY 2024-25"],
-      },
-      {
-        name: "total",
-        group: "FY 2025-26",
-        data: fyData["FY 2025-26"],
-      },
-    ];
-  }, [hrFinance]);
+  const adminExpenseByFiscalYear = useMemo(() => {
+  const fyData = {};
+
+  (hrFinance || []).forEach((item) => {
+    if (!item?.dueDate || !dayjs(item.dueDate).isValid()) {
+      return;
+    }
+
+    const fiscalYearStart = getFiscalYearStart(item.dueDate);
+    const fiscalYearLabel = formatFiscalYear(fiscalYearStart);
+    const monthIndex = getFiscalMonthIndex(item.dueDate);
+
+    if (!fyData[fiscalYearLabel]) {
+      fyData[fiscalYearLabel] = {
+        actual: Array(12).fill(0),
+        projected: Array(12).fill(0),
+      };
+    }
+
+    const actualAmount = getAmount(item?.actualAmount);
+    const projectedAmount = getAmount(item?.projectedAmount);
+
+    fyData[fiscalYearLabel].actual[monthIndex] += actualAmount;
+    fyData[fiscalYearLabel].projected[monthIndex] += projectedAmount;
+  });
+
+  if (!fyData[currentFiscalYear]) {
+    fyData[currentFiscalYear] = {
+      actual: Array(12).fill(0),
+      projected: Array(12).fill(0),
+    };
+  }
+
+  return fyData;
+}, [hrFinance, currentFiscalYear]);
+
+const expenseRawSeries = useMemo(() => {
+  return Object.entries(adminExpenseByFiscalYear)
+    .sort(([fyA], [fyB]) => {
+      const startA = Number(fyA.slice(3, 7));
+      const startB = Number(fyB.slice(3, 7));
+
+      return startA - startB;
+    })
+    .flatMap(([fiscalYear, data]) => {
+     
+      const actualForGraph = data.actual.map((actualAmount) =>
+        hiddenAdminExpenseSeries.actual ? 0 : actualAmount,
+      );
+
+      const projectedForGraph = data.projected.map(
+        (projectedAmount, monthIndex) => {
+         
+          if (hiddenAdminExpenseSeries.projected) {
+            return 0;
+          }
+
+         
+          if (hiddenAdminExpenseSeries.actual) {
+            return projectedAmount;
+          }
+
+          
+          const actualAmount = data.actual[monthIndex] || 0;
+
+          return actualAmount > 0 ? 0 : projectedAmount;
+        },
+      );
+
+      return [
+        {
+          name: "Actual Amount",
+          group: fiscalYear,
+          data: actualForGraph,
+        },
+        {
+          name: "Projected Amount",
+          group: fiscalYear,
+          data: projectedForGraph,
+        },
+      ];
+    });
+}, [
+  adminExpenseByFiscalYear,
+  hiddenAdminExpenseSeries.actual,
+  hiddenAdminExpenseSeries.projected,
+]);
+
+// const roundedMax = useMemo(() => {
+//   const fiscalYears = [
+//     ...new Set(expenseRawSeries.map((series) => series.group)),
+//   ];
+
+//   const maxValue = fiscalYears.reduce((max, fiscalYear) => {
+//     const actualSeries = expenseRawSeries.find(
+//       (series) =>
+//         series.group === fiscalYear && series.name === "Actual Amount"
+//     );
+
+//     const projectedSeries = expenseRawSeries.find(
+//       (series) =>
+//         series.group === fiscalYear && series.name === "Projected Amount"
+//     );
+
+//     const monthlyMax = Array.from({ length: 12 }, (_, index) => {
+//       const actual = actualSeries?.data?.[index] || 0;
+//       const projectedBalance = projectedSeries?.data?.[index] || 0;
+
+//       return actual + projectedBalance;
+//     });
+
+//     return Math.max(max, ...monthlyMax);
+//   }, 0);
+
+//   return Math.ceil((maxValue + 100000) / 100000) * 100000;
+// }, [expenseRawSeries]);
+const { roundedMax, tickAmount } = useMemo(() => {
+ 
+  const selectedYearSeries = expenseRawSeries.filter(
+    (series) => series.group === selectedFiscalYear,
+  );
+
+ 
+  const monthlyTotals = Array.from(
+    { length: 12 },
+    (_, monthIndex) =>
+      selectedYearSeries.reduce(
+        (total, series) =>
+          total + Number(series?.data?.[monthIndex] || 0),
+        0,
+      ),
+  );
+
+  const maxExpenseValue = Math.max(...monthlyTotals, 0);
+
+  if (maxExpenseValue <= 0) {
+    return {
+      roundedMax: 10000,
+      tickAmount: 5,
+    };
+  }
+
+ 
+  const bufferedMax = maxExpenseValue * 1.1;
+  const roughStep = bufferedMax / 6;
+
+  const magnitude =
+    10 ** Math.floor(Math.log10(roughStep));
+
+  const normalizedStep = roughStep / magnitude;
+
+  let step = magnitude;
+
+  if (normalizedStep <= 1) {
+    step = magnitude;
+  } else if (normalizedStep <= 2) {
+    step = 2 * magnitude;
+  } else if (normalizedStep <= 5) {
+    step = 5 * magnitude;
+  } else {
+    step = 10 * magnitude;
+  }
+
+  const safeRoundedMax =
+    Math.ceil(bufferedMax / step) * step;
+
+  return {
+    roundedMax: safeRoundedMax,
+    tickAmount: Math.max(
+      Math.round(safeRoundedMax / step),
+      1,
+    ),
+  };
+}, [expenseRawSeries, selectedFiscalYear]);
 
   const expenseOptions = {
-    chart: {
-      type: "bar",
-      toolbar: { show: false },
+  chart: {
+    type: "bar",
+    toolbar: { show: false },
+    stacked: true,
+    fontFamily: "Poppins-Regular, Arial, sans-serif",
+    events: {
+  legendClick: (_chartContext, seriesIndex) => {
+    setHiddenAdminExpenseSeries((currentState) => {
+      // Series index 0 = Actual Amount
+      if (seriesIndex === 0) {
+        return {
+          ...currentState,
+          actual: !currentState.actual,
+        };
+      }
 
-      stacked: false,
+      // Series index 1 = Projected Amount
+      if (seriesIndex === 1) {
+        return {
+          ...currentState,
+          projected: !currentState.projected,
+        };
+      }
+
+      return currentState;
+    });
+  },
+
+ 
+  dataPointSelection: () => {
+    navigate("finance/budget");
+  },
+},
+  },
+  colors: ["#54C4A7", "#c4c4c4"],
+  plotOptions: {
+    bar: {
+      horizontal: false,
+      columnWidth: "40%",
+      borderRadius: 5,
+      borderRadiusApplication: "end",
+      dataLabels: {
+        position: "top",
+        total: {
+          enabled: false,
+        },
+      },
+    },
+  },
+  dataLabels: {
+    enabled: true,
+    formatter: (val, opts) => {
+  if (!val || Number(val) <= 0) {
+    return "";
+  }
+
+  const seriesName =
+    opts?.w?.globals?.seriesNames?.[opts.seriesIndex];
+
+  const actualSeries =
+    opts?.w?.globals?.initialSeries?.find(
+      (item) => item.name === "Actual Amount",
+    );
+
+  const projectedSeries =
+    opts?.w?.globals?.initialSeries?.find(
+      (item) => item.name === "Projected Amount",
+    );
+
+  const actualAmount =
+    Number(
+      actualSeries?.data?.[opts.dataPointIndex] || 0,
+    );
+
+  const projectedAmount =
+    Number(
+      projectedSeries?.data?.[opts.dataPointIndex] || 0,
+    );
+
+  if (seriesName === "Projected Amount") {
+    return inrFormat(
+      actualAmount + projectedAmount,
+    );
+  }
+
+  if (
+    seriesName === "Actual Amount" &&
+    projectedAmount === 0
+  ) {
+    return inrFormat(actualAmount);
+  }
+
+  return "";
+},
+    style: {
+      fontSize: "12px",
+      colors: ["#000"],
+    },
+    offsetY: -22,
+  },
+ xaxis: {
+  categories: fiscalMonths,
+  title: {
+    text: "  ",
+  },
+  crosshairs: {
+    show: false,
+  },
+},
+ yaxis: {
+  min: 0,
+  max: roundedMax,
+  tickAmount,
+  forceNiceScale: false,
+
+  title: {
+    text: "Amount In Lakhs (INR)",
+  },
+
+  labels: {
+    minWidth: 25,
+    maxWidth: 35,
+
+    formatter: (value) => {
+      const axisValue =
+        Number(value || 0) / 10000;
+
+      if (Number.isInteger(axisValue)) {
+        return String(axisValue);
+      }
+
+      return Number(
+        axisValue.toFixed(2),
+      ).toString();
+    },
+
+    style: {
       fontFamily: "Poppins-Regular, Arial, sans-serif",
-      events: {
-        dataPointSelection: () => {
-          navigate("finance/budget");
-        },
+      fontSize: "11px",
+    },
+  },
+},
+  fill: {
+    opacity: 1,
+  },
+  states: {
+    hover: {
+      filter: {
+        type: "none",
       },
     },
-    colors: ["#54C4A7", "#EB5C45"],
-    plotOptions: {
-      bar: {
-        horizontal: false,
-        columnWidth: "40%",
-        borderRadius: 5,
-        borderRadiusApplication: "none",
-        dataLabels: {
-          position: "top",
-        },
+    active: {
+      filter: {
+        type: "none",
       },
     },
-    dataLabels: {
-      enabled: true,
-      formatter: (val) => {
-        return inrFormat(val);
-      },
+  },
+ legend: {
+  show: true,
+  position: "top",
 
-      style: {
-        fontSize: "12px",
-        colors: ["#000"],
-      },
-      offsetY: -22,
-    },
+ 
+  onItemClick: {
+    toggleDataSeries: false,
+  },
 
-    yaxis: {
-      min: 0,
-      max: roundedMax,
-      tickAmount: 4,
-      title: { text: "Amount In Lakhs (INR)" },
-      labels: {
-        formatter: (val) => `${val / 100000}`,
-      },
-    },
-    fill: {
-      opacity: 1,
-    },
-    legend: {
-      show: true,
-      position: "top",
-    },
+  labels: {
+    colors: [
+      // Actual legend text
+      hiddenAdminExpenseSeries.actual
+        ? "#D5D5D5"
+        : "#4B4B4B",
 
-    tooltip: {
-      enabled: false,
-      custom: function ({ series, seriesIndex, dataPointIndex }) {
-        const rawData = expenseRawSeries[seriesIndex]?.data[dataPointIndex];
-        // return `<div style="padding: 8px; font-family: Poppins, sans-serif;">
-        //       HR Expense: INR ${rawData.toLocaleString("en-IN")}
-        //     </div>`;
-        return `
-              <div style="padding: 8px; font-size: 13px; font-family: Poppins, sans-serif">
-          
-                <div style="display: flex; align-items: center; justify-content: space-between; background-color: #d7fff4; color: #00936c; padding: 6px 8px; border-radius: 4px; margin-bottom: 4px;">
-                  <div><strong>Finance Expense:</strong></div>
-                  <div style="width: 10px;"></div>
-               <div style="text-align: left;">INR ${Math.round(
-                 rawData
-               ).toLocaleString("en-IN")}</div>
-  
-                </div>
-       
-              </div>
-            `;
-      },
-    },
-  };
+      // Projected legend text
+      hiddenAdminExpenseSeries.projected
+        ? "#D5D5D5"
+        : "#4B4B4B",
+    ],
+  },
+
+  markers: {
+    fillColors: [
+      // Actual marker
+      hiddenAdminExpenseSeries.actual
+        ? "#E1F5EF"
+        : "#54C4A7",
+
+      // Projected marker
+      hiddenAdminExpenseSeries.projected
+        ? "#E2E2E2"
+        : "#C4C4C4",
+    ],
+  },
+},
+  tooltip: {
+  enabled: true,
+  shared: true,
+  intersect: false,
+
+  custom: function ({ dataPointIndex, w }) {
+    const selectedYearData =
+      adminExpenseByFiscalYear?.[selectedFiscalYear];
+
+    const actualAmount =
+      selectedYearData?.actual?.[dataPointIndex] || 0;
+
+    const projectedAmount =
+      selectedYearData?.projected?.[dataPointIndex] || 0;
+
+    const monthLabel =
+      w?.globals?.labels?.[dataPointIndex] ||
+      fiscalMonths[dataPointIndex] ||
+      `Month ${dataPointIndex + 1}`;
+
+    return `
+      <div
+        class="apexcharts-tooltip-title"
+        style="
+          font-family: Poppins-Regular;
+          font-size: 12px;
+          padding: 6px 10px;
+          margin-bottom: 0;
+        "
+      >
+        ${monthLabel}
+      </div>
+
+      <div
+        style="
+          padding: 8px 10px;
+          font-family: Poppins-Regular;
+          font-size: 12px;
+          background: #ffffff;
+          min-width: 230px;
+        "
+      >
+        <div
+          style="
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            margin-bottom: 7px;
+            white-space: nowrap;
+          "
+        >
+          <div
+            style="
+              display: flex;
+              align-items: center;
+              gap: 6px;
+            "
+          >
+            <span
+              style="
+                width: 12px;
+                height: 12px;
+                border-radius: 50%;
+                background: #54C4A7;
+                display: inline-block;
+              "
+            ></span>
+
+            <span>Actual Amount:</span>
+          </div>
+
+          <span style="font-weight: 600;">
+            INR ${Math.round(actualAmount).toLocaleString("en-IN")}
+          </span>
+        </div>
+
+        <div
+          style="
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            white-space: nowrap;
+          "
+        >
+          <div
+            style="
+              display: flex;
+              align-items: center;
+              gap: 6px;
+            "
+          >
+            <span
+              style="
+                width: 12px;
+                height: 12px;
+                border-radius: 50%;
+                background: #C4C4C4;
+                display: inline-block;
+              "
+            ></span>
+
+            <span>Projected Amount:</span>
+          </div>
+
+          <span style="font-weight: 600;">
+            INR ${Math.round(projectedAmount).toLocaleString("en-IN")}
+          </span>
+        </div>
+      </div>
+    `;
+  },
+},
+};
 
   const budgetBar = useMemo(() => {
     if (isHrFinanceLoading || !Array.isArray(hrFinance)) return null;
     return transformBudgetData(isHrFinanceLoading ? [] : hrFinance);
   }, [isHrFinanceLoading, hrFinance]);
 
-  const totalUtilised =
-    budgetBar?.[selectedFiscalYear]?.utilisedBudget?.reduce(
-      (acc, val) => acc + val,
-      0
-    ) || 0;
+const selectedAdminActualAmounts = useMemo(() => {
+  return (
+    adminExpenseByFiscalYear?.[selectedFiscalYear]?.actual ||
+    Array(12).fill(0)
+  );
+}, [adminExpenseByFiscalYear, selectedFiscalYear]);
+
+const totalUtilised = useMemo(() => {
+  return selectedAdminActualAmounts.reduce(
+    (sum, value) => sum + (Number(value) || 0),
+    0,
+  );
+}, [selectedAdminActualAmounts]);
   useEffect(() => {
     setIsSidebarOpen(true);
   }, []); // Empty dependency array ensures this runs once on mount
 
-  const { setIsSidebarOpen } = useSidebar();
+  //const { setIsSidebarOpen } = useSidebar();
 
   //-----------------------------------------------------------------------------------------------------------------//
-  const taskData = [
-    { unit: "ST-701A", tasks: 25 },
-    { unit: "ST-701B", tasks: 30 },
-    { unit: "ST-701A", tasks: 25 },
-    { unit: "ST-701B", tasks: 30 },
-    { unit: "ST-701A", tasks: 25 },
-    { unit: "ST-701B", tasks: 30 },
-    { unit: "ST-701A", tasks: 25 },
-    { unit: "ST-701B", tasks: 30 },
-  ];
+  //   const accessibleDepartmentTasks = useMemo(() => {
+  //   if (hasMultipleDepartments) {
+  //     if (isTasksSummaryLoading) return [];
+
+  //     return tasksSummary
+  //       .filter((dept) => {
+  //         const deptId =
+  //           typeof dept?.department === "object"
+  //             ? dept?.department?._id
+  //             : dept?.department;
+  //         const deptName =
+  //           typeof dept?.department === "object"
+  //             ? dept?.department?.name
+  //             : dept?.department;
+  //         const normalizedName =
+  //           typeof deptName === "string" ? deptName.toLowerCase() : "";
+
+  //         return (
+  //           (deptId && departmentIds.includes(deptId)) ||
+  //           (normalizedName && departmentNames.includes(normalizedName))
+  //         );
+  //       })
+  //       .flatMap((dept) =>
+  //         Array.isArray(dept?.tasks)
+  //           ? dept.tasks.filter((task) => task?.taskType === "Department")
+  //           : [],
+  //       );
+  //   }
+
+  //   return tasks.filter((task) => task?.taskType === "Department");
+  // }, [
+  //   departmentIds,
+  //   departmentNames,
+  //   hasMultipleDepartments,
+  //   isTasksSummaryLoading,
+  //   tasks,
+  //   tasksSummary,
+  // ]);
+
+  // const unitWiseTaskData = useMemo(() => {
+  //   const groupedTasks = accessibleDepartmentTasks.reduce((acc, task) => {
+  //     const unitNo = task?.location?.unitNo?.trim();
+
+  //     if (!unitNo || task?.status === "Completed") {
+  //       return acc;
+  //     }
+
+  //     if (!acc[unitNo]) {
+  //       acc[unitNo] = {
+  //         unit: unitNo,
+  //         tasks: 0,
+  //       };
+  //     }
+
+  //     acc[unitNo].tasks += 1;
+  //     return acc;
+  //   }, {});
+
+  //   return Object.values(groupedTasks).sort((a, b) => b.tasks - a.tasks);
+  // }, [accessibleDepartmentTasks]);
+
+  // const totalUnitWiseTask = unitWiseTaskData.reduce(
+  //   (sum, item) => sum + item.tasks,
+  //   0,
+  // );
+  // const unitWisePieData = unitWiseTaskData.map((item) => ({
+  //   label: `${item.unit} (${((item.tasks / totalUnitWiseTask) * 100).toFixed(
+  //     1,
+  //   )}%)`,
+  //   value: item.tasks,
+  // }));
+
+  // const unitPieChartOptions = {
+  //   labels: unitWisePieData.map((item) => item.label),
+  //   chart: {
+  //     fontFamily: "Poppins-Regular",
+  //     events: {
+  //       dataPointSelection: () => {
+  //          navigate("/app/tasks/department-tasks");
+  //       },
+  //     },
+  //   },
+  //   toolTip: {
+  //     y: {
+  //       formatter: (val) => `${((val / totalUnitWiseTask) * 100).toFixed(1)}%`,
+  //     },
+  //   },
+  // };
+  const managerByDepartmentName = useMemo(() => {
+    const map = new Map();
+
+    selectedDepartments.forEach((item) => {
+      const departmentName = item?.department?.name?.trim();
+      if (departmentName) {
+        map.set(departmentName.toLowerCase(), item?.admin || "Unassigned");
+      }
+    });
+
+    return map;
+  }, [selectedDepartments]);
+
+  const taskData = useMemo(() => {
+    const pendingDepartmentTasks = tasks.filter(
+      (task) => task?.taskType === "Department" && task?.status === "Pending",
+    );
+
+    const groupedTasks = pendingDepartmentTasks.reduce((acc, task) => {
+      const unitName = task?.location?.unitNo || "Unassigned";
+
+      if (!acc[unitName]) {
+        acc[unitName] = {
+          unit: unitName,
+          tasks: 0,
+        };
+      }
+
+      acc[unitName].tasks += 1;
+      return acc;
+    }, {});
+
+    return Object.values(groupedTasks).sort((a, b) =>
+      a.unit.localeCompare(b.unit, undefined, { numeric: true }),
+    );
+  }, [tasks]);
 
   const totalUnitWiseTask = taskData.reduce((sum, item) => sum + item.tasks, 0);
   const unitWisePieData = taskData.map((item) => ({
-    label: `${item.unit} (${((item.tasks / totalUnitWiseTask) * 100).toFixed(
-      1
-    )}%)`,
+    label: item.unit,
     value: item.tasks,
   }));
 
@@ -430,94 +1143,154 @@ const AdminDashboard = () => {
         },
       },
     },
-    toolTip: {
+    tooltip: {
       y: {
-        formatter: (val) => `${((val / totalUnitWiseTask) * 100).toFixed(1)}%`,
+        formatter: (val) => `${val} Due tasks`,
       },
     },
   };
 
-  //-----------------------------------------------------------------------------------------------------------------//
-  const executiveTasks = [
-    { name: "Mac Parkar", tasks: 30 },
-    { name: "Anne Fernandes", tasks: 10 },
-    { name: "Naaz Bavannawar", tasks: 20 },
-  ];
 
-  const executiveTotalTasks = executiveTasks.reduce(
-    (sum, user) => sum + user.tasks,
-    0
-  );
-  const pieExecutiveData = executiveTasks.map((user) =>
-    parseFloat(((user.tasks / executiveTotalTasks) * 100).toFixed(1))
-  );
+  //-----------------------------------------------------------------------------------------------------------------//
+  const executiveTasks = useMemo(() => {
+    const pendingTaskCollection = hasMultipleDepartments && !isSuperAdminView
+      ? tasksSummary
+        .filter((dept) => {
+          const deptName =
+            typeof dept?.department === "object"
+              ? dept?.department?.name
+              : dept?.department;
+          const normalizedName =
+            typeof deptName === "string" ? deptName.toLowerCase() : "";
+          const isSalesDepartment = normalizedName.includes("sales");
+
+          return (
+            !isSalesDepartment &&
+            (!departmentNames.length ||
+              departmentNames.includes(normalizedName))
+          );
+        })
+        .flatMap((dept) =>
+          Array.isArray(dept?.tasks)
+            ? dept.tasks
+              .filter(
+                (task) =>
+                  task?.taskType === "Department" &&
+                  task?.status === "Pending",
+              )
+              .map((task) => ({
+                ...task,
+                department:
+                  typeof task?.department === "object"
+                    ? task?.department?.name
+                    : task?.department ||
+                    (typeof dept?.department === "object"
+                      ? dept?.department?.name
+                      : dept?.department),
+              }))
+            : [],
+        )
+      : tasks.filter(
+        (task) =>
+          task?.taskType === "Department" && task?.status === "Pending",
+      );
+
+    const groupedTasks = pendingTaskCollection.reduce((acc, task) => {
+      const departmentName =
+        typeof task?.department === "object"
+          ? task?.department?.name
+          : task?.department || department?.name || "Unknown Department";
+
+      if (departmentName?.toLowerCase?.().includes("sales")) {
+        return acc;
+      }
+      const managerName =
+        managerByDepartmentName.get(departmentName.toLowerCase()) ||
+        "Unassigned";
+      if (!acc[managerName]) {
+        acc[managerName] = {
+          name: managerName,
+          tasks: 0,
+        };
+      }
+
+      acc[managerName].tasks += 1;
+      return acc;
+    }, {});
+
+    return Object.values(groupedTasks).sort((a, b) => b.tasks - a.tasks);
+  }, [
+    department?.name,
+    departmentNames,
+    hasMultipleDepartments,
+    isSuperAdminView,
+    managerByDepartmentName,
+    tasks,
+    tasksSummary,
+  ]);
+  // const executiveTotalTasks = executiveTasks.reduce(
+  //   (sum, user) => sum + user.tasks,
+  //   0,
+  // );
+  //  const pieExecutiveData =
+  //   executiveTotalTasks > 0
+  //     ? executiveTasks.map((user) =>
+  //         parseFloat(((user.tasks / executiveTotalTasks) * 100).toFixed(1)),
+  //       )
+  //     : [];
   const executiveTasksCount = executiveTasks.map((user) => user.tasks);
   const labels = executiveTasks.map((user) => user.name);
-  const colors = ["#FF5733", "#FFC300", "#28B463"];
-  //-----------------------------------------------------------------------------------------------------------------//
-  const companyWiseDesk = [
-    { company: "Zomato", desks: "12" },
-    { company: "SquadStack", desks: "10" },
-    { company: "Zimetrics", desks: "15" },
-    { company: "Others", desks: "16" },
+  const currentDepartmentAdminName =
+    managerByDepartmentName.get(department?.name?.toLowerCase?.()) ||
+    "—";
+  const colors = [
+    "#FF5733",
+    "#FFC300",
+    "#28B463",
+    "#5B6CFF",
+    "#9B59B6",
+    "#17A2B8",
+    "#E67E22",
+    "#E91E63",
   ];
-  const totalCompanyDesks = companyWiseDesk.reduce(
-    (sum, item) => sum + item.desks,
-    0
-  );
-  const pieCompanyWiseDeskData = companyWiseDesk.map((item) => ({
-    label: `${item.company} (${((item.desks / totalCompanyDesks) * 100).toFixed(
-      1
-    )}%)`,
-    value: item.desks,
-  }));
-  const pieCompanyWiseDeskOptions = {
-    labels: companyWiseDesk.map((item) => item.company),
-    chart: {
-      fontFamily: "Poppins-Regular",
-      events: {
-        dataPointSelection: () => {
-          navigate(
-            "/app/dashboard/admin-dashboard/client-members/client-members-data"
-          );
-        },
-      },
-    },
-    stroke: {
-      show: true,
-      width: 6, // Increase for more "gap"
-      colors: ["#ffffff"], // Or match background color
-    },
-    toolTip: {
-      y: {
-        formatter: (val) => `${((val / totalCompanyDesks) * 100).toFixed(1)}%`,
-      },
-    },
-  };
   //-----------------------------------------------------------------------------------------------------------------//
-  const genderData = [
-    { gender: "Male", count: "45" },
-    { gender: "Female", count: "40" },
-  ];
-  const totalGenderCount = genderData.reduce(
-    (sum, item) => sum + item.count,
-    0
+  // India - Wise Client Members
+  const clientMembersData = isClientsDataPending
+    ? []
+    : clientsData
+      .filter((item) => item.members?.length > 0)
+      .map((item) => item.members)
+      .flat();
+
+  const genderCounts = clientMembersData.reduce(
+    (acc, member) => {
+      const value = String(member?.gender || "")
+        .trim()
+        .toLowerCase();
+
+      if (value.startsWith("m")) acc.Male += 1;
+      else if (value.startsWith("f")) acc.Female += 1;
+
+      return acc;
+    },
+    { Male: 0, Female: 0 },
   );
-  const pieGenderData = genderData.map((item) => ({
-    label: `${item.gender} ${((item.count / totalGenderCount) * 100).toFixed(
-      1
-    )}%`,
-    value: item.count,
-  }));
+
+  const pieGenderData = [
+    { label: "Male", value: genderCounts.Male || 0 },
+    { label: "Female", value: genderCounts.Female || 0 },
+  ];
+
   const pieGenderOptions = {
-    labels: genderData.map((item) => item.gender),
+    labels: pieGenderData.map((item) => item.label),
     chart: {
+      type: "pie",
       fontFamily: "Poppins-Regular",
       events: {
         dataPointSelection: () => {
-          navigate(
-            "/app/dashboard/admin-dashboard/client-members/client-members-data"
-          );
+          // navigate(
+          //   "/app/dashboard/admin-dashboard/client-members/client-members-data",
+          // );
         },
       },
     },
@@ -528,9 +1301,83 @@ const AdminDashboard = () => {
     },
     tooltip: {
       y: {
-        formatter: (val) => `${val}`,
+        formatter: (val) => `${val} Members`,
       },
     },
+    legend: {
+      position: "right",
+    },
+    colors: ["#1E3D73", "#54C4A7"],
+  };
+  //-----------------------------------------------------------------------------------------------------------------//
+  function getLocationWiseData(data) {
+    const locationMap = {};
+
+    // Count companies per state from coworkingclient table.
+    data.forEach((client) => {
+      const state =
+        client?.hostate?.trim() || client?.hoState?.trim() || "Unknown";
+      locationMap[state] = (locationMap[state] || 0) + 1;
+    });
+
+    const sortedLocations = Object.entries(locationMap)
+      .map(([state, count]) => ({ label: state, value: count }))
+      .sort((a, b) => b.value - a.value);
+
+    const topStates = sortedLocations.slice(0, 6);
+    const othersCount = sortedLocations
+      .slice(6)
+      .reduce((sum, item) => sum + item.value, 0);
+
+    if (othersCount > 0) {
+      topStates.push({ label: "Others", value: othersCount });
+    }
+
+    return topStates;
+  }
+
+  const locationWiseData = getLocationWiseData(clientsData);
+  const locationChartColors = [
+    "#1E3D73",
+    "#FF6B6B",
+    "#4ECDC4",
+    "#F7B801",
+    "#8E44AD",
+    "#2ECC71",
+    "#FF8C42",
+  ];
+
+  const locationPieChartOptions = {
+    chart: {
+      type: "pie",
+      fontFamily: "Poppins-Regular",
+    },
+    labels: locationWiseData.map((item) => item.label),
+    tooltip: {
+      fillSeriesColor: false,
+      custom: ({ series, seriesIndex, w }) => {
+        const state = w?.globals?.labels?.[seriesIndex] || "Unknown";
+        const companies = series?.[seriesIndex] ?? 0;
+
+        const color =
+          w?.globals?.colors?.[seriesIndex] ||
+          locationChartColors[seriesIndex % locationChartColors.length];
+
+        return `<div style="
+      padding:8px 12px;
+      font-size:12px;
+      background:${color};
+      color:#fff;
+      border-radius:6px;
+    ">
+      ${state}: ${companies} companies
+    </div>`;
+      },
+    },
+    legend: {
+      position: "right",
+    },
+    colors: locationChartColors,
   };
   //-----------------------------------------------------------------------------------------------------------------//
   const houseKeepingMemberColumns = [
@@ -544,8 +1391,8 @@ const AdminDashboard = () => {
   const upcomingEventsColumns = [
     { id: "id", label: "Sr No", align: "left" },
     { id: "event", label: "Event", align: "left" },
+    { id: "type", label: "Type", align: "left" },
     { id: "date", label: "Date", align: "left" },
-    { id: "location", label: "Location", align: "left" },
   ];
 
   const clientMemberBirthdaysColumns = [
@@ -556,8 +1403,35 @@ const AdminDashboard = () => {
     { id: "company", label: "Company", align: "left" },
   ];
 
-  const today = dayjs.utc().startOf("day");
-  const cutOff = today.add(15, "day");
+  const today = dayjs().startOf("day");
+  const upcomingCutOff = today.add(15, "day");
+
+  const upcomingEvents = useMemo(
+    () =>
+      (holidayEvents || [])
+        .map((event) => {
+          const startDate = dayjs(event?.start).startOf("day");
+          const normalizedType = String(
+            event?.type || event?.extendedProps?.type || "",
+          )
+            .trim()
+            .toLowerCase();
+
+          return {
+            event: event?.title || "-",
+            type: normalizedType ? normalizedType.charAt(0).toUpperCase() + normalizedType.slice(1) : "-",
+            date: startDate.isValid() ? startDate.format("DD-MM-YYYY") : "-",
+            eventDate: startDate,
+            isUpcoming:
+              startDate.isValid() &&
+              !startDate.isBefore(today) &&
+              ["holiday", "event"].includes(normalizedType),
+          };
+        })
+        .filter((event) => event.isUpcoming)
+        .sort((a, b) => a.eventDate.diff(b.eventDate)),
+    [holidayEvents, today],
+  );
 
   const upcomingBirthdays = clientsData
     .flatMap((client) =>
@@ -581,10 +1455,10 @@ const AdminDashboard = () => {
             dateOfBirth: dob.format("DD-MM-YYYY"),
             upComingIn: upComingIn === 0 ? "Today" : `${upComingIn} days`,
             isUpcoming:
-              birthdayStart.isBefore(cutOff) &&
+              birthdayStart.isBefore(upcomingCutOff) &&
               birthdayStart.isAfter(today.subtract(1, "day")),
           };
-        })
+        }),
     )
     .filter((item) => item.isUpcoming);
 
@@ -629,10 +1503,10 @@ const AdminDashboard = () => {
           upComingInDays === 0
             ? "Today"
             : upComingInDays === 1
-            ? "Tomorrow"
-            : `${upComingInDays} days`,
+              ? "Tomorrow"
+              : `${upComingInDays} days`,
         isUpcoming:
-          anniversary.isBefore(cutOff) &&
+          anniversary.isBefore(upcomingCutOff) &&
           anniversary.isAfter(today.subtract(1, "day")),
       };
     })
@@ -669,6 +1543,92 @@ const AdminDashboard = () => {
     }));
   }, [weeklySchedule, isWeeklyScheduleLoading]);
 
+  const transformedHouseKeepingMembers = useMemo(() => {
+    if (
+      isHouseKeepingLoading ||
+      isHouseKeepingAssignmentsLoading ||
+      !Array.isArray(houseKeepingMembers)
+    ) {
+      return [];
+    }
+
+    const latestAssignmentsByMember = houseKeepingAssignments.reduce(
+      (acc, assignment) => {
+        const memberId = assignment?.housekeepingMember?._id;
+
+        if (!memberId) {
+          return acc;
+        }
+
+        const existingAssignment = acc[memberId];
+        const assignmentDate = dayjs(
+          assignment?.endDate || assignment?.startDate || assignment?.createdAt,
+        ).valueOf();
+        const existingDate = existingAssignment
+          ? dayjs(
+              existingAssignment?.endDate ||
+                existingAssignment?.startDate ||
+                existingAssignment?.createdAt,
+            ).valueOf()
+          : -Infinity;
+
+        if (!existingAssignment || assignmentDate > existingDate) {
+          acc[memberId] = assignment;
+        }
+
+        return acc;
+      },
+      {},
+    );
+
+    return houseKeepingMembers
+      .filter((member) => {
+        if (member?.isActive === false) {
+          return false;
+        }
+
+        const joiningDate = parseHouseKeepingJoiningDate(
+          member?.dateOfJoining || member?.createdAt,
+        );
+
+        return (
+          Boolean(joiningDate) &&
+          joiningDate.valueOf() >= currentMonthStart.valueOf() &&
+          joiningDate.valueOf() <= currentMonthEnd.valueOf()
+        );
+      })
+      .sort((a, b) => {
+        const firstDate = a?.dateOfJoining || a?.createdAt || 0;
+        const secondDate = b?.dateOfJoining || b?.createdAt || 0;
+        return dayjs(secondDate).valueOf() - dayjs(firstDate).valueOf();
+      })
+      .map((member, index) => {
+        const assignedUnit = latestAssignmentsByMember[member?._id]?.unit;
+
+        return {
+          id: index + 1,
+          name:
+            [member?.firstName, member?.lastName].filter(Boolean).join(" ") ||
+            "N/A",
+          dateOfJoin: member?.dateOfJoining
+            ? humanDate(member.dateOfJoining)
+            : member?.createdAt
+              ? humanDate(member.createdAt)
+              : "-",
+          building:
+            assignedUnit?.building?.buildingName || member?.workBuilding || "-",
+          unitNo: assignedUnit?.unitNo || member?.unitNo || "-",
+        };
+      });
+  }, [
+    currentMonthEnd,
+    currentMonthStart,
+    houseKeepingAssignments,
+    houseKeepingMembers,
+    isHouseKeepingAssignmentsLoading,
+    isHouseKeepingLoading,
+  ]);
+
   const transformedTasks = tasks.map((task, index) => {
     return {
       id: index + 1,
@@ -678,52 +1638,174 @@ const AdminDashboard = () => {
     };
   });
 
-  let simplifiedClientsPie = [];
+  const simplifiedClientsPie = useMemo(() => {
+    if (isClientsDataPending || !Array.isArray(clientsData)) {
+      return [];
+    }
 
-  if (!isClientsDataPending && Array.isArray(clientsData)) {
-    let otherTotalDesks = 0;
+    const sortedClients = clientsData
+      .map((item) => ({
+        companyName: item?.clientName || "Unknown",
+        totalDesks: Number(item?.totalDesks) || 0,
+      }))
+      .filter((item) => item.totalDesks > 0)
+      .sort((a, b) => b.totalDesks - a.totalDesks);
 
-    simplifiedClientsPie = clientsData.reduce((acc, item) => {
-      const { clientName: companyName, totalDesks } = item;
-
-      if (totalDesks < 15) {
-        otherTotalDesks += totalDesks;
-        return acc;
-      }
-
-      acc.push({ companyName, totalDesks });
-      return acc;
-    }, []);
+    const topCompanies = sortedClients.slice(0, 6);
+    const otherTotalDesks = sortedClients
+      .slice(6)
+      .reduce((sum, item) => sum + item.totalDesks, 0);
 
     if (otherTotalDesks > 0) {
-      simplifiedClientsPie.push({
-        companyName: "Other",
+      topCompanies.push({
+        companyName: "Others",
         totalDesks: otherTotalDesks,
       });
     }
-  }
+
+    return topCompanies;
+  }, [clientsData, isClientsDataPending]);
+
+  const totalDueTasks = useMemo(() => {
+    if (hasMultipleDepartments && !isSuperAdminView) {
+      if (isTasksSummaryLoading) return 0;
+
+      return tasksSummary
+        .filter((dept) => {
+          const deptId =
+            typeof dept?.department === "object"
+              ? dept?.department?._id
+              : dept?.department;
+          const deptName =
+            typeof dept?.department === "object"
+              ? dept?.department?.name
+              : dept?.department;
+          const normalizedName =
+            typeof deptName === "string" ? deptName.toLowerCase() : "";
+
+          return (
+            (deptId && departmentIds.includes(deptId)) ||
+            (normalizedName && departmentNames.includes(normalizedName))
+          );
+        })
+        .reduce((sum, dept) => {
+          const departmentTasks = Array.isArray(dept?.tasks)
+            ? dept.tasks.filter((task) => task?.taskType === "Department")
+            : [];
+          return sum + departmentTasks.length;
+        }, 0);
+    }
+
+    const departmentTasks = tasks.filter(
+      (task) => task?.taskType === "Department",
+    );
+    return departmentTasks.length || 0;
+  }, [
+    departmentIds,
+    departmentNames,
+    hasMultipleDepartments,
+    isSuperAdminView,
+    isTasksSummaryLoading,
+    tasks,
+    tasksSummary,
+  ]);
+
+  // if (!isClientsDataPending && Array.isArray(clientsData)) {
+  //   let otherTotalDesks = 0;
+
+  //   simplifiedClientsPie = clientsData.reduce((acc, item) => {
+  //     const { clientName: companyName, totalDesks } = item;
+
+  //     if (totalDesks < 15) {
+  //       otherTotalDesks += totalDesks;
+  //       return acc;
+  //     }
+
+  //     acc.push({ companyName, totalDesks });
+  //     return acc;
+  //   }, []);
+
+  //   if (otherTotalDesks > 0) {
+  //     simplifiedClientsPie.push({
+  //       companyName: "Other",
+  //       totalDesks: otherTotalDesks,
+  //     });
+  //   }
+  // }
 
   const totalClientsDesks = simplifiedClientsPie.reduce(
     (sum, item) => sum + item.totalDesks,
-    0
+    0,
   );
 
   const totalDeskPercent = simplifiedClientsPie.map((item) => ({
-    label: `${item.companyName} ${(
-      (item.totalDesks / totalClientsDesks) *
-      100
+    label: `${item.companyName} ${(totalClientsDesks > 0
+      ? (item.totalDesks / totalClientsDesks) * 100
+      : 0
     ).toFixed(1)}%`,
     value: item.totalDesks,
   }));
+  const biometricStatusSummary = useMemo(() => {
+    if (isClientsDataPending || !Array.isArray(clientsData)) {
+      return [];
+    }
+
+    const summary = clientsData
+      .flatMap((client) => client?.members || [])
+      .reduce(
+        (acc, member) => {
+          const biometricStatus = String(
+            member?.biometricStatus || "pending",
+          ).toLowerCase();
+
+          if (biometricStatus === "approved") {
+            acc.approved += 1;
+          } else if (biometricStatus === "revoke") {
+            acc.revoke += 1;
+          } else {
+            acc.pending += 1;
+          }
+
+          return acc;
+        },
+          { approved: 0, pending: 0, revoke: 0 },
+      );
+
+    return [
+      { label: `Approved ${summary.approved}`, value: summary.approved },
+      { label: `Pending ${summary.pending}`, value: summary.pending },
+      { label: `Revoke ${summary.revoke}`, value: summary.revoke },
+    ].filter((item) => item.value > 0);
+  }, [clientsData, isClientsDataPending]);
+
+  const biometricPieOptions = {
+    labels: biometricStatusSummary.map((item) => item.label),
+    chart: {
+      fontFamily: "Poppins-Regular",
+      toolbar: false,
+      events: {
+        dataPointSelection: () => {
+          // navigate("/app/dashboard/admin-dashboard/mix-bag/biometric-access");
+        },
+      },
+    },
+     colors: ["#0B7A3E", "#E69A00", "#B42318"],
+    legend: {
+      position: "bottom",
+    },
+    tooltip: {
+      y: {
+        formatter: (val) => `${val} Members`,
+      },
+    },
+  };
   const clientsDesksPieOptions = {
-    labels: simplifiedClientsPie.map((item) => {
-      const label = item?.companyName ? `${item.companyName}` : "Unknown";
-      return label.length > 10 ? label.slice(0, 15) + "..." : label;
-    }),
+    labels: simplifiedClientsPie.map((item) => item?.companyName || "Unknown"),
     chart: {
       fontFamily: "Poppins-Regular",
       toolbar: false,
     },
+
     colors: [
       "#0F172A", // deep navy blue
       "#1E293B", // dark slate blue
@@ -737,35 +1819,63 @@ const AdminDashboard = () => {
       "#4C51BF", // indigo-tinged blue
     ],
 
+
     tooltip: {
-      y: {
-        formatter: (val) => {
-          return `${val} Desks`; // Explicitly return the formatted value
-        },
+      custom: function ({ series, seriesIndex, w }) {
+        const name = w.globals.labels[seriesIndex] || "";
+        const value = series[seriesIndex];
+        const color = w.globals.colors[seriesIndex];
+
+        const shortName =
+          name.length > 15 ? name.slice(0, 15) + "..." : name;
+
+        return `<div style="
+                     padding:7px 10px;
+                     background:${color};
+                     border-radius:5px;
+                     font-size:13px;
+                   ">
+                     ${shortName}: ${value} Desks
+                   </div>`;
       },
     },
     legend: {
-      position: "right",
+      position: "bottom",
+      horizontalAlign: "center",
+      fontSize: "12px",
+      itemMargin: {
+        horizontal: 8,
+        vertical: 4,
+      },
+      markers: {
+        width: 12,
+        height: 12,
+      },
+      formatter: (seriesName) => {
+        return seriesName.length > 15
+          ? seriesName.slice(0, 15) + "..."
+          : seriesName;
+      },
     },
   };
 
   //--------------------ACCESS CONFIG-------------------------//
 
-  const departmentExpenseGraphConfig = [
-    {
-      key: PERMISSIONS.ADMIN_DEPARTMENT_EXPENSE.value,
-      data: hrFinance,
-      dateKey: "dueDate",
-      valueKey: "actualAmount",
-      responsiveResize: true,
-      chartOptions: expenseOptions,
-      graphTitle: `BIZ Nest ${department?.name?.toUpperCase()} DEPARTMENT EXPENSE`,
-    },
-  ];
-
+ const departmentExpenseGraphConfig = [
+  {
+    key: PERMISSIONS.ADMIN_DEPARTMENT_EXPENSE.value,
+    data: expenseRawSeries,
+    options: expenseOptions,
+    responsiveResize: true,
+    chartId: "bargraph-admin-expense",
+    title: `BIZ Nest ${department?.name?.toUpperCase()} DEPARTMENT EXPENSE`,
+    titleAmount: `INR ${Math.round(totalUtilised).toLocaleString("en-IN")}`,
+    onYearChange: setSelectedFiscalYear,
+  },
+];
   const allowedDeptExpenseGrpah = filterPermissions(
     departmentExpenseGraphConfig,
-    userPermissions
+    userPermissions,
   );
 
   //data cards
@@ -775,13 +1885,14 @@ const AdminDashboard = () => {
       key: PERMISSIONS.ADMIN_TOTAL_ADMIN_OFFICES.value,
       title: "Total",
       data: Array.isArray(unitsData) ? unitsData.length : 0,
-      description: "Admin Offices",
+      description: "Offices Under Management",
       route: "admin-offices",
     },
     {
       key: PERMISSIONS.ADMIN_MONTHLY_DUE_TASKS.value,
       title: "Total",
-      data: tasks.length || 0,
+      // data: tasks.length || 0,
+      data: totalDueTasks,
       description: "Monthly Due Tasks",
       route: "/app/tasks/department-tasks",
     },
@@ -795,14 +1906,15 @@ const AdminDashboard = () => {
     {
       key: PERMISSIONS.ADMIN_EXPENSE_PER_SQFT.value,
       title: "Total",
-      data: `INR ${inrFormat(totalOverallExpense / totalSqFt)}`,
+      // data: `INR ${inrFormat(totalOverallExpense / totalSqFt)}`,
+      data: `INR ${inrFormat(expensePerSqFtTotals.perSqFtExpense)}`,
       description: "Expense Per Sq. Ft.",
       route: "per-sq-ft-expense",
     },
     {
       key: PERMISSIONS.ADMIN_ELECTRICITY_EXPENSE_PER_SQFT.value,
       title: "Total",
-      data: `INR ${inrFormat(electrictyExpense / totalSqFt)}`,
+      data: `INR ${inrFormat(currentMonthElectricityExpense / totalSqFt)}`,
       description: "Electricity Expense Per Sq. Ft.",
       route: "per-sq-ft-electricity-expense",
     },
@@ -810,14 +1922,14 @@ const AdminDashboard = () => {
       key: PERMISSIONS.ADMIN_TOP_EXECUTIVE.value,
       title: "Top Executive",
       data: "",
-      description: "Mr. Machindranath Parkar",
+      description: currentDepartmentAdminName,
       route: "admin-executive-expense",
     },
   ];
 
   const allowedAdminDataCards = filterPermissions(
     dataCardConfigs,
-    userPermissions
+    userPermissions,
   );
 
   //MUI Tables
@@ -826,17 +1938,20 @@ const AdminDashboard = () => {
     {
       key: PERMISSIONS.ADMIN_WEEKLY_EXECUTIVE_SHIFT_TIMING.value,
       scroll: true,
+      scrollHeight: 480,
       Title: "Weekly Executive Shift Timing",
-      rowsToDisplay: 3,
       rows: transformedWeeklyShifts,
       columns: executiveTimingsColumns,
     },
     {
       key: PERMISSIONS.ADMIN_UPCOMING_EVENTS_LIST.value,
       scroll: true,
+      scrollHeight: 480,
       Title: "Upcoming Events List",
-      rowsToDisplay: 3,
-      rows: [],
+      rows: upcomingEvents.map((item, index) => ({
+        ...item,
+        id: index + 1,
+      })),
       columns: upcomingEventsColumns,
     },
     {
@@ -869,9 +1984,9 @@ const AdminDashboard = () => {
     {
       key: PERMISSIONS.ADMIN_NEWLY_JOINED_HOUSE_KEEPING_MEMBERS.value,
       scroll: true,
-      Title: "Newly Joined House Keeping Members",
-      rowsToDisplay: 4,
-      rows: [],
+      scrollHeight: 480,
+      Title: `Newly Joined House Keeping Members - ${currentMonthLabel}`,
+      rows: transformedHouseKeepingMembers,
       columns: houseKeepingMemberColumns,
     },
   ];
@@ -885,14 +2000,16 @@ const AdminDashboard = () => {
       title: "Unit Wise Due Tasks",
       chartType: "PieChartMui",
       border: true,
-      data: [],
-      options: [],
+      height: 320,
+      width: 500,
+      data: unitWisePieData,
+      options: unitPieChartOptions,
     },
   ];
 
   const allowedUnitWise = filterPermissions(
     unitWiseDueTasksWidget,
-    userPermissions
+    userPermissions,
   );
 
   //Executivve wise
@@ -904,16 +2021,195 @@ const AdminDashboard = () => {
       chartType: "DonutChart",
       border: true,
       centerLabel: "Tasks",
-      labels: [],
+      labels,
       colors,
-      series: [],
+      series: executiveTasksCount,
       tooltipValue: executiveTasksCount,
+      tooltipFormatter: (label, value) =>
+        `${label}: ${value || 0} pending tasks`,
     },
   ];
 
   const allowedExecutiveWise = filterPermissions(
     executiveWiseDueTasksWidget,
-    userPermissions
+    userPermissions,
+  );
+
+  const adminCategoryWiseTickets = useMemo(() => {
+    if (isTicketsLoading || !Array.isArray(tickets)) return [];
+
+    const categoryCountMap = tickets.reduce((acc, item) => {
+      const category = String(item?.ticket || "Others").trim() || "Others";
+      acc[category] = (acc[category] || 0) + 1;
+      return acc;
+    }, {});
+
+    const sortedCategories = Object.entries(categoryCountMap)
+      .map(([label, value]) => ({ label, value }))
+      .sort((first, second) => second.value - first.value);
+
+    if (sortedCategories.length <= 5) {
+      return sortedCategories;
+    }
+
+    const topCategories = sortedCategories.slice(0, 5);
+    const othersCount = sortedCategories
+      .slice(5)
+      .reduce((sum, item) => sum + item.value, 0);
+
+    return [...topCategories, { label: "Others", value: othersCount }];
+  }, [isTicketsLoading, tickets]);
+
+  const adminCategoryWiseTicketsData = adminCategoryWiseTickets.map((item) => ({
+    label: item.label,
+    value: item.value,
+  }));
+
+  const adminCategoryWiseTicketsOptions = {
+    labels: adminCategoryWiseTickets.map((item) => item.label),
+    chart: {
+      fontFamily: "Poppins-Regular",
+    },
+    legend: {
+      horizontalAlign: "center",
+      itemMargin: {
+        horizontal: 4,
+        vertical: 2,
+      },
+      formatter: (seriesName) =>
+        `<span title="${seriesName}" style="display:inline-block;max-width:92px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom;font-size:12px;line-height:1.2;">${seriesName}</span>`,
+    },
+    stroke: {
+      show: true,
+      width: 2,
+      colors: ["#ffffff"],
+    },
+    colors: [
+      "#274C77",
+      "#6096BA",
+      "#A3CEF1",
+      "#8B5E3C",
+      "#5B8E7D",
+      "#D08C60",
+    ],
+    tooltip: {
+      fillSeriesColor: false,
+      custom: ({ series, seriesIndex, w }) => {
+        const category =
+          adminCategoryWiseTickets?.[seriesIndex]?.label ||
+          w?.globals?.labels?.[seriesIndex] ||
+          "Unknown";
+        const count = series?.[seriesIndex] ?? 0;
+        const color =
+          w?.globals?.colors?.[seriesIndex] ||
+          adminCategoryWiseTicketsOptions.colors[
+            seriesIndex % adminCategoryWiseTicketsOptions.colors.length
+          ];
+
+        return `<div style="
+          padding:8px 12px;
+          font-size:12px;
+          font-family:Poppins-Regular;
+          font-weight:600;
+          background:${color};
+          color:#fff;
+          border-radius:6px;
+        ">
+          ${category} : ${count}
+        </div>`;
+      },
+    },
+  };
+
+  const adminPendingStatuses = new Set([
+    "open",
+    "pending",
+    "in progress",
+    "escalated",
+  ]);
+
+  const adminPendingTicketsCount = (
+    Array.isArray(tickets) ? tickets : []
+  ).filter((ticket) =>
+    adminPendingStatuses.has(String(ticket?.status || "").toLowerCase()),
+  ).length;
+
+  const adminCompletedTicketsCount = (
+    Array.isArray(tickets) ? tickets : []
+  ).filter((ticket) => String(ticket?.status || "").toLowerCase() === "closed")
+    .length;
+
+  const adminDueTicketsData = [
+    { label: "Completed", value: adminCompletedTicketsCount },
+    { label: "Pending", value: adminPendingTicketsCount },
+  ];
+
+  const adminDueTicketsOptions = {
+    labels: adminDueTicketsData.map((item) => item.label),
+    chart: {
+      fontFamily: "Poppins-Regular",
+    },
+    legend: {
+      horizontalAlign: "center",
+      itemMargin: {
+        horizontal: 8,
+        vertical: 4,
+      },
+    },
+    stroke: {
+      show: true,
+      width: 2,
+      colors: ["#ffffff"],
+    },
+    colors: ["#59C9A5", "#FCA5A5"],
+    tooltip: {
+      fillSeriesColor: false,
+      custom: ({ series, seriesIndex, w }) => {
+        const label = w?.globals?.labels?.[seriesIndex] || "Unknown";
+        const count = series?.[seriesIndex] ?? 0;
+        const color =
+          w?.globals?.colors?.[seriesIndex] ||
+          adminDueTicketsOptions.colors[
+            seriesIndex % adminDueTicketsOptions.colors.length
+          ];
+
+        return `<div style="
+          padding:8px 12px;
+          font-size:12px;
+          font-family:Poppins-Regular;
+          font-weight:600;
+          background:${color};
+          color:#fff;
+          border-radius:6px;
+        ">
+          ${label} : ${count}
+        </div>`;
+      },
+    },
+  };
+
+  const adminTicketChartConfigs = [
+    {
+      key: PERMISSIONS.ADMIN_CATEGORY_WISE_TICKETS.value,
+      title: "Category Wise Tickets",
+      data: adminCategoryWiseTicketsData,
+      options: adminCategoryWiseTicketsOptions,
+      width: 500,
+      height: 320,
+    },
+    {
+      key: PERMISSIONS.ADMIN_DUE_TICKETS.value,
+      title: "Due Tickets",
+      data: adminDueTicketsData,
+      options: adminDueTicketsOptions,
+      width: 500,
+      height: 320,
+    },
+  ];
+
+  const allowedAdminTicketCharts = filterPermissions(
+    adminTicketChartConfigs,
+    userPermissions,
   );
 
   const piechartConfig2 = [
@@ -925,24 +2221,51 @@ const AdminDashboard = () => {
       border: true,
       data: totalDeskPercent,
       options: clientsDesksPieOptions,
-      width: "100%",
+      height: 320,
+      width: 500,
       isLoading: isClientsDataPending,
       loadingFallback: <CircularProgress color="#1E3D73" />,
     },
     {
-      key: PERMISSIONS.ADMIN_BIOMETRICS_GENDER_DATA.value,
+      key: PERMISSIONS.ADMIN_INDIA_WISE_MEMBERS.value,
       layout: 2,
-      title: "Biometrics Gender Data",
+      title: "India-wise Members",
       chartType: "PieChartMui",
       border: true,
-      data: [],
-      options: [],
+      data: locationWiseData,
+      options: locationPieChartOptions,
+      height: 320,
+      width: 500,
+      isLoading: isClientsDataPending,
+      loadingFallback: <CircularProgress color="#1E3D73" />,
+    },
+    {
+      key: PERMISSIONS.ADMIN_CLIENT_MEMBER_GENDER_WISE_DATA.value,
+      layout: 2,
+      title: "Client Member Gender Wise Data",
+      chartType: "PieChartMui",
+      border: true,
+      data: pieGenderData,
+      options: pieGenderOptions,
+      height: 320,
+      width: 500,
+      isLoading: isClientsDataPending,
+      loadingFallback: <CircularProgress color="#1E3D73" />,
+    },
+    {
+      key: PERMISSIONS.ADMIN_BIOMETRICS_ACTIVATION_DATA.value,
+      layout: 2,
+      title: "Biometrics Activation Data",
+      chartType: "PieChartMui",
+      border: true,
+      data: biometricStatusSummary,
+      options: biometricPieOptions,
     },
   ];
 
   const allowedPiechartConfig2 = filterPermissions(
     piechartConfig2,
-    userPermissions
+    userPermissions,
   );
   //-----------------------------------------------------------------------------------------------------------------//
   const techWidgets = [
@@ -959,9 +2282,18 @@ const AdminDashboard = () => {
           }
         >
           <WidgetSection normalCase layout={1} padding>
-            {allowedDeptExpenseGrpah.map((config, index) => (
-              <FyBarGraph key={index} {...config} />
-            ))}
+           {allowedDeptExpenseGrpah.map((config) => (
+  <YearlyGraph
+    key={config.chartId}
+    data={config.data}
+    responsiveResize={config.responsiveResize}
+    chartId={config.chartId}
+    options={config.options}
+    onYearChange={config.onYearChange}
+    title={config.title}
+    titleAmount={config.titleAmount}
+  />
+))}
           </WidgetSection>
         </Suspense>,
       ],
@@ -1028,7 +2360,13 @@ const AdminDashboard = () => {
       widgets: [
         allowedUnitWise.map((config) => (
           <WidgetSection border={config.border} title={config.title}>
-            <PieChartMui data={config.data} options={config.options} />
+            <PieChartMui
+              data={config.data}
+              options={config.options}
+              width={config?.width}
+              height={config?.height}
+              centerAlign
+            />
           </WidgetSection>
         )),
         allowedExecutiveWise.map((config) => (
@@ -1039,10 +2377,25 @@ const AdminDashboard = () => {
               colors={config.colors}
               series={config.series}
               tooltipValue={config.tooltipValue}
+              tooltipFormatter={config.tooltipFormatter}
             />
           </WidgetSection>
         )),
       ],
+    },
+    {
+      layout: allowedAdminTicketCharts.length,
+      widgets: allowedAdminTicketCharts.map((config) => (
+        <WidgetSection border title={config.title}>
+          <PieChartMui
+            data={config.data}
+            options={config.options}
+            width={config.width}
+            height={config.height}
+            centerAlign
+          />
+        </WidgetSection>
+      )),
     },
     {
       layout: 2,
@@ -1052,7 +2405,9 @@ const AdminDashboard = () => {
             <PieChartMui
               data={config.data}
               options={config.options}
-              width={config.width}
+              width={config?.width}
+              height={config?.height}
+              centerAlign
             />
           ) : (
             <CircularProgress color="#1E3D73" />

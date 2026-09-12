@@ -3,13 +3,14 @@ import PrimaryButton from "../../../../components/PrimaryButton";
 import { useNavigate } from "react-router-dom";
 import AgTable from "../../../../components/AgTable";
 import { MdOutlineRemoveRedEye } from "react-icons/md";
-import { TextField, IconButton } from "@mui/material";
+import { TextField, IconButton, Chip } from "@mui/material";
 import { DatePicker } from "@mui/x-date-pickers/DatePicker";
 import dayjs from "dayjs";
 import MuiModal from "../../../../components/MuiModal";
 import DetalisFormatted from "../../../../components/DetalisFormatted";
 import { toast } from "sonner";
 import { useForm, Controller } from "react-hook-form";
+import { inrFormat } from "../../../../utils/currencyFormat";
 import { LuImageUp } from "react-icons/lu";
 import { useQuery } from "@tanstack/react-query";
 import useAxiosPrivate from "../../../../hooks/useAxiosPrivate";
@@ -27,8 +28,12 @@ const VoucherCreation = () => {
   const { data: voucherData = [], isPending: isVoucherPending } = useQuery({
     queryKey: ["voucherData"],
     queryFn: async () => {
-      const response = await axios.get("/api/budget/approved-budgets");
-      return response.data.allBudgets;
+      const response = await axios.get("/api/budget/company-budget");
+      return Array.isArray(response.data.allBudgets)
+        ? response.data.allBudgets
+        : [];
+      // const response = await axios.get("/api/budget/approved-budgets");
+      // return response.data.allBudgets;
     },
   });
 
@@ -48,16 +53,52 @@ const VoucherCreation = () => {
   };
 
   const invoiceCreationColumns = [
-    { field: "srNo", headerName: "Sr No", flex: 1 },
+    { field: "srNo", headerName: "Sr No", flex: 0.5},
     { field: "voucherName", headerName: "Voucher Name", flex: 1 },
     { field: "modeOfPayment", headerName: "Mode of Payment", flex: 1 },
-    { field: "advanceAmount", headerName: "Advance Amount", flex: 1 },
-    { field: "chequeNo", headerName: "Cheque No", flex: 1 },
-    { field: "chequeDate", headerName: "Cheque Date", flex: 1 },
+    { field: "chequeNo", headerName: "Cheque No", flex: 1,hide: true },
+    { field: "chequeDate", headerName: "Cheque Date", flex: 1,hide: true },
+    { field: "financeParticularSummary", headerName: "Finance Particulars", hide: true },
+    { field: "totalAmount", headerName: "Total Amount(INR)", flex: 1, valueFormatter: (params) => inrFormat(params.value), },
+    { field: "advanceAmount", headerName: "Advance Amount(INR)", flex: 1, valueFormatter: (params) => inrFormat(params.value),hide: true },
     { field: "approvedAt", headerName: "Approved Date", flex: 1, cellRenderer : (params)=>(humanDate(params.value)) },
+    { field: "expectedDateInvoice", headerName: "Expected Invoice Date", hide: true },
+    { field: "financeVoucherLink", headerName: "Finance Voucher File", hide: true },
+    {
+      field: "status",
+      headerName: "Approval Status",
+      flex: 1,
+      cellRenderer: (params) => {
+        const status = String(params?.value || "-");
+        const normalizedStatus = status.toLowerCase();
+
+        const styleMap = {
+          approved: { backgroundColor: "#DCFCE7", color: "#166534" },
+          rejected: { backgroundColor: "#FEE2E2", color: "#991B1B" },
+        };
+
+        const chipStyle = styleMap[normalizedStatus] || {
+          backgroundColor: "#F5F5F5",
+          color: "#616161",
+        };
+
+        return (
+          <Chip
+            label={status}
+            size="small"
+            sx={{
+              ...chipStyle,
+              fontWeight: 500,
+              textTransform: "capitalize",
+            }}
+          />
+        );
+      },
+    },
     {
       field: "actions",
       headerName: "Actions",
+      pinned: "right",
       cellRenderer: (params) => (
         <div className="p-2 flex gap-2 hover:bg-gray-300 rounded-full w-fit">
           <span
@@ -83,8 +124,21 @@ const VoucherCreation = () => {
           
             voucherName: item.finance?.voucher?.name || "-",
             voucherLink: item.finance?.voucher?.link || "-",
+            financeVoucherLink: item.finance?.voucher?.link || "-",
             modeOfPayment: item.finance?.modeOfPayment || "-",
             advanceAmount: item.finance?.advanceAmount ?? "-",
+             financeParticularSummary:
+              Array.isArray(item.finance?.particulars) && item.finance.particulars.length > 0
+                ? item.finance.particulars
+                    .map((p) => `${p.particularName || "-"}: INR ${inrFormat(p.particularAmount || 0)}`)  
+              .join(", ")
+                : "-",
+             totalAmount: Array.isArray(item.finance?.particulars)
+              ? item.finance.particulars.reduce(
+                  (sum, entry) => sum + Number(entry?.particularAmount || 0),
+                  0,
+                )
+              : 0,
             chequeNo: item.finance?.chequeNo || "-",
             chequeDate: item.finance?.chequeDate
               ? dayjs(item.finance.chequeDate).format("DD MMM YYYY")
@@ -104,6 +158,7 @@ const VoucherCreation = () => {
             setViewVoucherModal(true);
           }}
           isLoading={isVoucherPending}
+          exportData
         />
       </PageFrame>
 
@@ -117,17 +172,73 @@ const VoucherCreation = () => {
           title="Voucher Finance Details"
         >
           <div className="space-y-3">
+            <span className="text-subtitle font-pmedium text-primary my-0.5 uppercase">
+                 Voucher History Finance Details
+            </span>
+
+             {(() => {
+              const particulars = Array.isArray(viewDetails.financeParticulars)
+                ? viewDetails.financeParticulars
+                : [];
+              const particularsTotal = particulars.reduce(
+                (sum, item) => sum + Number(item?.particularAmount || 0),
+                0
+              );
+
+              return (
+                <>     
             <DetalisFormatted title="Sr No" detail={viewDetails.srNo || "-"} />
             <DetalisFormatted
               title="Mode of Payment"
               detail={viewDetails.modeOfPayment}
             />
-            <DetalisFormatted title="Amount" detail={viewDetails.amount} />
-            <DetalisFormatted title="Cheque No" detail={viewDetails.chequeNo} />
+             <DetalisFormatted title="Cheque No" detail={viewDetails.chequeNo} />
             <DetalisFormatted
               title="Cheque Date"
               detail={viewDetails.chequeDate}
             />
+
+            {/* {(viewDetails.financeParticulars || []).length > 0 ? (
+              <div className="border-t pt-2">
+                <p className="text-sm font-semibold text-gray-700 mb-1">
+                  Particulars
+                </p>
+                {(viewDetails.financeParticulars || []).map((p, idx) => (
+                  <DetalisFormatted
+                    key={idx}
+                    title={`Particular ${idx + 1}`}
+                    detail={`${p.particularName || "-"} — ₹${
+                      p.particularAmount || 0
+                    }`}
+                  />
+                ))}
+              </div>
+            ) : (
+              <DetalisFormatted title="Particulars" detail="-" />
+            )} */}
+
+
+            {(viewDetails.financeParticulars || []).length > 0 ? (
+            <>
+              {(viewDetails.financeParticulars || []).map((p, idx) => (
+                <DetalisFormatted
+                  key={idx}
+                  title={`Particular ${idx + 1}`}
+                  detail={`${p.particularName || "-"} — INR ${inrFormat(p.particularAmount || 0)}`}
+                />
+              ))}
+            </>
+          ) : (
+            <DetalisFormatted title="Particulars" detail="-" />
+          )}
+
+           <DetalisFormatted title="Total Amount" detail={`INR ${inrFormat(particularsTotal)}`} />
+
+            {/* <DetalisFormatted title="Amount" detail={viewDetails.amount} /> */}
+             <DetalisFormatted
+                  title="Advance Amount"
+                  detail={`INR ${inrFormat(viewDetails.finance.advanceAmount || 0)}`}
+                />
             <DetalisFormatted
               title="Expected Invoice Date"
               detail={viewDetails.expectedDateInvoice}
@@ -149,7 +260,7 @@ const VoucherCreation = () => {
                 )
               }
             />
-            {(viewDetails.financeParticulars || []).map((p, idx) => (
+            {/* {(viewDetails.financeParticulars || []).map((p, idx) => (
               <div key={idx} className="border-t pt-2">
                 <DetalisFormatted
                   title={`Particular ${idx + 1}`}
@@ -158,10 +269,14 @@ const VoucherCreation = () => {
                   }`}
                 />
               </div>
-            ))}
+            ))} */}
+           </>
+              );
+            })()}
           </div>
         </MuiModal>
       )}
+
 
       {viewAddVoucherModal && (
         <MuiModal

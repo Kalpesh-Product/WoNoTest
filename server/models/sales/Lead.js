@@ -11,6 +11,8 @@ const LeadSchema = new mongoose.Schema(
     },
     companyName: {
       type: String,
+      required: true,
+      unique: true,
     },
     serviceCategory: {
       type: mongoose.Schema.Types.ObjectId,
@@ -45,13 +47,19 @@ const LeadSchema = new mongoose.Schema(
     },
     emailAddress: {
       type: String,
+      unique: true,
+      sparse: true,
+      match: [/^\S+@\S+\.\S+$/, "Invalid email format"],
+    },
+    source: {
+      type: String,
     },
     leadSource: {
       type: String,
     },
     period: {
       type: String,
-      required: true,
+      // required: true,
     },
     openDesks: {
       type: Number,
@@ -72,10 +80,10 @@ const LeadSchema = new mongoose.Schema(
       type: String,
     },
     lastFollowUpDate: {
-      type: Date
+      type: Date,
     },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 const Lead = mongoose.model("Lead", LeadSchema);

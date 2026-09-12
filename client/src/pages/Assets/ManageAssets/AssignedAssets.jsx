@@ -22,15 +22,42 @@ import ThreeDotMenu from "../../../components/ThreeDotMenu";
 import StatusChip from "../../../components/StatusChip";
 import DetalisFormatted from "../../../components/DetalisFormatted";
 import humanDate from "../../../utils/humanDateForamt";
+import { inrFormat } from "../../../utils/currencyFormat";
 import { toast } from "sonner";
 import { queryClient } from "../../../main";
+import { MdOutlineRemoveRedEye } from "react-icons/md";
+import { useLocation } from "react-router-dom";
 
 const AssignedAssets = () => {
   const axios = useAxiosPrivate();
+  const location = useLocation();
   const [selectedAsset, setSelectedAsset] = useState([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState("");
   const departmentId = useSelector((state) => state.assets.selectedDepartment);
+  const isInUseView = location.state?.assetViewFilter === "inUse";
+  const tableTitle = isInUseView
+    ? "Assigned Assets - In Use"
+    : "Assigned Assets";
+
+  const formatDateTime = (value) => {
+    if (!value) return "N/A";
+    const dateObj = new Date(value);
+    if (Number.isNaN(dateObj.getTime())) return "N/A";
+
+    const datePart = `${String(dateObj.getDate()).padStart(2, "0")}-${String(
+      dateObj.getMonth() + 1
+    ).padStart(2, "0")}-${dateObj.getFullYear()}`;
+    const timePart = dateObj
+      .toLocaleTimeString("en-IN", {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
+      })
+      .toLowerCase();
+
+    return `${datePart}, ${timePart}`;
+  };
   //-----------------------API----------------------//
   const { data: assignedAssets = [], isLoading: isAssignedPending } = useQuery({
     queryKey: ["assignedAssets"],
@@ -60,9 +87,17 @@ const AssignedAssets = () => {
       queryClient.invalidateQueries({ queryKey: ["assignedAssets"] });
     },
     onError: (error) => {
-      toast.error(error.message || "Failed to revoke asset");
+      toast.error(
+        error?.response?.data?.message ||
+          error?.message ||
+          "Failed to revoke asset"
+      );
     },
   });
+  //   onError: (error) => {
+  //     toast.error(error.message || "Failed to revoke asset");
+  //   },
+  // });
 
   //-----------------------Event handlers----------------------//
   const handleView = (data) => {
@@ -76,10 +111,49 @@ const AssignedAssets = () => {
   const assetsColumns = [
     { field: "srNo", headerName: "Sr No", width: 100 },
     { field: "assignee", headerName: "Assignee Name" },
+    { field: "approvedByName", headerName: "Approved By", hide: true },
+    { field: "assignedByName", headerName: "Assigned By", hide: true },
+    { field: "approvedOn", headerName: "Approved At", hide: true },
+    { field: "assignedOn", headerName: "Assigned At", hide: true },
     { field: "assetNumber", headerName: "Asset Id" },
+    { field: "assetType", headerName: "Asset Type", hide: true },
+    { field: "secondaryId", headerName: "Secondary ID", hide: true },
+    { field: "departmentAssetId", headerName: "Department Asset ID", hide: true },
     { field: "department", headerName: "Department" },
     { field: "category", headerName: "Category" },
     { field: "brand", headerName: "Brand" },
+    { field: "name", headerName: "Asset Name" },
+    { field: "subCategoryName", headerName: "Sub Category", hide: true },
+    { field: "purchaseOnLabel", headerName: "Purchase Date", hide: true },
+    { field: "warranty", headerName: "Warranty (Months)", hide: true },
+    { field: "warrantyExpiryLabel", headerName: "Warranty Expiry Date", hide: true },
+    { field: "rentedMonths", headerName: "Rented Months", hide: true },
+    { field: "rentalExpiryLabel", headerName: "Rented Expiration Date", hide: true },
+    { field: "priceLabel", headerName: "Price", hide: true },
+    { field: "serialNumber", headerName: "Serial Number" },
+    { field: "description", headerName: "Description", hide: true },
+    { field: "ownershipType", headerName: "Ownership Type", hide: true },
+    { field: "tangableLabel", headerName: "Tangable", hide: true },
+    { field: "building", headerName: "Building", minWidth: 160, flex: 1 },
+    // { field: "location", headerName: "Location" },
+    //  { field: "building", headerName: "Building" },
+    { field: "unit", headerName: "Location", minWidth: 140, flex: 1 },
+    {
+      field: "assignedBuilding",
+      headerName: "Assigned Building",
+      minWidth: 180,
+      flex: 1,
+    },
+    {
+      field: "assignedUnit",
+      headerName: "Assigned Unit",
+      minWidth: 160,
+      flex: 1,
+    },
+    { field: "damagedLabel", headerName: "Damaged", hide: true },
+    { field: "underMaintenanceLabel", headerName: "Under Maintenance", hide: true },
+    { field: "extraLabel", headerName: "Extra", hide: true },
+    { field: "revokedLabel", headerName: "Revoked", hide: true },
     {
       field: "status",
       headerName: "Status",
@@ -91,16 +165,25 @@ const AssignedAssets = () => {
       headerName: "Actions",
       pinned: "right",
       cellRenderer: (params) => (
-        <ThreeDotMenu
-          rowId={params.data.assetId}
-          menuItems={[
-            { label: "View", onClick: () => handleView(params.data) },
-            params.data.status !== "Revoked" && {
-              label: "Revoke",
-              onClick: () => revokeAsset(params.data),
-            },
-          ]}
-        />
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            title="View"
+            className="p-1 text-gray-600 hover:text-primary"
+            onClick={() => handleView(params.data)}
+          >
+            <MdOutlineRemoveRedEye size={20} />
+          </button>
+          <ThreeDotMenu
+            rowId={params.data.assetId}
+            menuItems={[
+              params.data.status !== "Revoked" && {
+                label: "Revoke",
+                onClick: () => revokeAsset(params.data),
+              },
+            ]}
+          />
+        </div>
       ),
     },
   ];
@@ -109,19 +192,133 @@ const AssignedAssets = () => {
     ? []
     : assignedAssets.map((item, index) => {
         const assets = item.asset;
+          const assetLocation = assets?.location || assets?.unit || null;
+        const assignedLocation = item?.location || item?.unit || null;
+        const buildingName =
+          assetLocation?.building?.buildingName ||
+          assetLocation?.buildingName ||
+          assets?.building?.buildingName ||
+          assets?.buildingName ||
+          "N/A";
+        const unitNo =
+          assetLocation?.unitNo ||
+          assetLocation?.unit ||
+          assets?.unitNo ||
+          assets?.unit ||
+          "N/A";
+        const assignedBuildingName =
+          assignedLocation?.building?.buildingName ||
+          assignedLocation?.buildingName ||
+          item?.building?.buildingName ||
+          item?.buildingName ||
+          "N/A";
+        const assignedUnitNo =
+          assignedLocation?.unitNo ||
+          assignedLocation?.unit ||
+          item?.unitNo ||
+          item?.unit ||
+          "N/A";
         const category = assets?.subCategory?.category?.categoryName;
+        const approvedByName = item?.approvedBy
+          ? `${item.approvedBy.firstName || ""} ${item.approvedBy.lastName || ""}`.trim()
+          : "N/A";
+        const assignedByPerson = item?.assignedBy || item?.approvedBy;
+        const assignedByName = assignedByPerson
+          ? `${assignedByPerson.firstName || ""} ${assignedByPerson.lastName || ""}`.trim()
+          : "N/A";
         return {
           ...assets,
           ...item,
           srNo: index + 1,
           assignee: `${item.assignee?.firstName} ${item.assignee?.lastName}`,
+          approvedByName,
+          assignedByName,
+          approvedOn:
+            item?.status === "Approved" && item?.updatedAt
+              ? formatDateTime(item.updatedAt)
+              : "N/A",
+          assignedOn: formatDateTime(item?.assignedAt || item?.createdAt),
           assetId: item._id,
           assetNumber: item?.asset?.assetId,
           department: item?.fromDepartment?.name,
           category: category,
           brand: assets?.brand,
+          name: assets?.name || "N/A",
+          subCategoryName: assets?.subCategory?.subCategoryName || "N/A",
+          purchaseOnLabel: assets?.purchaseDate
+            ? humanDate(assets.purchaseDate)
+            : "N/A",
+          warranty: assets?.warranty ?? "N/A",
+          warrantyExpiryLabel: assets?.warrantyExpiryDate
+            ? humanDate(assets.warrantyExpiryDate)
+            : "N/A",
+          rentedMonths: assets?.rentedMonths ?? "N/A",
+          rentalExpiryLabel: assets?.rentedExpirationDate
+            ? humanDate(assets.rentedExpirationDate)
+            : "N/A",
+          priceLabel: `INR ${inrFormat(assets?.price)}`,
+          serialNumber: assets?.serialNumber || "N/A",
+          description: assets?.description || "N/A",
+          ownershipType: assets?.ownershipType || "N/A",
+          tangableLabel: assets?.tangable ? "Yes" : "No",
+          building: buildingName,
+          location: assignedLocation,
+          unit: unitNo,
+          assignedBuilding: assignedBuildingName,
+          assignedUnit: assignedUnitNo,
+          damagedLabel: assets?.isDamaged ? "Yes" : "No",
+          underMaintenanceLabel: assets?.isUnderMaintenance ? "Yes" : "No",
+          extraLabel: assets?.isExtra ? "Yes" : "No",
+          revokedLabel: item?.isRevoked ? "Yes" : "No",
+          assetLocation,
+          assignedLocation,
         };
       });
+      //   const assetLocation =
+      //     assets?.location ||
+      //     item?.location ||
+      //     assets?.unit ||
+      //     item?.unit ||
+      //     null;
+      //   const buildingName =
+      //     item?.location?.building?.buildingName ||
+      //     assets?.location?.building?.buildingName ||
+      //     assetLocation?.building?.buildingName ||
+      //     assetLocation?.buildingName ||
+      //     item?.building?.buildingName ||
+      //     assets?.building?.buildingName ||
+      //     item?.buildingName ||
+      //     assets?.buildingName ||
+      //     "N/A";
+      //   const unitNo =
+      //     item?.location?.unitNo ||
+      //     item?.location?.unit ||
+      //     assets?.location?.unitNo ||
+      //     assets?.location?.unit ||
+      //     assetLocation?.unitNo ||
+      //     assetLocation?.unit ||
+      //     item?.unitNo ||
+      //     item?.unit ||
+      //     "N/A";
+      //   const category = assets?.subCategory?.category?.categoryName;
+      //   return {
+      //     ...assets,
+      //     ...item,
+      //     srNo: index + 1,
+      //     assignee: `${item.assignee?.firstName} ${item.assignee?.lastName}`,
+      //     assetId: item._id,
+      //     assetNumber: item?.asset?.assetId,
+      //     department: item?.fromDepartment?.name,
+      //     category: category,
+      //     brand: assets?.brand,
+      //     name: assets?.name || "N/A",
+      //     serialNumber: assets?.serialNumber || "N/A",
+      //     building: buildingName,
+      //     location: item?.location || null,
+      //     unit: unitNo,
+      //     assetLocation,
+      //   };
+      // });
 
   //-----------------------Table Data----------------------//
 
@@ -131,9 +328,10 @@ const AssignedAssets = () => {
         <AgTable
           key={assignedAssets.length}
           search={true}
-          tableTitle={"Assigned Assets"}
+          tableTitle={tableTitle}
           data={tableData}
           columns={assetsColumns}
+          exportData
         />
       </PageFrame>
       <MuiModal
@@ -148,6 +346,34 @@ const AssignedAssets = () => {
               detail={selectedAsset?.assignee}
             />
             <DetalisFormatted
+              title={"Approved By"}
+              detail={
+                selectedAsset?.approvedBy
+                  ? `${selectedAsset.approvedBy.firstName || ""} ${selectedAsset.approvedBy.lastName || ""}`.trim()
+                  : "N/A"
+              }
+            />
+             <DetalisFormatted
+              title={"Assigned By"}
+              detail={
+                (selectedAsset?.assignedBy || selectedAsset?.approvedBy)
+                  ? `${(selectedAsset.assignedBy || selectedAsset.approvedBy)?.firstName || ""} ${(selectedAsset.assignedBy || selectedAsset.approvedBy)?.lastName || ""}`.trim()
+                  : "N/A"
+              }
+            />
+            <DetalisFormatted
+              title={"Approved At"}
+              detail={
+                selectedAsset?.status === "Approved" && selectedAsset?.updatedAt
+                  ? formatDateTime(selectedAsset.updatedAt)
+                  : "N/A"
+              }
+            />
+             <DetalisFormatted
+              title={"Assigned At"}
+              detail={formatDateTime(selectedAsset?.assignedAt || selectedAsset?.createdAt)}
+            />
+            <DetalisFormatted
               title={"Asset Name"}
               detail={selectedAsset?.name}
             />
@@ -159,6 +385,14 @@ const AssignedAssets = () => {
               title={"Asset Type"}
               detail={selectedAsset?.assetType}
             />
+             <DetalisFormatted
+              title={"Secondary ID"}
+              detail={selectedAsset?.secondaryId || "N/A"}
+            />
+            <DetalisFormatted
+              title={"Department Asset ID"}
+              detail={selectedAsset?.departmentAssetId || "N/A"}
+            />
             <DetalisFormatted title={"Brand"} detail={selectedAsset?.brand} />
             <DetalisFormatted
               title={"Category"}
@@ -169,20 +403,119 @@ const AssignedAssets = () => {
               detail={selectedAsset?.subCategory?.subCategoryName}
             />
             <DetalisFormatted
-              title={"Assigned Date"}
-              detail={humanDate(selectedAsset?.createdAt)}
+              title={"Purchase Date"}
+              detail={
+                selectedAsset?.purchaseDate
+                  ? humanDate(selectedAsset?.purchaseDate)
+                  : "N/A"
+              }
             />
+            <DetalisFormatted
+              title={"Warranty (Months)"}
+              detail={selectedAsset?.warranty ?? "N/A"}
+            />
+            <DetalisFormatted
+              title={"Warranty Expiry Date"}
+              detail={
+                selectedAsset?.warrantyExpiryDate
+                  ? humanDate(selectedAsset?.warrantyExpiryDate)
+                  : "N/A"
+              }
+            />
+            <DetalisFormatted
+              title={"Rented Months"}
+              detail={selectedAsset?.rentedMonths ?? "N/A"}
+            />
+            <DetalisFormatted
+              title={"Rented Expiration Date"}
+              detail={
+                selectedAsset?.rentedExpirationDate
+                  ? humanDate(selectedAsset?.rentedExpirationDate)
+                  : "N/A"
+              }
+            />
+            <DetalisFormatted
+              title={"Price"}
+              //detail={inrFormat(selectedAsset?.price)}
+              detail={`INR ${inrFormat(selectedAsset?.price)}`}
+            />
+            <DetalisFormatted
+              title={"Serial Number"}
+              detail={selectedAsset?.serialNumber || "N/A"}
+            />
+            <DetalisFormatted
+              title={"Description"}
+              detail={selectedAsset?.description || "N/A"}
+            />
+            <DetalisFormatted
+              title={"Ownership Type"}
+              detail={selectedAsset?.ownershipType || "N/A"}
+            />
+            <DetalisFormatted
+              title={"Tangable"}
+              detail={selectedAsset?.tangable ? "Yes" : "No"}
+            />
+            <DetalisFormatted
+              title={"Status"}
+              detail={selectedAsset?.status || "N/A"}
+            />
+              <DetalisFormatted
+              title={"Department"}
+              detail={selectedAsset?.department || "N/A"}
+            />
+            <DetalisFormatted
+              title={"Building"}
+              detail={
+                selectedAsset?.assetLocation?.building?.buildingName ||
+                selectedAsset?.building ||
+                "N/A"
+              }
+            />
+            <DetalisFormatted
+              title={"UnitNo"}
+              detail={
+                selectedAsset?.assetLocation?.unitNo || selectedAsset?.unit || "N/A"
+              }
+            />
+            <DetalisFormatted
+              title={"Assigned Building"}
+              detail={selectedAsset?.assignedBuilding || "N/A"}
+            />
+            <DetalisFormatted
+              title={"Assigned Unit"}
+              detail={selectedAsset?.assignedUnit || "N/A"}
+            />
+              {/* <DetalisFormatted
+                title={"Department"}
+                detail={selectedAsset?.department || "N/A"}
+              />
+             <DetalisFormatted
+                           title={"Building"}
+                           detail={
+                             selectedAsset?.location?.building?.buildingName ||
+                             selectedAsset?.building ||
+                             "N/A"
+                           }
+                         />
+                         <DetalisFormatted
+                           title={"UnitNo"}
+                           detail={selectedAsset?.location?.unitNo || selectedAsset?.unit || "N/A"}
+                         /> */}
             <DetalisFormatted
               title={"Damaged"}
               detail={selectedAsset?.isDamaged ? "Yes" : "No"}
             />
             <DetalisFormatted
-              title={"Revoked"}
-              detail={selectedAsset?.isRevoked ? "Yes" : "No"}
-            />
-            <DetalisFormatted
               title={"Under Maintenance"}
               detail={selectedAsset?.isUnderMaintenance ? "Yes" : "No"}
+            />
+            <DetalisFormatted
+              title={"Extra"}
+              detail={selectedAsset?.isExtra ? "Yes" : "No"}
+            />
+            <DetalisFormatted
+              title={"Revoked"}
+              detail={selectedAsset?.isRevoked ? "Yes" : "No"}
             />
           </div>
         )}

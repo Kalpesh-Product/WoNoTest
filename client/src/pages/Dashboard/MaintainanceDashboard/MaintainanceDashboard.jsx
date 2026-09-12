@@ -13,6 +13,7 @@ import DonutChart from "../../../components/graphs/DonutChart";
 import MuiTable from "../../../components/Tables/MuiTable";
 import { Box, Chip, Skeleton } from "@mui/material";
 import { useNavigate } from "react-router-dom";
+import { useDispatch } from "react-redux";
 import BudgetGraph from "../../../components/graphs/BudgetGraph";
 import { inrFormat } from "../../../utils/currencyFormat";
 import { useSidebar } from "../../../context/SideBarContext";
@@ -27,15 +28,111 @@ import humanDate from "../../../utils/humanDateForamt";
 import useAuth from "../../../hooks/useAuth";
 import { PERMISSIONS } from "./../../../constants/permissions";
 import { filterPermissions } from "../../../utils/accessConfig";
+import StatusChip from "../../../components/StatusChip";
+import {
+  setSelectedDepartment,
+  setSelectedDepartmentName,
+} from "../../../redux/slices/assetsSlice";
 
 const MaintainanceDashboard = () => {
   const { setIsSidebarOpen } = useSidebar();
-  const department = usePageDepartment();
-  const axios = useAxiosPrivate();
-  const [selectedFiscalYear, setSelectedFiscalYear] = useState("FY 2024-25");
+const department = usePageDepartment();
+const axios = useAxiosPrivate();
+const navigate = useNavigate();
+const dispatch = useDispatch();
+
+const getFiscalYearStart = (date = dayjs()) => {
+  const parsedDate = dayjs(date);
+  return parsedDate.month() >= 3 ? parsedDate.year() : parsedDate.year() - 1;
+};
+
+const formatFiscalYear = (startYear) =>
+  `FY ${startYear}-${String(startYear + 1).slice(-2)}`;
+
+const getFiscalMonthIndex = (date) => {
+  const parsedDate = dayjs(date);
+  const month = parsedDate.month();
+
+  return month >= 3 ? month - 3 : month + 9;
+};
+
+const getAmount = (value) => {
+  if (typeof value === "number") return value;
+
+  if (typeof value === "string") {
+    const parsed = Number(value.replace(/,/g, ""));
+    return Number.isNaN(parsed) ? 0 : parsed;
+  }
+
+  return 0;
+};
+
+const currentDepartmentId = department?._id;
+const currentDepartmentName = department?.name || "Maintenance";
+const encodedDepartmentName = encodeURIComponent(currentDepartmentName);
+
+const handleUnderMaintenanceAssetsClick = () => {
+  if (!currentDepartmentId) return;
+
+  dispatch(setSelectedDepartment(currentDepartmentId));
+  dispatch(setSelectedDepartmentName(currentDepartmentName));
+  navigate(
+    `/app/assets/view-assets/${encodedDepartmentName}/list-of-assets/assets-under-maintenance`,
+    {
+      state: { assetStatusFilter: "underMaintenance" },
+    },
+  );
+};
+
+const fiscalMonths = [
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+  "Jan",
+  "Feb",
+  "Mar",
+];
+
+const currentFiscalYear = formatFiscalYear(getFiscalYearStart());
+
+const [selectedFiscalYear, setSelectedFiscalYear] =
+  useState(currentFiscalYear);
+const [
+  hiddenMaintenanceExpenseSeries,
+  setHiddenMaintenanceExpenseSeries,
+] = useState({
+  actual: false,
+  projected: false,
+});  
+const currentFiscalMonthIndexForCard =
+  dayjs().month() >= 3 ? dayjs().month() - 3 : dayjs().month() + 9;
 
   const { auth } = useAuth();
   const userPermissions = auth?.user?.permissions?.permissions || [];
+  const normalizeListResponse = (response) => {
+    if (Array.isArray(response)) return response;
+    if (Array.isArray(response?.tasks)) return response.tasks;
+    if (Array.isArray(response?.data)) return response.data;
+    if (Array.isArray(response?.response)) return response.response;
+    return [];
+  };
+  const { data: selectedDepartments = [] } = useQuery({
+    queryKey: ["maintenance-selectedDepartments"],
+    queryFn: async () => {
+      const response = await axios.get(
+        "api/company/get-company-data?field=selectedDepartments",
+      );
+      return Array.isArray(response.data?.selectedDepartments)
+        ? response.data.selectedDepartments
+        : [];
+    },
+  });
 
   //------------------------PAGE ACCESS START-------------------//
   const cardsConfig = [
@@ -90,118 +187,64 @@ const MaintainanceDashboard = () => {
           `/api/budget/company-budget?departmentId=6798bafbe469e809084e24a7
             `
         );
-        return response.data?.allBudgets;
+          return Array.isArray(response.data?.allBudgets)
+          ? response.data.allBudgets
+          : [];
       } catch (error) {
         throw new Error("Error fetching data");
       }
     },
   });
 
-  //------------------------Graph round functions-------------------//
-  const expenseSeries = useMemo(() => {
-    // Initialize monthly buckets
-    const months = Array.from({ length: 12 }, (_, index) =>
-      dayjs(`2024-04-01`).add(index, "month").format("MMM")
-    );
-
-    const fyData = {
-      "FY 2024-25": Array(12).fill(0),
-      "FY 2025-26": Array(12).fill(0),
-    };
-
-    hrFinance.forEach((item) => {
-      const date = dayjs(item.dueDate);
-      const year = date.year();
-      const monthIndex = date.month(); // 0 = Jan, 11 = Dec
-
-      if (year === 2024 && monthIndex >= 3) {
-        // Apr 2024 to Dec 2024 (month 3 to 11)
-        fyData["FY 2024-25"][monthIndex - 3] += item.actualAmount || 0;
-      } else if (year === 2025) {
-        if (monthIndex <= 2) {
-          // Jan to Mar 2025 (months 0–2)
-          fyData["FY 2024-25"][monthIndex + 9] += item.actualAmount || 0;
-        } else if (monthIndex >= 3) {
-          // Apr 2025 to Dec 2025 (months 3–11)
-          fyData["FY 2025-26"][monthIndex - 3] += item.actualAmount || 0;
-        }
-      } else if (year === 2026 && monthIndex <= 2) {
-        // Jan to Mar 2026
-        fyData["FY 2025-26"][monthIndex + 9] += item.actualAmount || 0;
-      }
-    });
-
-    return [
-      {
-        name: "total",
-        group: "FY 2024-25",
-        data: fyData["FY 2024-25"],
-      },
-      {
-        name: "total",
-        group: "FY 2025-26",
-        data: fyData["FY 2025-26"],
-      },
-    ];
-  }, [hrFinance]);
-
-  const maxExpenseValue = Math.max(
-    ...expenseSeries.flatMap((series) => series.data)
-  );
-  const roundedMax = Math.ceil((maxExpenseValue + 100000) / 100000) * 100000;
-  //------------------------Graph round functions-------------------//
-  //----------------------Monthly average-----------------------//
+  
   //----------------------KPA Data-----------------------//
   const fetchDepartments = async () => {
+    if (!department?._id) {
+      return [];
+    }
+
     try {
       const response = await axios.get(
-        `api/performance/get-tasks?dept=${department?._id}&type=KPA`
+        `/api/performance/get-tasks?dept=${department._id}&type=KPA&duration=Monthly`
       );
-      return response.data;
+      return normalizeListResponse(response.data);
     } catch (error) {
       console.error("Error fetching data:", error);
+      return [];
     }
   };
   const { data: departmentKra = [], isPending: departmentLoading } = useQuery({
-    queryKey: ["fetchedMonthlyKPA"],
+    queryKey: ["fetchedMonthlyKPA", department?._id],
     queryFn: fetchDepartments,
+    enabled: !!department?._id,
   });
   //----------------------KPA Data-----------------------//
-  const monthlyGroups = {};
-
-  hrFinance.forEach((item) => {
-    const dueDate = new Date(item.dueDate);
-    const monthKey = `${dueDate.getFullYear()}-${dueDate.getMonth() + 1}`; // e.g., "2024-4"
-    if (!monthlyGroups[monthKey]) monthlyGroups[monthKey] = [];
-    monthlyGroups[monthKey].push(item.actualAmount || 0);
-  });
-
-  const monthlyTotals = Object.values(monthlyGroups).map((amounts) =>
-    amounts.reduce((sum, val) => sum + val, 0)
-  );
-
-  const averageMonthlyExpense = monthlyTotals.length
-    ? monthlyTotals.reduce((a, b) => a + b, 0) / monthlyTotals.length
-    : 0;
-
   const totalOverallExpense = isHrFinanceLoading
-    ? []
-    : hrFinance.reduce((sum, item) => (sum + item.actualAmount || 0, 0));
-  console.log("totalExpense : ", totalOverallExpense);
+    ? 0
+    : hrFinance.reduce(
+        (sum, item) => sum + getAmount(item?.actualAmount),
+        0,
+      );
   //----------------------Monthly average-----------------------//
 
   const { data: tasks = [], isLoading: isTasksLoading } = useQuery({
-    queryKey: ["tasks"],
+    queryKey: ["tasks", department?._id],
     queryFn: async () => {
+      if (!department?._id) {
+        return [];
+      }
+
       try {
         const response = await axios.get(
           `/api/tasks/get-tasks?dept=${department._id}`
         );
-        return response.data;
+        return normalizeListResponse(response.data);
       } catch (error) {
-        throw new Error("Error fetching data");
+        console.error("Error fetching data:", error);
+        return [];
       }
     },
+    enabled: !!department?._id,
   });
 
   //----------------------Units data-----------------------//
@@ -223,229 +266,121 @@ const MaintainanceDashboard = () => {
     ? []
     : unitsData.reduce((acc, unit) => acc + (unit.sqft || 0), 0);
 
+  const { data: maintenanceAssets = [], isLoading: isMaintenanceAssetsLoading } =
+    useQuery({
+      queryKey: ["maintenance-assets", department?._id],
+      queryFn: async () => {
+        if (!department?._id) {
+          return [];
+        }
+
+        try {
+          const response = await axios.get(
+            `/api/assets/get-assets?departmentId=${department._id}`,
+          );
+          return Array.isArray(response.data)
+            ? response.data.flatMap((item) => item?.assets || [])
+            : [];
+        } catch (error) {
+          console.error("Error fetching maintenance assets:", error);
+          return [];
+        }
+      },
+      enabled: !!department?._id,
+    });
+
+  const underMaintenanceAssetsCount = useMemo(() => {
+    if (isMaintenanceAssetsLoading || !Array.isArray(maintenanceAssets)) {
+      return 0;
+    }
+
+    return maintenanceAssets.filter((asset) => asset?.isUnderMaintenance === true)
+      .length;
+  }, [maintenanceAssets, isMaintenanceAssetsLoading]);
+
+  const monthlyDueTasksCount = useMemo(() => {
+    const currentMonth = dayjs();
+
+    return (Array.isArray(tasks) ? tasks : []).filter((task) =>
+      task?.dueDate ? dayjs(task.dueDate).isSame(currentMonth, "month") : false,
+    ).length;
+  }, [tasks]);
+
   //----------------------Units data-----------------------//
 
   const { data: weeklySchedule = [], isLoading: isWeeklyScheduleLoading } =
     useQuery({
-      queryKey: ["weeklySchedule"],
+      queryKey: ["weeklySchedule", department?._id],
       queryFn: async () => {
+        if (!department?._id) {
+          return [];
+        }
+
         try {
           const response = await axios.get(
             `/api/weekly-unit/fetch-weekly-unit/${department._id}`
           );
           return response.data;
         } catch (error) {
-          throw new Error("Error fetching data");
+          console.error("Error fetching data:", error);
+          return [];
         }
       },
+      enabled: !!department?._id,
     });
 
-  const hrBarData = transformBudgetData(!isHrFinanceLoading ? hrFinance : []);
-  const totalExpense = hrBarData?.projectedBudget?.reduce(
-    (sum, val) => sum + (val || 0),
-    0
-  );
-
-  const expenseRawSeries = useMemo(() => {
-    // Initialize monthly buckets
-    const months = Array.from({ length: 12 }, (_, index) =>
-      dayjs(`2024-04-01`).add(index, "month").format("MMM")
-    );
-
-    const fyData = {
-      "FY 2024-25": Array(12).fill(0),
-      "FY 2025-26": Array(12).fill(0),
-    };
-
-    hrFinance.forEach((item) => {
-      const date = dayjs(item.dueDate);
-      const year = date.year();
-      const monthIndex = date.month(); // 0 = Jan, 11 = Dec
-
-      if (year === 2024 && monthIndex >= 3) {
-        // Apr 2024 to Dec 2024 (month 3 to 11)
-        fyData["FY 2024-25"][monthIndex - 3] += item.actualAmount || 0;
-      } else if (year === 2025) {
-        if (monthIndex <= 2) {
-          // Jan to Mar 2025 (months 0–2)
-          fyData["FY 2024-25"][monthIndex + 9] += item.actualAmount || 0;
-        } else if (monthIndex >= 3) {
-          // Apr 2025 to Dec 2025 (months 3–11)
-          fyData["FY 2025-26"][monthIndex - 3] += item.actualAmount || 0;
-        }
-      } else if (year === 2026 && monthIndex <= 2) {
-        // Jan to Mar 2026
-        fyData["FY 2025-26"][monthIndex + 9] += item.actualAmount || 0;
+  const { data: tickets = [], isLoading: isTicketsLoading } = useQuery({
+    queryKey: ["maintenance-ticket-issues", department?._id],
+    queryFn: async () => {
+      if (!department?._id) {
+        return [];
       }
-    });
 
-    return [
-      {
-        name: "total",
-        group: "FY 2024-25",
-        data: fyData["FY 2024-25"],
-      },
-      {
-        name: "total",
-        group: "FY 2025-26",
-        data: fyData["FY 2025-26"],
-      },
-    ];
-  }, [hrFinance]);
-
-  const expenseOptions = {
-    chart: {
-      type: "bar",
-      toolbar: { show: false },
-
-      stacked: false,
-      fontFamily: "Poppins-Regular, Arial, sans-serif",
-      events: {
-        dataPointSelection: () => {
-          navigate("finance/budget");
-        },
-      },
+      try {
+        const response = await axios.get(
+          `/api/tickets/department-tickets/${department._id}`
+        );
+        return Array.isArray(response.data) ? response.data : [];
+      } catch (error) {
+        console.error("Error fetching maintenance tickets:", error);
+        return [];
+      }
     },
-    colors: ["#54C4A7", "#EB5C45"],
-    plotOptions: {
-      bar: {
-        horizontal: false,
-        columnWidth: "40%",
-        borderRadius: 5,
-        borderRadiusApplication: "none",
-        dataLabels: {
-          position: "top",
-        },
-      },
-    },
-    dataLabels: {
-      enabled: true,
-      formatter: (val) => {
-        return inrFormat(val);
-      },
+    enabled: !!department?._id,
+  });
 
-      style: {
-        fontSize: "12px",
-        colors: ["#000"],
-      },
-      offsetY: -22,
-    },
+  const categoryWiseMaintenance = useMemo(() => {
+    if (isTicketsLoading || !Array.isArray(tickets)) return [];
 
-    yaxis: {
-      min: 0,
-      tickAmount: 4,
-      max: roundedMax,
-      title: { text: "Amount In Lakhs (INR)" },
-      labels: {
-        formatter: (val) => `${val / 100000}`,
-      },
-    },
-    fill: {
-      opacity: 1,
-    },
-    legend: {
-      show: true,
-      position: "top",
-    },
+    const categoryCountMap = tickets.reduce((acc, item) => {
+      const category = String(item?.ticket || "Others").trim() || "Others";
+      acc[category] = (acc[category] || 0) + 1;
+      return acc;
+    }, {});
 
-    tooltip: {
-      enabled: false,
-      custom: function ({ series, seriesIndex, dataPointIndex }) {
-        const rawData = expenseRawSeries[seriesIndex]?.data[dataPointIndex];
-        // return `<div style="padding: 8px; font-family: Poppins, sans-serif;">
-        //       HR Expense: INR ${rawData.toLocaleString("en-IN")}
-        //     </div>`;
-        return `
-              <div style="padding: 8px; font-size: 13px; font-family: Poppins, sans-serif">
-          
-                <div style="display: flex; align-items: center; justify-content: space-between; background-color: #d7fff4; color: #00936c; padding: 6px 8px; border-radius: 4px; margin-bottom: 4px;">
-                  <div><strong>Finance Expense:</strong></div>
-                  <div style="width: 10px;"></div>
-               <div style="text-align: left;">INR ${Math.round(
-                 rawData
-               ).toLocaleString("en-IN")}</div>
-  
-                </div>
-       
-              </div>
-            `;
-      },
-    },
-  };
+    const sortedCategories = Object.entries(categoryCountMap)
+      .map(([unit, expense]) => ({ unit, expense }))
+      .sort((first, second) => second.expense - first.expense);
 
-  const budgetBar = useMemo(() => {
-    if (isHrFinanceLoading || !Array.isArray(hrFinance)) return null;
-    return transformBudgetData(isHrFinanceLoading ? [] : hrFinance);
-  }, [isHrFinanceLoading, hrFinance]);
-  const totalUtilised =
-    budgetBar?.[selectedFiscalYear]?.utilisedBudget?.reduce(
-      (acc, val) => acc + val,
-      0
-    ) || 0;
-  useEffect(() => {
-    setIsSidebarOpen(true);
-  }, []); // Empty dependency array ensures this runs once on mount
+    if (sortedCategories.length <= 5) {
+      return sortedCategories;
+    }
 
-  const navigate = useNavigate();
+    const topCategories = sortedCategories.slice(0, 5);
+    const othersCount = sortedCategories
+      .slice(5)
+      .reduce((sum, item) => sum + item.expense, 0);
 
-  const taskData = [
-    { unit: "ST-701A", tasks: 25 },
-    { unit: "ST-701B", tasks: 30 },
-  ];
+    return [...topCategories, { unit: "Others", expense: othersCount }];
+  }, [isTicketsLoading, tickets]);
 
-  const totalUnitWiseTask = taskData.reduce((sum, item) => sum + item.tasks, 0);
-  const unitWisePieData = taskData.map((item) => ({
-    label: `${item.unit} (${((item.tasks / totalUnitWiseTask) * 100).toFixed(
-      1
-    )}%)`,
-    value: item.tasks,
-  }));
-
-  // ------------------------------------------------------------------------------------------------------------------//
-  // ------------------------------------------------------------------------------------------------------------------//
-  // Due Maintenance
-  const dueMaintenance = [
-    { name: "AC", tasks: 10 },
-    { name: "Furniture", tasks: 20 },
-    { name: "Carpets", tasks: 30 },
-    { name: "Plumbing", tasks: 30 },
-    { name: "Glass Items", tasks: 30 },
-    { name: "Others", tasks: 30 },
-  ];
-
-  const dueMaintenanceCount = dueMaintenance.map((user) => user.tasks);
-  const colorsMaintenance = [
-    "#FF5733",
-    "#FFC300",
-    "#28B463",
-    "#28b49a",
-    "#7a02ad",
-    "#ff00e6",
-  ];
-  //----------------------------------------------------------------------------------------------------------//
-
-  //----------------------------------------------------------------------------------------------------------//
-  // Categoty Wise Maintenance
-  const categoryWiseMaintenance = [
-    { unit: "AC", expense: 12000 },
-    { unit: "Carpets", expense: 10000 },
-    { unit: "Plumbing", expense: 11500 },
-    { unit: "Furniture", expense: 10000 },
-    { unit: "Electronics", expense: 10000 },
-    { unit: "Stationery", expense: 10000 },
-    { unit: "Glass Items", expense: 10000 },
-    { unit: "Others", expense: 10000 },
-  ];
   const totalCategoryWiseMaintenance = categoryWiseMaintenance.reduce(
     (sum, item) => sum + item.expense,
     0
   );
   const pieCategoryWiseMaintenanceData = categoryWiseMaintenance.map(
     (item) => ({
-      label: `${item.unit} (${(
-        (item.expense / totalCategoryWiseMaintenance) *
-        100
-      ).toFixed(1)}%)`,
+      label: item.unit,
       value: item.expense,
     })
   );
@@ -454,27 +389,712 @@ const MaintainanceDashboard = () => {
     chart: {
       fontFamily: "Poppins-Regular",
     },
+    legend: {
+      horizontalAlign: "center",
+      itemMargin: {
+        horizontal: 4,
+        vertical: 2,
+      },
+      formatter: (seriesName) =>
+        `<span title="${seriesName}" style="display:inline-block;max-width:92px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom;font-size:12px;line-height:1.2;">${seriesName}</span>`,
+    },
     stroke: {
       show: true,
-      width: 5, // Increase for more "gap"
-      colors: ["#ffffff"], // Or match background color
+      width: 2,
+      colors: ["#ffffff"],
     },
     colors: [
-      "#0D47A1", // Dark Blue
-      "#1565C0",
-      "#1976D2",
-      "#1E88E5",
-      "#2196F3",
-      "#42A5F5",
-      "#64B5F6",
-      "#90CAF9", // Lightest
+      "#274C77",
+      "#6096BA",
+      "#A3CEF1",
+      "#8B5E3C",
+      "#5B8E7D",
+      "#D08C60",
+      "#7D6B91",
+      "#B7B7A4",
     ],
-    toolTip: {
-      y: {
-        formatter: (val) => `${((val / totalUnitWiseTask) * 100).toFixed(1)}%`,
+    tooltip: {
+      fillSeriesColor: false,
+      custom: ({ series, seriesIndex, w }) => {
+        const category =
+          categoryWiseMaintenance?.[seriesIndex]?.unit ||
+          w?.globals?.labels?.[seriesIndex] ||
+          "Unknown";
+        const count = series?.[seriesIndex] ?? 0;
+        const color =
+          w?.globals?.colors?.[seriesIndex] ||
+          pieCategoryWiseMaintenanceOptions.colors[
+            seriesIndex % pieCategoryWiseMaintenanceOptions.colors.length
+          ];
+
+        return `<div style="
+          padding:8px 12px;
+          font-size:12px;
+          font-family:Poppins-Regular;
+          font-weight:600;
+          background:${color};
+          color:#fff;
+          border-radius:6px;
+        ">
+          ${category} : ${count}
+        </div>`;
       },
     },
   };
+
+  const hrBarData = transformBudgetData(!isHrFinanceLoading ? hrFinance : []);
+  const totalExpense = hrBarData?.projectedBudget?.reduce(
+    (sum, val) => sum + (val || 0),
+    0
+  );
+
+  const maintenanceExpenseByFiscalYear = useMemo(() => {
+  const fyData = {};
+
+  (hrFinance || []).forEach((item) => {
+    if (!item?.dueDate || !dayjs(item.dueDate).isValid()) {
+      return;
+    }
+
+    const fiscalYearStart = getFiscalYearStart(item.dueDate);
+    const fiscalYearLabel = formatFiscalYear(fiscalYearStart);
+    const monthIndex = getFiscalMonthIndex(item.dueDate);
+
+    if (!fyData[fiscalYearLabel]) {
+      fyData[fiscalYearLabel] = {
+        actual: Array(12).fill(0),
+        projected: Array(12).fill(0),
+      };
+    }
+
+    const actualAmount = getAmount(item?.actualAmount);
+    const projectedAmount = getAmount(item?.projectedAmount);
+
+    fyData[fiscalYearLabel].actual[monthIndex] += actualAmount;
+    fyData[fiscalYearLabel].projected[monthIndex] += projectedAmount;
+  });
+
+  if (!fyData[currentFiscalYear]) {
+    fyData[currentFiscalYear] = {
+      actual: Array(12).fill(0),
+      projected: Array(12).fill(0),
+    };
+  }
+
+  return fyData;
+}, [hrFinance, currentFiscalYear]);
+
+const expenseRawSeries = useMemo(() => {
+  return Object.entries(maintenanceExpenseByFiscalYear)
+    .sort(([fyA], [fyB]) => {
+      const startA = Number(fyA.slice(3, 7));
+      const startB = Number(fyB.slice(3, 7));
+
+      return startA - startB;
+    })
+    .flatMap(([fiscalYear, data]) => {
+     
+      const actualForGraph = data.actual.map((actualAmount) =>
+        hiddenMaintenanceExpenseSeries.actual ? 0 : actualAmount,
+      );
+
+      const projectedForGraph = data.projected.map(
+        (projectedAmount, monthIndex) => {
+         
+          if (hiddenMaintenanceExpenseSeries.projected) {
+            return 0;
+          }
+
+          
+          if (hiddenMaintenanceExpenseSeries.actual) {
+            return projectedAmount;
+          }
+
+         
+          const actualAmount = data.actual[monthIndex] || 0;
+
+          return actualAmount > 0 ? 0 : projectedAmount;
+        },
+      );
+
+      return [
+        {
+          name: "Actual Amount",
+          group: fiscalYear,
+          data: actualForGraph,
+        },
+        {
+          name: "Projected Amount",
+          group: fiscalYear,
+          data: projectedForGraph,
+        },
+      ];
+    });
+}, [
+  maintenanceExpenseByFiscalYear,
+  hiddenMaintenanceExpenseSeries.actual,
+  hiddenMaintenanceExpenseSeries.projected,
+]);
+
+// const roundedMax = useMemo(() => {
+//   const fiscalYears = [
+//     ...new Set(expenseRawSeries.map((series) => series.group)),
+//   ];
+
+//   const maxValue = fiscalYears.reduce((max, fiscalYear) => {
+//     const actualSeries = expenseRawSeries.find(
+//       (series) =>
+//         series.group === fiscalYear && series.name === "Actual Amount"
+//     );
+
+//     const projectedSeries = expenseRawSeries.find(
+//       (series) =>
+//         series.group === fiscalYear && series.name === "Projected Amount"
+//     );
+
+//     const monthlyMax = Array.from({ length: 12 }, (_, index) => {
+//       const actual = actualSeries?.data?.[index] || 0;
+//       const projectedBalance = projectedSeries?.data?.[index] || 0;
+
+//       return actual + projectedBalance;
+//     });
+
+//     return Math.max(max, ...monthlyMax);
+//   }, 0);
+
+//   return Math.ceil((maxValue + 100000) / 100000) * 100000;
+// }, [expenseRawSeries]);
+const { roundedMax, tickAmount } = useMemo(() => {
+  /*
+   * Sirf selected FY ki currently visible series use hogi.
+   * Doosre financial year ka data scale ko affect nahi karega.
+   */
+  const selectedYearSeries = expenseRawSeries.filter(
+    (series) => series.group === selectedFiscalYear,
+  );
+
+  /*
+   * Har month ka currently displayed Actual + Projected total.
+   */
+  const monthlyTotals = Array.from(
+    { length: 12 },
+    (_, monthIndex) =>
+      selectedYearSeries.reduce(
+        (total, series) =>
+          total + Number(series?.data?.[monthIndex] || 0),
+        0,
+      ),
+  );
+
+  const maxExpenseValue = Math.max(...monthlyTotals, 0);
+
+  if (maxExpenseValue <= 0) {
+    return {
+      roundedMax: 10000,
+      tickAmount: 5,
+    };
+  }
+
+  /*
+   * Maintenance BudgetPage wala exact dynamic-scale formula.
+   */
+  const bufferedMax = maxExpenseValue * 1.1;
+  const roughStep = bufferedMax / 6;
+
+  const magnitude =
+    10 ** Math.floor(Math.log10(roughStep));
+
+  const normalizedStep = roughStep / magnitude;
+
+  let step = magnitude;
+
+  if (normalizedStep <= 1) {
+    step = magnitude;
+  } else if (normalizedStep <= 2) {
+    step = 2 * magnitude;
+  } else if (normalizedStep <= 5) {
+    step = 5 * magnitude;
+  } else {
+    step = 10 * magnitude;
+  }
+
+  const safeRoundedMax =
+    Math.ceil(bufferedMax / step) * step;
+
+  return {
+    roundedMax: safeRoundedMax,
+    tickAmount: Math.max(
+      Math.round(safeRoundedMax / step),
+      1,
+    ),
+  };
+}, [expenseRawSeries, selectedFiscalYear]);
+
+  const expenseOptions = {
+  chart: {
+    type: "bar",
+    toolbar: { show: false },
+    stacked: true,
+    fontFamily: "Poppins-Regular, Arial, sans-serif",
+    events: {
+  legendClick: (_chartContext, seriesIndex) => {
+    setHiddenMaintenanceExpenseSeries((currentState) => {
+      // Series index 0 = Actual Amount
+      if (seriesIndex === 0) {
+        return {
+          ...currentState,
+          actual: !currentState.actual,
+        };
+      }
+
+      // Series index 1 = Projected Amount
+      if (seriesIndex === 1) {
+        return {
+          ...currentState,
+          projected: !currentState.projected,
+        };
+      }
+
+      return currentState;
+    });
+  },
+
+ 
+  dataPointSelection: () => {
+    navigate("finance/budget");
+  },
+},
+  },
+  colors: ["#54C4A7", "#c4c4c4"],
+  plotOptions: {
+    bar: {
+      horizontal: false,
+      columnWidth: "40%",
+      borderRadius: 5,
+      borderRadiusApplication: "end",
+      dataLabels: {
+        position: "top",
+        total: {
+          enabled: true,
+         formatter: (_, config) => {
+  const total =
+    config?.w?.globals?.stackedSeriesTotals?.[
+      config?.dataPointIndex
+    ] || 0;
+
+  if (Number(total) <= 0) {
+    return "";
+  }
+
+  return inrFormat(Number(total));
+},
+          style: {
+            fontSize: "12px",
+            fontWeight: 600,
+            color: "#000",
+          },
+          offsetY: -8,
+        },
+      },
+    },
+  },
+  dataLabels: {
+    enabled: false,
+  },
+  xaxis: {
+  categories: fiscalMonths,
+  title: {
+    text: "  ",
+  },
+  crosshairs: {
+    show: false,
+    fill: {
+      opacity: 0,
+    },
+    stroke: {
+      opacity: 0,
+    },
+  },
+},
+  yaxis: {
+  min: 0,
+  max: roundedMax,
+  tickAmount,
+  forceNiceScale: false,
+
+  title: {
+    text: "Amount In Lakhs (INR)",
+  },
+
+  labels: {
+    minWidth: 25,
+    maxWidth: 35,
+
+    /*
+     * BudgetPage ke current display ke bilkul same:
+     * ₹50,000   -> 5
+     * ₹1,00,000 -> 10
+     */
+    formatter: (value) => {
+      const axisValue =
+        Number(value || 0) / 10000;
+
+      if (Number.isInteger(axisValue)) {
+        return String(axisValue);
+      }
+
+      return Number(
+        axisValue.toFixed(2),
+      ).toString();
+    },
+
+    style: {
+      fontFamily: "Poppins-Regular, Arial, sans-serif",
+      fontSize: "11px",
+    },
+  },
+},
+  fill: {
+    opacity: 1,
+  },
+  states: {
+    hover: {
+      filter: {
+        type: "none",
+      },
+    },
+    active: {
+      filter: {
+        type: "none",
+      },
+    },
+  },
+  legend: {
+  show: true,
+  position: "top",
+
+  
+  onItemClick: {
+    toggleDataSeries: false,
+  },
+
+  labels: {
+    colors: [
+      // Actual legend text
+      hiddenMaintenanceExpenseSeries.actual
+        ? "#D5D5D5"
+        : "#4B4B4B",
+
+      // Projected legend text
+      hiddenMaintenanceExpenseSeries.projected
+        ? "#D5D5D5"
+        : "#4B4B4B",
+    ],
+  },
+
+  markers: {
+    fillColors: [
+      // Actual legend marker
+      hiddenMaintenanceExpenseSeries.actual
+        ? "#E1F5EF"
+        : "#54C4A7",
+
+      // Projected legend marker
+      hiddenMaintenanceExpenseSeries.projected
+        ? "#E2E2E2"
+        : "#C4C4C4",
+    ],
+  },
+},
+  tooltip: {
+  enabled: true,
+  shared: true,
+  intersect: false,
+
+  custom: function ({ dataPointIndex, w }) {
+    const selectedYearData =
+      maintenanceExpenseByFiscalYear?.[selectedFiscalYear];
+
+    const actualAmount =
+      selectedYearData?.actual?.[dataPointIndex] || 0;
+
+    const projectedAmount =
+      selectedYearData?.projected?.[dataPointIndex] || 0;
+
+    const monthLabel =
+      w?.globals?.labels?.[dataPointIndex] ||
+      fiscalMonths[dataPointIndex] ||
+      `Month ${dataPointIndex + 1}`;
+
+    return `
+      <div
+        class="apexcharts-tooltip-title"
+        style="
+          font-family: Poppins-Regular;
+          font-size: 12px;
+          padding: 6px 10px;
+          margin-bottom: 0;
+        "
+      >
+        ${monthLabel}
+      </div>
+
+      <div
+        style="
+          padding: 8px 10px;
+          font-family: Poppins-Regular;
+          font-size: 12px;
+          background: #ffffff;
+          min-width: 230px;
+        "
+      >
+        <div
+          style="
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            margin-bottom: 7px;
+            white-space: nowrap;
+          "
+        >
+          <div
+            style="
+              display: flex;
+              align-items: center;
+              gap: 6px;
+            "
+          >
+            <span
+              style="
+                width: 12px;
+                height: 12px;
+                border-radius: 50%;
+                background: #54C4A7;
+                display: inline-block;
+              "
+            ></span>
+
+            <span>Actual Amount:</span>
+          </div>
+
+          <span style="font-weight: 600;">
+            INR ${Math.round(actualAmount).toLocaleString("en-IN")}
+          </span>
+        </div>
+
+        <div
+          style="
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            white-space: nowrap;
+          "
+        >
+          <div
+            style="
+              display: flex;
+              align-items: center;
+              gap: 6px;
+            "
+          >
+            <span
+              style="
+                width: 12px;
+                height: 12px;
+                border-radius: 50%;
+                background: #C4C4C4;
+                display: inline-block;
+              "
+            ></span>
+
+            <span>Projected Amount:</span>
+          </div>
+
+          <span style="font-weight: 600;">
+            INR ${Math.round(projectedAmount).toLocaleString("en-IN")}
+          </span>
+        </div>
+      </div>
+    `;
+  },
+},
+};
+
+  const budgetBar = useMemo(() => {
+    if (isHrFinanceLoading || !Array.isArray(hrFinance)) return null;
+    return transformBudgetData(isHrFinanceLoading ? [] : hrFinance);
+  }, [isHrFinanceLoading, hrFinance]);
+const selectedMaintenanceActualAmounts = useMemo(() => {
+  return (
+    maintenanceExpenseByFiscalYear?.[selectedFiscalYear]?.actual ||
+    Array(12).fill(0)
+  );
+}, [maintenanceExpenseByFiscalYear, selectedFiscalYear]);
+
+const totalUtilised = useMemo(() => {
+  return selectedMaintenanceActualAmounts.reduce(
+    (sum, value) => sum + (Number(value) || 0),
+    0,
+  );
+}, [selectedMaintenanceActualAmounts]);
+
+const currentFyAverageMonthlyExpense = useMemo(() => {
+  const currentFyActualAmounts =
+    maintenanceExpenseByFiscalYear?.[currentFiscalYear]?.actual ||
+    Array(12).fill(0);
+
+  const totalCurrentFyExpense = currentFyActualAmounts.reduce(
+    (sum, value) => sum + (Number(value) || 0),
+    0,
+  );
+
+  return totalCurrentFyExpense / 12;
+}, [currentFiscalYear, maintenanceExpenseByFiscalYear]);
+  useEffect(() => {
+    setIsSidebarOpen(true);
+  }, []); // Empty dependency array ensures this runs once on mount
+
+  //const navigate = useNavigate();
+  const managerByDepartmentName = useMemo(() => {
+    const map = new Map();
+    selectedDepartments.forEach((item) => {
+      const departmentName = item?.department?.name?.trim();
+      if (departmentName) {
+        map.set(departmentName.toLowerCase(), item?.admin || "Unassigned");
+      }
+    });
+    return map;
+  }, [selectedDepartments]);
+
+  const pendingDepartmentTasks = useMemo(
+    () =>
+      tasks.filter(
+        (task) => task?.taskType === "Department" && task?.status === "Pending",
+      ),
+    [tasks],
+  );
+  const unitWisePieData = useMemo(() => {
+    const groupedTasks = pendingDepartmentTasks.reduce((acc, task) => {
+      const unitName = task?.location?.unitNo || "Unassigned";
+      if (!acc[unitName]) acc[unitName] = { label: unitName, value: 0 };
+      acc[unitName].value += 1;
+      return acc;
+    }, {});
+
+    return Object.values(groupedTasks).sort((a, b) =>
+      a.label.localeCompare(b.label, undefined, { numeric: true }),
+    );
+  }, [pendingDepartmentTasks]);
+
+  const unitPieChartOptions = {
+    labels: unitWisePieData.map((item) => item.label),
+    chart: {
+      fontFamily: "Poppins-Regular",
+      events: {
+        dataPointSelection: () => navigate("/app/tasks"),
+      },
+    },
+    tooltip: {
+      y: {
+        formatter: (val) => `${val} Due tasks`,
+      },
+    },
+  };
+
+  const executiveTasks = useMemo(() => {
+    const groupedTasks = pendingDepartmentTasks.reduce((acc, task) => {
+      const departmentName =
+        typeof task?.department === "object"
+          ? task?.department?.name
+          : task?.department || department?.name || "Unknown Department";
+      const managerName =
+        managerByDepartmentName.get(departmentName.toLowerCase()) ||
+        "Unassigned";
+      if (!acc[managerName]) acc[managerName] = { name: managerName, tasks: 0 };
+      acc[managerName].tasks += 1;
+      return acc;
+    }, {});
+
+    return Object.values(groupedTasks).sort((a, b) => b.tasks - a.tasks);
+  }, [department?.name, managerByDepartmentName, pendingDepartmentTasks]);
+
+  const executiveTaskLabels = executiveTasks.map((item) => item.name);
+  const executiveTasksCount = executiveTasks.map((item) => item.tasks);
+  const executiveTaskColors = [
+    "#FF5733",
+    "#FFC300",
+    "#28B463",
+    "#5B6CFF",
+    "#9B59B6",
+    "#17A2B8",
+    "#E67E22",
+    "#E91E63",
+  ];
+
+  // ------------------------------------------------------------------------------------------------------------------//
+  // ------------------------------------------------------------------------------------------------------------------//
+  // Due Maintenance
+  const dueTicketStatuses = new Set(["open", "pending", "in progress", "escalated"]);
+
+  const pendingMaintenanceTicketsCount = (Array.isArray(tickets) ? tickets : []).filter(
+    (ticket) => dueTicketStatuses.has(String(ticket?.status || "").toLowerCase())
+  ).length;
+  const completedMaintenanceTicketsCount = (Array.isArray(tickets) ? tickets : []).filter(
+    (ticket) => String(ticket?.status || "").toLowerCase() === "closed"
+  ).length;
+
+  const dueMaintenanceData = [
+    { label: "Completed", value: completedMaintenanceTicketsCount },
+    { label: "Pending", value: pendingMaintenanceTicketsCount },
+  ];
+
+  const dueMaintenanceOptions = {
+    labels: dueMaintenanceData.map((item) => item.label),
+    chart: {
+      fontFamily: "Poppins-Regular",
+    },
+    legend: {
+      horizontalAlign: "center",
+      itemMargin: {
+        horizontal: 8,
+        vertical: 4,
+      },
+    },
+    stroke: {
+      show: true,
+      width: 2,
+      colors: ["#ffffff"],
+    },
+    colors: ["#59C9A5", "#FCA5A5"],
+    tooltip: {
+      fillSeriesColor: false,
+      custom: ({ series, seriesIndex, w }) => {
+        const label = w?.globals?.labels?.[seriesIndex] || "Unknown";
+        const count = series?.[seriesIndex] ?? 0;
+        const color =
+          w?.globals?.colors?.[seriesIndex] ||
+          dueMaintenanceOptions.colors[
+            seriesIndex % dueMaintenanceOptions.colors.length
+          ];
+
+        return `<div style="
+          padding:8px 12px;
+          font-size:12px;
+          font-family:Poppins-Regular;
+          font-weight:600;
+          background:${color};
+          color:#fff;
+          border-radius:6px;
+        ">
+          ${label} : ${count}
+        </div>`;
+      },
+    },
+  };
+  //----------------------------------------------------------------------------------------------------------//
+
   //----------------------------------------------------------------------------------------------------------//
   // Gender Data
   const genderData = [
@@ -497,9 +1117,9 @@ const MaintainanceDashboard = () => {
       fontFamily: "Poppins-Regular",
       events: {
         dataPointSelection: () => {
-          navigate(
-            "/app/dashboard/admin-dashboard/client-members/client-members-data"
-          );
+          // navigate(
+          //   "/app/dashboard/admin-dashboard/client-members/client-members-data"
+          // );
         },
       },
     },
@@ -625,31 +1245,6 @@ const MaintainanceDashboard = () => {
     };
   });
 
-  const priorityTasks = [
-    { taskName: "Check Lights", type: "Daily", endTime: "12:00 PM" },
-    {
-      taskName: "Inspect Fire Extinguishers",
-      type: "Daily",
-      endTime: "03:00 PM",
-    },
-    { taskName: "Test Alarm System", type: "Monthly", endTime: "10:00 AM" },
-    { taskName: "Clean AC Filters", type: "Daily", endTime: "02:30 PM" },
-    { taskName: "Check Water Pressure", type: "Daily", endTime: "08:00 AM" },
-    {
-      taskName: "Monitor Security Cameras",
-      type: "Daily",
-      endTime: "11:45 PM",
-    },
-    {
-      taskName: "Update Software Patches",
-      type: "Monthly",
-      endTime: "06:00 PM",
-    },
-    { taskName: "Backup Server Data", type: "Daily", endTime: "07:30 PM" },
-    { taskName: "Test Emergency Lights", type: "Monthly", endTime: "04:15 PM" },
-    { taskName: "Calibrate Sensors", type: "Monthly", endTime: "01:00 PM" },
-  ];
-
   const priorityTasksColumns = [
     { id: "id", label: "Sr No", align: "left" },
     { id: "taskName", label: "Task Name", align: "left" },
@@ -657,9 +1252,23 @@ const MaintainanceDashboard = () => {
       id: "status",
       label: "Status",
       renderCell: (data) => {
+        const status = String(data.status || "-");
+        const normalizedStatus = status.toLowerCase();
+        const styleMap = {
+          approved: { backgroundColor: "#DCFCE7", color: "#166534" },
+          pending: { backgroundColor: "#FEF3C7", color: "#92400E" },
+          rejected: { backgroundColor: "#FEE2E2", color: "#991B1B" },
+          completed: { backgroundColor: "#DCFCE7", color: "#166534" },
+        };
+
+        const chipStyle = styleMap[normalizedStatus] || {
+          backgroundColor: "#F5F5F5",
+          color: "#616161",
+        };
+
         return (
           <>
-            <Chip sx={{ color: "#1E3D73" }} label={data.status} />
+            <Chip sx={{ ...chipStyle }} label={status} size="small" />
           </>
         );
       },
@@ -668,80 +1277,7 @@ const MaintainanceDashboard = () => {
     { id: "endTime", label: "End Time", align: "left" },
   ];
 
-  const executiveTimings = [
-    {
-      srNo: 1,
-      id: 2,
-      name: "Rajesh Sawant",
-      building: "DTC",
-      unitNo: "002",
-      startTime: "9:00AM",
-      endTime: "06:00PM",
-    },
-    {
-      srNo: 2,
-      id: 2,
-      name: "Praktan Madkaikar",
-      building: "ST",
-      unitNo: "501(B)",
-      startTime: "09:30 AM",
-      endTime: "06:30 PM",
-    },
-    {
-      srNo: 3,
-      id: 3,
-      name: "Rajesh Sawant",
-      building: "ST",
-      unitNo: "701(A)",
-      startTime: "09:00 AM",
-      endTime: "06:00 PM",
-    },
-    {
-      srNo: 4,
-      id: 4,
-      name: "Praktan Madkaikar",
-      building: "DTC",
-      unitNo: "007",
-      startTime: "09:00 AM",
-      endTime: "06:00 PM",
-    },
-    {
-      srNo: 5,
-      id: 5,
-      name: "Praktan Madkaikar",
-      building: "DTC",
-      unitNo: "004",
-      startTime: "09:00 AM",
-      endTime: "06:00 PM",
-    },
-    {
-      srNo: 6,
-      id: 6,
-      name: "Praktan Madkaikar",
-      building: "ST",
-      unitNo: "601(A)",
-      startTime: "09:00 AM",
-      endTime: "06:00 PM",
-    },
-    {
-      srNo: 7,
-      id: 7,
-      name: "Praktan Madkaikar",
-      building: "ST",
-      unitNo: "601(B)",
-      startTime: "09:00 AM",
-      endTime: "06:00 PM",
-    },
-    {
-      srNo: 8,
-      id: 8,
-      name: "Praktan Madkaikar",
-      building: "ST",
-      unitNo: "501(A)",
-      startTime: "09:00 AM",
-      endTime: "06:00 PM",
-    },
-  ];
+
 
   const executiveTimingsColumns = [
     { id: "srNo", label: "Sr No", align: "left" },
@@ -844,22 +1380,21 @@ const MaintainanceDashboard = () => {
   const maintenancePieDonutChart = [
     {
       key: PERMISSIONS.MAINTENANCE_CATEGORY_WISE_MAINTENANCE.value,
-      title: "Category Wise Maintenance",
+      title: "Category Wise Tickets",
       border: true,
-      data: [],
-      options: [],
+      data: pieCategoryWiseMaintenanceData,
+      options: pieCategoryWiseMaintenanceOptions,
+      centerAlign: true,
       type: "PieChartMui",
     },
     {
       key: PERMISSIONS.MAINTENANCE_DUE_MAINTENANCE.value,
-      title: "Due Maintenance",
+      title: "Due Tickets",
       border: true,
-      series: [],
-      labels: [],
-      colors: colorsMaintenance,
-      centerLabel: "Due Tasks",
-      tooltipValue: dueMaintenanceCount,
-      type: "Donut",
+      data: dueMaintenanceData,
+      options: dueMaintenanceOptions,
+      centerAlign: true,
+      type: "PieChartMui",
     },
   ];
   const allowedPieDonut = filterPermissions(
@@ -915,20 +1450,20 @@ const MaintainanceDashboard = () => {
     {
       key: PERMISSIONS.MAINTENANCE_MONTHLY_DUE_TASKS.value, // maintenance_monthly_due_tasks
       title: "Total",
-      data: tasks.length || 0,
+      data: monthlyDueTasksCount,
       description: "Monthly Due Tasks",
       route: "/app/tasks",
     },
     {
       key: PERMISSIONS.MAINTENANCE_MONTHLY_EXPENSE.value, // maintenance_monthly_expense
       title: "Average",
-      data: `INR ${inrFormat(averageMonthlyExpense)}`,
+      data: `INR ${inrFormat(currentFyAverageMonthlyExpense)}`,
       description: "Monthly Expense",
       route: "maintenance-expenses",
     },
     {
       key: PERMISSIONS.MAINTENANCE_EXPENSE_PER_SQFT.value,
-      title: "Avg",
+      title: "Total",
       data: `INR ${inrFormat(totalUtilised / totalSqFt)}`,
       description: "Expense per Sqft",
       route: "per-sq-ft-expense",
@@ -936,13 +1471,14 @@ const MaintainanceDashboard = () => {
     {
       key: PERMISSIONS.MAINTENANCE_ASSETS_UNDER_MANAGEMENT.value,
       title: "Total",
-      data: 0,
+      data: underMaintenanceAssetsCount,
       description: "Assets Under Management",
-      // route: "maintenance-assets",
+      route: `/app/assets/view-assets/${encodedDepartmentName}/list-of-assets/assets-under-maintenance`,
+      onClick: handleUnderMaintenanceAssetsClick,
     },
     {
       key: PERMISSIONS.MAINTENANCE_MONTHLY_KPA.value,
-      title: "Score",
+      title: "Total",
       data: departmentKra.length || 0,
       description: "Monthly KPA",
       route: "/app/performance",
@@ -963,7 +1499,7 @@ const MaintainanceDashboard = () => {
       rows: transformedTasks,
       columns: priorityTasksColumns,
       scroll: true,
-      rowsToDisplay: 4,
+      rowsToDisplay: transformedTasks.length,
     },
     {
       key: PERMISSIONS.MAINTENANCE_WEEKLY_EXECUTIVE_SHIFT_TIMING.value,
@@ -972,7 +1508,7 @@ const MaintainanceDashboard = () => {
       rows: transformedWeeklyShifts,
       columns: executiveTimingsColumns,
       scroll: true,
-      rowsToDisplay: 4,
+      rowsToDisplay: transformedWeeklyShifts.length,
     },
   ];
 
@@ -980,6 +1516,34 @@ const MaintainanceDashboard = () => {
     maintenanceTablesConfig,
     userPermissions
   );
+
+   const dueTasksConfigs = [
+    {
+      key: PERMISSIONS.MAINTENANCE_UNIT_WISE_DUE_TASKS.value,
+      type: "PieChartMui",
+      border: true,
+      title: "Unit Wise Due Tasks",
+      data: unitWisePieData,
+      options: unitPieChartOptions,
+      width: 500,
+      height: 320,
+      centerAlign: true,
+    },
+    {
+      key: PERMISSIONS.MAINTENANCE_EXECUTIVE_WISE_DUE_TASKS.value,
+      type: "DonutChart",
+      border: true,
+      title: "Executive Wise Due Tasks",
+      centerLabel: "Tasks",
+      labels: executiveTaskLabels,
+      colors: executiveTaskColors,
+      series: executiveTasksCount,
+      tooltipValue: executiveTasksCount,
+      tooltipFormatter: (label, value) =>
+        `${label}: ${value || 0} pending tasks`,
+    },
+  ];
+  const allowedDueTasks = filterPermissions(dueTasksConfigs, userPermissions);
 
   const techWidgets = [
     {
@@ -1061,57 +1625,89 @@ const MaintainanceDashboard = () => {
       layout: 3,
       widgets: allowedMaintenanceDataCards.map((config) => (
         <DataCard
+          key={config.key}
           route={config.route}
           title={config.title}
           data={config.data}
           description={config.description}
+          onClick={config.onClick}
         />
       )),
     },
 
     {
       layout: 2,
-      widgets: allowedMaintenanceTables.map((config)=>(
+      widgets: allowedMaintenanceTables.map((config) => (
 
         <MuiTable
           {...config}
         />
       ))
-        
-      
+    },
+
+    {
+      layout: allowedDueTasks.length,
+      widgets: allowedDueTasks.map((config) => (
+        <WidgetSection key={config.key} border title={config.title}>
+          {config.type === "PieChartMui" ? (
+            <PieChartMui
+              data={config.data}
+              options={config.options}
+              width={config.width}
+              height={config.height}
+              centerAlign={config.centerAlign}
+            />
+          ) : (
+            <DonutChart
+              centerLabel={config.centerLabel}
+              labels={config.labels}
+              colors={config.colors}
+              series={config.series}
+              tooltipValue={config.tooltipValue}
+              tooltipFormatter={config.tooltipFormatter}
+            />
+          )}
+        </WidgetSection>
+      )),
     },
 
     {
       layout: 2,
-      widgets:allowedPieDonut.map((config) => {
-      if (config.type === "PieChartMui") {
-        return (
-          <WidgetSection key={config.key} border={config.border} title={config.title}>
-            <PieChartMui data={config.data} options={config.options} />
-          </WidgetSection>
-        );
-      } else if (config.type === "Donut") {
-        return (
-          <WidgetSection key={config.key} border={config.border} title={config.title}>
-            <DonutChart
-              centerLabel={config.centerLabel}
-              labels={config.labels}
-              series={config.series}
-              tooltipValue={config.tooltipValue}
-            />
-          </WidgetSection>
-        );
-      }
-    }),
+      widgets: allowedPieDonut.map((config) => {
+        if (config.type === "PieChartMui") {
+          return (
+            <WidgetSection key={config.key} border={config.border} title={config.title}>
+              <PieChartMui
+                data={config.data}
+                options={config.options}
+                width={config.width}
+                height={config.height}
+                centerAlign={config.centerAlign}
+              />
+            </WidgetSection>
+          );
+        } else if (config.type === "Donut") {
+          return (
+            <WidgetSection key={config.key} border={config.border} title={config.title}>
+              <DonutChart
+                centerLabel={config.centerLabel}
+                labels={config.labels}
+                series={config.series}
+                tooltipValue={config.tooltipValue}
+              />
+            </WidgetSection>
+          );
+        }
+      }),
     },
     {
       layout: 2,
-      widgets: allowedPieChartConfig.map((config)=>(
-         <WidgetSection border={config.border} title={config.title}>
+      widgets: allowedPieChartConfig.map((config) => (
+        <WidgetSection border={config.border} title={config.title}>
           <PieChartMui data={config.data} options={config.options} />
         </WidgetSection>
       ))
-    
+
     },
   ];
 

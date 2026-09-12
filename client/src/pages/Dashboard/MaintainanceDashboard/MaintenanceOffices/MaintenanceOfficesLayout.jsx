@@ -29,7 +29,7 @@ const MaintenanceOfficesLayout = () => {
   const [clearedImageOpen, setClearedImageOpen] = useState(false);
   const [clearedFile, setClearedFile] = useState(null);
   const [tabIndex, setTabIndex] = useState(0);
-
+  const currentMonthLabel = dayjs().format("MMM-YYYY");
   const handleTabChange = (event, newValue) => {
     setTabIndex(newValue);
   };
@@ -59,10 +59,11 @@ const MaintenanceOfficesLayout = () => {
     queryKey: ["unitDetails"],
     queryFn: async () => {
       const response = await axios.get("/api/sales/co-working-members", {
-        params: { unitId: unit },
+       params: { unitId: unit, active: true },
       });
       return response.data || {};
     },
+    enabled: !!unit,
   });
 
   const totalOccupied = Number(unitDetails?.totalOccupiedDesks) || 0;
@@ -197,14 +198,14 @@ const MaintenanceOfficesLayout = () => {
           title="Total Desks"
           secondTitle="Total Occupancy %"
           secondData={"100%"}
-          description="Last Month : Apr-25"
+          description={`Current Month : ${currentMonthLabel}`}
         />
         <DoubleDataCard
           data={totalActualOccupied}
           title="Occupied Desks"
           secondTitle="Occupancy %"
           secondData={`${occupancyPercent}%`}
-          description="Last Month : Apr-25"
+          description={`Current Month : ${currentMonthLabel}`}
         />
         <DoubleDataCard
           data={totalDesks - totalActualOccupied}
@@ -214,7 +215,7 @@ const MaintenanceOfficesLayout = () => {
             ((totalDesks - totalActualOccupied) / totalDesks) *
             100
           ).toFixed(0)}%`}
-          description="Last Month : Apr-25"
+          description={`Current Month : ${currentMonthLabel}`}
         />
       </WidgetSection>
 
@@ -227,16 +228,18 @@ const MaintenanceOfficesLayout = () => {
           tableHeight={300}
           hideFilter
           columns={[
-            { field: "id", headerName: "Sr. No", width: 100 },
+            { field: "id", headerName: "Sr. No", width: 300 },
             { field: "client", headerName: "Client Name", flex: 1 },
-            { field: "occupiedDesks", headerName: "Occupied Desks" },
+            { field: "occupiedDesks", headerName: "Occupied Desks",flex: 1},
             {
               field: "occupancyPercent",
               headerName: "Occupied %",
+              flex: 1,
               cellRenderer: (params) => `${params.value}%`,
             },
           ]}
           data={tableData}
+          exportData
         />
       </WidgetSection>
 

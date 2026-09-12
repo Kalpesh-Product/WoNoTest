@@ -1,3 +1,4 @@
+const { fetchMeetingReportService } = require("../../services/reports/meeting");
 const Meeting = require("../../models/meetings/Meetings");
 const User = require("../../models/hr/UserData");
 const { default: mongoose } = require("mongoose");
@@ -23,18 +24,91 @@ const emitter = require("../../utils/eventEmitter");
 const { isValid } = require("date-fns/isValid");
 const Role = require("../../models/roles/Roles");
 const CoworkingMember = require("../../models/sales/CoworkingMembers");
-const { handleDocumentUpload } = require("../../config/cloudinaryConfig");
+const { handleDocumentUpload } = require("../../config/s3Config");
+const { resetMeetingCreditsIfNeeded } = require("../../utils/resetCredits");
+const ExternalVisits = require("../../models/visitor/ExternalVisits");
+const buildDateFilter = require("../../utils/dateFilter");
+
+const getEffectiveEndTime = (meeting) => {
+  const originalEndTime = new Date(meeting?.endTime);
+  const extendedEndTime = meeting?.extendTime
+    ? new Date(meeting.extendTime)
+    : null;
+
+  return extendedEndTime &&
+    !isNaN(extendedEndTime.getTime()) &&
+    extendedEndTime > originalEndTime
+    ? extendedEndTime
+    : originalEndTime;
+};
+
+const calculateCredits = (startTime, endTime, creditPerHour) =>
+  Number(
+    (
+      ((new Date(endTime) - new Date(startTime)) / (1000 * 60 * 60)) *
+      Number(creditPerHour || 0)
+    ).toFixed(2),
+  );
+
+const recalculateAndUpdatePayment = ({
+  meeting,
+  paymentAmount,
+  paymentBaseAmount,
+  paymentGstAmount,
+  discountAmount,
+  paymentMode,
+  paymentStatus,
+}) => {
+  const durationInMs = getEffectiveEndTime(meeting) - meeting.startTime;
+  const durationInHours = Number((durationInMs / (1000 * 60 * 60)).toFixed(2));
+  const perHourCost = Number(meeting.bookedRoom?.perHourPrice || 0);
+  const calculatedBaseAmount = Number(
+    (durationInHours * perHourCost).toFixed(2),
+  );
+  const resolvedBaseAmount = Number(
+    paymentBaseAmount ?? paymentAmount ?? calculatedBaseAmount,
+  );
+  const resolvedGstAmount = Number(
+    paymentGstAmount ?? (resolvedBaseAmount * 18) / 100,
+  );
+  const resolvedPaymentAmount = Number(
+    paymentAmount ?? resolvedBaseAmount + resolvedGstAmount,
+  );
+
+  meeting.paymentBaseAmount = resolvedBaseAmount;
+  meeting.paymentGstAmount = resolvedGstAmount;
+  meeting.paymentAmount = resolvedPaymentAmount;
+  meeting.paymentMode = paymentMode;
+  meeting.paymentStatus = paymentStatus === "Paid";
+  meeting.discountAmount = Number(discountAmount ?? 0);
+
+  return {
+    durationInHours,
+    resolvedBaseAmount,
+    resolvedGstAmount,
+    resolvedPaymentAmount,
+  };
+};
+
+const getMonthStartUTC = (date) =>
+  new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
 
 const addMeetings = async (req, res, next) => {
   const logPath = "meetings/MeetingLog";
   const logAction = "Book Meeting";
   const logSourceKey = "meeting";
 
+  let bookingLockToken;
+  let lockedRoomId;
+  let creditDeduction;
+  let meetingWasSaved = false;
+
   try {
     const {
       meetingType,
       bookedRoom,
       bookedBy,
+      clientBookedBy,
       startDate,
       endDate,
       startTime,
@@ -44,6 +118,7 @@ const addMeetings = async (req, res, next) => {
       client,
       externalCompany,
       internalParticipants,
+      clientParticipants,
       externalParticipants,
       paymentAmount,
       paymentStatus,
@@ -53,6 +128,55 @@ const addMeetings = async (req, res, next) => {
     const company = req.company;
     const user = req.user;
     const ip = req.ip;
+    let isClient = client ? company.toString() !== client.toString() : false;
+    let resolvedClientBookedBy = clientBookedBy;
+
+    if (meetingType === "Internal" && isClient && !bookedBy && !resolvedClientBookedBy) {
+      const normalizeText = (value) =>
+        String(value || "").trim().toLowerCase();
+
+      const currentUser = await User.findById(user)
+        .select("email firstName lastName phone")
+        .lean();
+
+      const currentUserFullName = normalizeText(
+        [currentUser?.firstName, currentUser?.lastName]
+          .filter(Boolean)
+          .join(" "),
+      );
+
+      const memberLookupConditions = [
+        ...(currentUser?.email ? [{ email: currentUser.email }] : []),
+        ...(currentUserFullName ? [{ employeeName: currentUserFullName }] : []),
+        ...(currentUser?.phone ? [{ mobileNo: currentUser.phone }] : []),
+      ];
+
+      const currentClientMembers = memberLookupConditions.length
+        ? await CoworkingMembers.find({
+            client,
+            $or: memberLookupConditions,
+          })
+            .select("_id")
+            .collation({ locale: "en", strength: 2 })
+            .lean()
+        : [];
+
+      const fallbackClientMembers =
+        currentClientMembers.length || !memberLookupConditions.length
+          ? []
+          : await CoworkingMembers.find({
+              $or: memberLookupConditions,
+            })
+              .select("_id")
+              .collation({ locale: "en", strength: 2 })
+              .lean();
+
+      resolvedClientBookedBy = (
+        currentClientMembers.length > 0
+          ? currentClientMembers
+          : fallbackClientMembers
+      )[0]?._id || null;
+    }
 
     if (
       !meetingType ||
@@ -62,15 +186,19 @@ const addMeetings = async (req, res, next) => {
       !endTime ||
       !subject ||
       !agenda ||
-      (meetingType === "Internal" && !bookedBy) ||
+      // (meetingType === "Internal" && !bookedBy) ||
+      (meetingType === "Internal" && !bookedBy && !resolvedClientBookedBy) ||
       (meetingType === "Internal" && !client) ||
-      (meetingType === "External" && !externalCompany)
+      (meetingType === "External" && !externalCompany) ||
+      (meetingType === "External" &&
+        (!Array.isArray(externalParticipants) ||
+          externalParticipants.length === 0))
     ) {
       throw new CustomError(
         "Missing required fields",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
 
@@ -79,7 +207,7 @@ const addMeetings = async (req, res, next) => {
         "Invalid client Id provided",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
 
@@ -88,7 +216,7 @@ const addMeetings = async (req, res, next) => {
         "Invalid Room Id provided",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
 
@@ -107,7 +235,7 @@ const addMeetings = async (req, res, next) => {
         "Invalid date format",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
 
@@ -121,17 +249,63 @@ const addMeetings = async (req, res, next) => {
         "Room is unavailable",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
 
-    let internalUsers = [];
-    let users = [];
-    let isClient = client ? company.toString() !== client.toString() : false;
+    bookingLockToken = new mongoose.Types.ObjectId().toString();
+    lockedRoomId = roomAvailable._id;
+    const lockNow = new Date();
+    const lockedRoom = await Room.findOneAndUpdate(
+      {
+        _id: roomAvailable._id,
+        status: "Available",
+        $or: [
+          { bookingLockExpiresAt: { $exists: false } },
+          { bookingLockExpiresAt: { $lte: lockNow } },
+        ],
+      },
+      {
+        $set: {
+          bookingLockToken,
+          bookingLockExpiresAt: new Date(lockNow.getTime() + 5 * 60 * 1000),
+        },
+      },
+      { new: true },
+    );
 
-    if (internalParticipants) {
-      const invalidIds = internalParticipants.filter(
-        (id) => !mongoose.Types.ObjectId.isValid(id)
+    if (!lockedRoom) {
+      throw new CustomError(
+        "Room booking is currently being processed. Please try again.",
+        logPath,
+        logAction,
+        logSourceKey,
+        409,
+      );
+    }
+
+    const normalizeParticipantIds = (ids = []) =>
+      Array.from(
+        new Set(
+          (Array.isArray(ids) ? ids : [])
+            .filter(Boolean)
+            .map((id) => String(id).trim())
+            .filter(Boolean),
+        ),
+      );
+
+    const internalParticipantIds = normalizeParticipantIds(internalParticipants);
+    const clientParticipantIds = normalizeParticipantIds(clientParticipants);
+    const requestedParticipantIds = Array.from(
+      new Set([...internalParticipantIds, ...clientParticipantIds]),
+    );
+
+    let internalUsers = [];
+    let clientUsers = [];
+
+    if (requestedParticipantIds.length > 0) {
+      const invalidIds = requestedParticipantIds.filter(
+        (id) => !mongoose.Types.ObjectId.isValid(id),
       );
 
       if (invalidIds.length > 0) {
@@ -139,23 +313,26 @@ const addMeetings = async (req, res, next) => {
           "Invalid internal participant IDs",
           logPath,
           logAction,
-          logSourceKey
+          logSourceKey,
         );
       }
 
-      if (isClient) {
-        users = await CoworkingMembers.find({
-          _id: { $in: internalParticipants },
-        });
-      } else {
-        users = await User.find({ _id: { $in: internalParticipants } });
-      }
+      const [matchedInternalUsers, matchedClientUsers] = await Promise.all([
+        User.find({ _id: { $in: requestedParticipantIds } }).select("_id"),
+        CoworkingMembers.find({ _id: { $in: requestedParticipantIds } }).select(
+          "_id",
+        ),
+      ]);
 
-      const unmatchedIds = internalParticipants.filter(
-        (id) =>
-          !users.find((user) => {
-            return user._id.toString() === id.toString();
-          })
+      const internalIdSet = new Set(
+        matchedInternalUsers.map((user) => user._id.toString()),
+      );
+      const clientIdSet = new Set(
+        matchedClientUsers.map((user) => user._id.toString()),
+      );
+
+      const unmatchedIds = requestedParticipantIds.filter(
+        (id) => !internalIdSet.has(id) && !clientIdSet.has(id),
       );
 
       if (unmatchedIds.length > 0) {
@@ -163,37 +340,21 @@ const addMeetings = async (req, res, next) => {
           "Some internal participant IDs did not match any user",
           logPath,
           logAction,
-          logSourceKey
+          logSourceKey,
         );
       }
 
-      internalUsers = users.map((user) => user._id);
+      internalUsers = matchedInternalUsers.map((user) => user._id);
+      clientUsers = matchedClientUsers.map((user) => user._id);
     }
 
     const conflictingMeeting = await Meeting.findOne({
       bookedRoom: roomAvailable._id,
-      startDate: { $lte: endDateObj },
-      endDate: { $gte: startDateObj },
-      $or: [
-        {
-          $and: [
-            { startTime: { $lte: startTimeObj } },
-            { endTime: { $gt: startTimeObj } },
-          ],
-        },
-        {
-          $and: [
-            { startTime: { $lt: endTimeObj } },
-            { endTime: { $gte: endTimeObj } },
-          ],
-        },
-        {
-          $and: [
-            { startTime: { $gte: startTimeObj } },
-            { endTime: { $lte: endTimeObj } },
-          ],
-        },
-      ],
+      status: { $ne: "Cancelled" },
+      startTime: { $lt: endTimeObj },
+      $expr: {
+        $gt: [{ $ifNull: ["$extendTime", "$endTime"] }, startTimeObj],
+      },
     });
 
     if (conflictingMeeting) {
@@ -201,44 +362,264 @@ const addMeetings = async (req, res, next) => {
         "Room is already booked for the specified time",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
 
     // Calculate meeting duration and credit deduction
-    const durationInMs = endTimeObj - startTimeObj;
-    const durationInHours = durationInMs / (1000 * 60 * 60);
+
+    const durationInMinutes = (endTimeObj - startTimeObj) / (1000 * 60);
+
+    if (durationInMinutes <= 0) {
+      throw new CustomError(
+        "End time must be greater than start time",
+        logPath,
+        logAction,
+        logSourceKey,
+      );
+    }
+
     const creditPerHour = roomAvailable.perHourCredit || 0;
-    const totalCreditsUsed = durationInHours * creditPerHour;
+
+    const totalCreditsUsed =
+      meetingType === "Internal"
+        ? Number(((durationInMinutes / 60) * creditPerHour).toFixed(2))
+        : 0;
+
+    // const durationInMs = endTimeObj - startTimeObj;
+    // const durationInHours = durationInMs / (1000 * 60 * 60);
+    // const creditPerHour = roomAvailable.perHourCredit || 0;
+    // const totalCreditsUsed =
+    //   meetingType === "Internal" ? durationInHours * creditPerHour : 0;
 
     // Atomically deduct credits using findOneAndUpdate with credit check
 
-    const bookingUser = await User.findById(bookedBy);
-    const updateQuery = { _id: client };
-    const BookingModel = isClient ? CoworkingClient : Company;
+    const bookingUser = bookedBy
+      ? await User.findById(bookedBy)
+      : isClient && resolvedClientBookedBy
+        ? await CoworkingMembers.findById(resolvedClientBookedBy)
+        : null;
 
-    const updatedUser = await BookingModel.findOneAndUpdate(
-      {
-        ...updateQuery,
-        meetingCreditBalance: { $gte: totalCreditsUsed },
-      },
-      { $inc: { meetingCreditBalance: -totalCreditsUsed } },
-      { new: true }
-    );
+    const meetingParticipants = Array.from(
+      new Set(
+        [
+          ...(Array.isArray(internalUsers) ? internalUsers : []),
+          ...(Array.isArray(clientUsers) ? clientUsers : []),
+          bookingUser?._id || null,
+        ]
+          .filter(Boolean)
+          .map((id) => id.toString()),
+      ),
+    ).map((id) => new mongoose.Types.ObjectId(id));
 
-    if (!updatedUser) {
-      throw new CustomError(
-        "Insufficient credits or booking user not found",
-        logPath,
-        logAction,
-        logSourceKey
+    const normalizeEmail = (value) =>
+      String(value || "").trim().toLowerCase();
+
+    const departmentManagerRecipientIds = async () => {
+      const departmentIds = Array.isArray(req.departments)
+        ? req.departments.filter(Boolean)
+        : [];
+
+      if (!departmentIds.length) {
+        return [];
+      }
+
+      const userDepartments = await UserData.find({
+        company: req.company,
+        departments: { $in: departmentIds },
+        isActive: true,
+      })
+        .populate([
+          { path: "role", select: "roleTitle" },
+          { path: "departments", select: "name" },
+        ])
+        .select("_id firstName lastName");
+
+      const managerIds = userDepartments
+        .filter((user) =>
+          user.departments?.some((department) =>
+            user.role?.some((role) => {
+              const roleTitle = String(role?.roleTitle || "");
+              const departmentName = String(department?.name || "");
+              return (
+                roleTitle.startsWith(departmentName) &&
+                (roleTitle.endsWith("Admin") || roleTitle.endsWith("Manager"))
+              );
+            }),
+          ),
+        )
+        .map((user) => user._id.toString());
+
+      return Array.from(new Set(managerIds)).map(
+        (id) => new mongoose.Types.ObjectId(id),
       );
+    };
+
+    const notificationRecipientIds = async () => {
+      if (!isClient) {
+        const managerRecipientIds = await departmentManagerRecipientIds();
+        return Array.from(
+          new Set(
+            [...meetingParticipants, ...managerRecipientIds].map((id) =>
+              id.toString(),
+            ),
+          ),
+        ).map((id) => new mongoose.Types.ObjectId(id));
+      }
+
+      const rawRecipientIds = Array.from(
+        new Set(meetingParticipants.map((id) => id.toString())),
+      );
+
+      const coworkingMemberDocs = await CoworkingMembers.find({
+        _id: { $in: rawRecipientIds },
+      })
+        .select("_id email")
+        .lean()
+        .exec();
+
+      const memberEmailSet = new Set(
+        coworkingMemberDocs
+          .map((member) => normalizeEmail(member.email))
+          .filter(Boolean),
+      );
+
+      const mappedUsers = memberEmailSet.size
+        ? await User.find({
+            email: { $in: Array.from(memberEmailSet) },
+          })
+            .select("_id email")
+            .lean()
+            .exec()
+        : [];
+
+      const userIdByEmail = new Map(
+        mappedUsers.map((user) => [normalizeEmail(user.email), user._id]),
+      );
+
+      const recipientSet = new Set();
+
+      rawRecipientIds.forEach((recipientId) => {
+        const member = coworkingMemberDocs.find(
+          (item) => item._id.toString() === recipientId,
+        );
+
+        if (member) {
+          const mappedUserId = userIdByEmail.get(normalizeEmail(member.email));
+          if (mappedUserId) {
+            recipientSet.add(mappedUserId.toString());
+          }
+          return;
+        }
+
+        recipientSet.add(recipientId);
+      });
+
+      const managerRecipientIds = await departmentManagerRecipientIds();
+      managerRecipientIds.forEach((managerId) =>
+        recipientSet.add(managerId.toString()),
+      );
+
+      return Array.from(recipientSet).map((id) => new mongoose.Types.ObjectId(id));
+    };
+
+    if (meetingType === "Internal") {
+      const BookingModel = isClient ? CoworkingClient : Company;
+
+      const meetingDate = new Date(startTime);
+      const meetingMonthStart = getMonthStartUTC(meetingDate);
+      // const meetingMonthStart = new Date(
+      //   meetingDate.getFullYear(),
+      //   meetingDate.getMonth(),
+      //   1,
+      // );
+
+      const now = new Date();
+      // const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      const currentMonthStart = getMonthStartUTC(now);
+      const isCurrentMonth =
+        meetingMonthStart.getTime() === currentMonthStart.getTime();
+
+      const creditRecord = await resetMeetingCreditsIfNeeded(
+        BookingModel,
+        client,
+        meetingDate,
+      );
+
+      if (!creditRecord) {
+        throw new CustomError(
+          "Booking client/company not found",
+          logPath,
+          logAction,
+          logSourceKey,
+        );
+      }
+
+      const updateFields = {
+        $inc: {
+          "meetingCreditBalanceHistory.$.remainingCredit": -totalCreditsUsed,
+          "meetingCreditBalanceHistory.$.consumedCredit": totalCreditsUsed,
+        },
+      };
+
+      if (isCurrentMonth) {
+        updateFields.$inc.meetingCreditBalance = -totalCreditsUsed;
+      }
+
+      const updatedCreditRecord = await BookingModel.findOneAndUpdate(
+        {
+          _id: client,
+          meetingCreditBalanceHistory: {
+            $elemMatch: {
+              monthStartDate: {
+                $gte: new Date(
+                  meetingMonthStart.getTime() - 12 * 60 * 60 * 1000,
+                ),
+                $lte: new Date(
+                  meetingMonthStart.getTime() + 12 * 60 * 60 * 1000,
+                ),
+              },
+            },
+          },
+        },
+        updateFields,
+      );
+
+      if (!updatedCreditRecord) {
+        throw new CustomError(
+          "Unable to update meeting credits for the selected month",
+          logPath,
+          logAction,
+          logSourceKey,
+        );
+      }
+
+      creditDeduction = {
+        BookingModel,
+        client,
+        meetingMonthStart,
+        totalCreditsUsed,
+        isCurrentMonth,
+      };
     }
 
     const meeting = new Meeting({
       meetingType,
-      bookedBy: !isClient ? bookedBy : null,
-      clientBookedBy: isClient ? bookedBy : null,
+       // bookedBy: meetingType === "Internal" && !isClient ? bookedBy : null,
+      // clientBookedBy: meetingType === "Internal" && isClient ? bookedBy : null,
+
+      // bookedBy: meetingType === "Internal" && bookingUser ? bookedBy : null,
+      // clientBookedBy:
+      //   meetingType === "Internal" && isClient && !bookingUser
+      //     ? bookedBy
+      //     : null,
+
+       bookedBy: meetingType === "Internal" && bookedBy ? bookedBy : null,
+      clientBookedBy:
+        meetingType === "Internal" && isClient && resolvedClientBookedBy
+          ? resolvedClientBookedBy
+          : null,    
+      externalBookedBy: meetingType === "External" ? bookedBy : null,
       receptionist: user,
       startDate: startDateObj,
       endDate: endDateObj,
@@ -252,13 +633,13 @@ const addMeetings = async (req, res, next) => {
       externalClient: meetingType === "External" ? externalCompany : null,
       company,
       status: "Upcoming",
-      internalParticipants:
-        internalParticipants && !isClient ? internalUsers : [],
-      clientParticipants: internalParticipants && isClient ? internalUsers : [],
+      internalParticipants: internalUsers,
+      clientParticipants: clientUsers,
       externalParticipants: externalParticipants || [],
     });
 
     const savedMeeting = await meeting.save();
+    meetingWasSaved = true;
     // await Promise.all([
     //   meeting.save(),
     //   Room.findByIdAndUpdate(roomAvailable._id, { status: "Occupied" }),
@@ -269,24 +650,30 @@ const addMeetings = async (req, res, next) => {
         "Failed to book meeting",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
 
-    isClient
-      ? null
-      : emitter.emit("notification", {
-          initiatorData: bookingUser._id,
-          users: internalParticipants.map((userId) => ({
-            userActions: {
-              whichUser: userId,
-              hasRead: false,
-            },
-          })),
-          type: "book meeting",
-          module: "Meetings",
-          message: `You have been added to a meeting by ${bookingUser.firstName} ${bookingUser.lastName}`,
-        });
+    const notificationRecipients = await notificationRecipientIds();
+
+    if (bookingUser && notificationRecipients.length > 0) {
+      const bookingUserName = bookingUser?.firstName || bookingUser?.lastName
+        ? `${bookingUser?.firstName || ""} ${bookingUser?.lastName || ""}`.trim()
+        : bookingUser?.employeeName || bookingUser?.name || "Unknown";
+
+      emitter.emit("notification", {
+        initiatorData: bookingUser._id,
+        users: notificationRecipients.map((userId) => ({
+          userActions: {
+            whichUser: userId,
+            hasRead: false,
+          },
+        })),
+        type: "book meeting",
+        module: "Meetings",
+        message: `You have been added to a meeting by ${bookingUserName}`,
+      });
+    }
 
     await createLog({
       path: logPath,
@@ -305,12 +692,56 @@ const addMeetings = async (req, res, next) => {
       message: "Meeting added successfully",
     });
   } catch (error) {
+    if (creditDeduction && !meetingWasSaved) {
+      const {
+        BookingModel,
+        client: bookingClient,
+        meetingMonthStart,
+        totalCreditsUsed: deductedCredits,
+        isCurrentMonth,
+      } = creditDeduction;
+      const rollbackFields = {
+        $inc: {
+          "meetingCreditBalanceHistory.$.remainingCredit": deductedCredits,
+          "meetingCreditBalanceHistory.$.consumedCredit": -deductedCredits,
+        },
+      };
+      if (isCurrentMonth) {
+        rollbackFields.$inc.meetingCreditBalance = deductedCredits;
+      }
+      await BookingModel.findOneAndUpdate(
+        {
+          _id: bookingClient,
+          meetingCreditBalanceHistory: {
+            $elemMatch: {
+              monthStartDate: {
+                $gte: new Date(
+                  meetingMonthStart.getTime() - 12 * 60 * 60 * 1000,
+                ),
+                $lte: new Date(
+                  meetingMonthStart.getTime() + 12 * 60 * 60 * 1000,
+                ),
+              },
+            },
+          },
+        },
+        rollbackFields,
+      ).catch(() => {});
+    }
+
     if (error instanceof CustomError) {
       next(error);
     } else {
       next(
-        new CustomError(error.message, logPath, logAction, logSourceKey, 500)
+        new CustomError(error.message, logPath, logAction, logSourceKey, 500),
       );
+    }
+  } finally {
+    if (lockedRoomId && bookingLockToken) {
+      await Room.updateOne(
+        { _id: lockedRoomId, bookingLockToken },
+        { $unset: { bookingLockToken: 1, bookingLockExpiresAt: 1 } },
+      ).catch(() => {});
     }
   }
 };
@@ -319,7 +750,7 @@ const getAvaliableUsers = async (req, res, next) => {
   try {
     const { startTime, endTime } = req.query;
     if (!startTime || !endTime) {
-      return res.status(400).json({ message: "Please provide a valid date" });
+      return res.status(400).json({ message: "Start/End time missing" });
     }
 
     if (
@@ -331,217 +762,400 @@ const getAvaliableUsers = async (req, res, next) => {
 
     const start = new Date(startTime);
     const end = new Date(endTime);
+    const cancelledStatuses = [
+      "Cancelled",
+      "Canceled",
+      "cancelled",
+      "canceled",
+    ];
 
     const meetings = await Meeting.find({
       company: req.company,
-      $and: [{ startTime: { $lte: end } }, { endTime: { $gte: start } }],
+      status: { $nin: cancelledStatuses },
+      startTime: { $lt: end },
+      $expr: {
+        $gt: [{ $ifNull: ["$extendTime", "$endTime"] }, start],
+      },
     })
-      .select("bookedBy internalParticipants startTime endTime")
+      .select(
+        "bookedBy clientBookedBy internalParticipants clientParticipants startTime endTime extendTime",
+      )
       .lean()
       .exec();
 
     const unavailableUserIds = new Set();
     meetings.forEach((meeting) => {
       if (meeting.bookedBy) unavailableUserIds.add(meeting.bookedBy.toString());
+      if (meeting.clientBookedBy)
+        unavailableUserIds.add(meeting.clientBookedBy.toString());
       if (meeting.internalParticipants) {
         meeting.internalParticipants.forEach((userId) =>
-          unavailableUserIds.add(userId.toString())
+          unavailableUserIds.add(userId.toString()),
+        );
+      }
+
+      if (meeting.clientParticipants) {
+        meeting.clientParticipants.forEach((userId) =>
+          unavailableUserIds.add(userId.toString()),
         );
       }
     });
 
     // Fetch all users and filter out unavailable ones
-    const availableUsers = await User.find({
+    const activeClientIds = await CoworkingClient.find({
       company: req.company,
-      _id: { $nin: Array.from(unavailableUserIds) },
+      // _id: { $nin: Array.from(unavailableUserIds) },
       isActive: true,
     })
-      .select("_id firstName lastName email")
-      .lean()
-      .exec();
+      .select("_id")
+      .lean();
 
-    res.status(200).json(availableUsers);
-  } catch (error) {
-    next(error);
-  }
-};
-
-const getMeetings = async (req, res, next) => {
-  try {
-    const { user, company, roles, departments } = req;
-
-    const meetings = await Meeting.find({
-      company,
-    })
-      .populate({
-        path: "bookedRoom",
-        select: "name housekeepingStatus",
-        populate: {
-          path: "location",
-          select: "unitName unitNo",
-          populate: {
-            path: "building",
-            select: "buildingName",
-          },
-        },
+    const [availableUsers, availableClientMembers] = await Promise.all([
+      User.find({
+        company: req.company,
+        _id: { $nin: Array.from(unavailableUserIds) },
+        isActive: true,
       })
-      .populate([
-        {
-          path: "bookedBy",
-          select: "departments firstName lastName email",
-          populate: { path: "departments", select: "name" },
-        },
-        { path: "clientBookedBy", select: "employeeName email" },
-        {
-          path: "receptionist",
-          select: "firstName lastName departments",
-          populate: { path: "departments", select: "name" },
-        },
-        { path: "client", select: "clientName" },
-        // { path: "externalClient", select: "companyName pocName mobileNumber" },
-        { path: "internalParticipants", select: "firstName lastName email" },
-        { path: "clientParticipants", select: "employeeName email" },
-        { path: "externalParticipants", select: "firstName lastName email" },
-      ]);
+        .select("_id firstName lastName email")
+        .lean()
+        .exec(),
+      CoworkingMembers.find({
+        client: { $in: activeClientIds.map((client) => client._id) },
+        _id: { $nin: Array.from(unavailableUserIds) },
+      })
+        .select("_id employeeName email client")
+        .populate({ path: "client", select: "clientName" })
+        .lean()
+        .exec(),
+    ]);
 
-    const departmentIds = departments.map((dept) => dept._id);
+    const formattedClientMembers = availableClientMembers.map((member) => ({
+      _id: member._id,
+      employeeName: member.employeeName,
+      email: member.email,
+      client: member.client?._id || member.client,
+      clientName: member.client?.clientName,
+    }));
 
-    const department = await Department.find({
-      _id: { $in: departmentIds },
-    });
+    const totalAvailableUsers = [...availableUsers, ...formattedClientMembers];
 
-    let filteredMeetings = meetings;
-    if (
-      !roles.includes("Administration Admin") &&
-      !roles.includes("Administration Employee") &&
-      !roles.includes("Master Admin") &&
-      !roles.includes("Super Admin")
-    ) {
-      filteredMeetings = meetings.filter((meeting) => {
-        if (!meeting.bookedBy || !Array.isArray(meeting.bookedBy.departments))
-          return false;
-
-        const bookedDeptIds = meeting.bookedBy.departments.map((dept) =>
-          dept._id?.toString()
-        );
-
-        return bookedDeptIds.some((deptId) => departmentIds.includes(deptId));
-      });
-    }
-
-    const reviews = await Review.find().select(
-      "-createdAt -updatedAt -__v -company"
-    );
-
-    if (!reviews) {
-      return res.status(400).json({ message: "No reviews found" });
-    }
-
-    const internalParticipants = filteredMeetings.map((meeting) =>
-      meeting.internalParticipants.map((participant) => participant)
-    );
-    const clientParticipants = filteredMeetings.map((meeting) =>
-      meeting.clientParticipants.map((participant) => participant)
-    );
-
-    const transformedMeetings = filteredMeetings.map((meeting, index) => {
-      let totalParticipants = [];
-      if (
-        internalParticipants[index].length &&
-        clientParticipants[index].length &&
-        meeting.externalParticipants.length
-      ) {
-        totalParticipants = [
-          ...internalParticipants[index],
-          ...meeting.externalParticipants,
-        ];
-      }
-
-      const meetingReviews = reviews.find(
-        (review) => review.meeting.toString() === meeting._id.toString()
-      );
-
-      const isClient = meeting.client ? true : false;
-
-      const isReceptionist = meeting.receptionist.departments.some(
-        (dept) => dept.name === "Administration"
-      );
-
-      let receptionist;
-      if (isReceptionist) {
-        receptionist = meeting.receptionist
-          ? [
-              meeting.receptionist.firstName,
-              meeting.receptionist.middleName,
-              meeting.receptionist.lastName,
-            ]
-              .filter(Boolean)
-              .join(" ")
-          : "";
-      }
-
-      return {
-        _id: meeting._id,
-        name: meeting.bookedBy?.name,
-        receptionist: isReceptionist ? receptionist : "N/A",
-        // bookedBy: { ...meeting.bookedBy },
-        clientBookedBy: meeting.clientBookedBy,
-        department: meeting?.bookedBy?.departments,
-        roomName: meeting.bookedRoom.name,
-        bookedBy: meeting.bookedBy,
-        location: meeting.bookedRoom.location,
-        client: isClient
-          ? meeting.client.clientName
-          : meeting.externalClient
-          ? null
-          : "BIZ Nest",
-        externalClient: meeting.externalClient
-          ? meeting.externalClient.companyName
-          : null,
-        paymentAmount: meeting.paymentAmount ? meeting.paymentAmount : null,
-        paymentMode: meeting.paymentMode ? meeting.paymentMode : null,
-        paymentStatus: meeting.paymentStatus ? meeting.paymentStatus : null,
-        paymentProof: meeting.paymentProof ? meeting.paymentProof.link : null,
-        meetingType: meeting.meetingType,
-        housekeepingStatus: meeting.houeskeepingStatus,
-        date: meeting.startDate,
-        endDate: meeting.endDate,
-        startTime: meeting.startTime,
-        endTime: meeting.endTime,
-        extendTime: meeting.extendTime,
-        credits: meeting.credits,
-        duration: formatDuration(meeting.startTime, meeting.endTime),
-        meetingStatus: meeting.status,
-        action: meeting.extend,
-        agenda: meeting.agenda,
-        subject: meeting.subject,
-        housekeepingChecklist: [...(meeting.housekeepingChecklist ?? [])],
-        participants:
-          totalParticipants.length > 0
-            ? totalParticipants
-            : internalParticipants[index].length > 0
-            ? internalParticipants[index]
-            : clientParticipants[index].length > 0
-            ? clientParticipants[index]
-            : meeting.externalParticipants,
-        reviews: meetingReviews ? meetingReviews : [],
-        discountAmount: meeting.discountAmount,
-        paymentVerification: meeting.paymentVerification,
-        company: meeting.company,
-      };
-    });
-
-    return res.status(200).json(transformedMeetings);
+    res.status(200).json(totalAvailableUsers);
   } catch (error) {
     next(error);
   }
 };
+
+async function getMeetings(req, res, next) {
+  try {
+    const { user, company, roles, departments = [] } = req;
+    const type = req.query?.type || req.type || "";
+    const completed = req.query?.completed;
+    const includeTotal = req.query?.includeTotal === "true";
+    const includeReviews = req.query?.includeReviews === "true";
+
+    const requestFilters = req.query?.dateFilter ||
+      req.query?.filters || {
+        startDate:
+          req.query?.["dateFilter[startDate]"] ||
+          req.query?.["filters[startDate]"] ||
+          req.query?.startDate,
+        endDate:
+          req.query?.["dateFilter[endDate]"] ||
+          req.query?.["filters[endDate]"] ||
+          req.query?.endDate,
+      };
+    const hasDateFilter = Boolean(
+      requestFilters?.startDate || requestFilters?.endDate,
+    );
+
+    const payload = await fetchMeetingReportService({
+      departments,
+      roles,
+      user,
+      company,
+      type,
+      completed,
+      includeTotal,
+      includeReviews,
+      page: req.query?.page,
+      limit: req.query?.limit,
+      search: req.query?.search,
+      searchContext: req.query?.searchContext,
+      ...(hasDateFilter && {
+        dateFilter: buildDateFilter({
+          startDate: requestFilters.startDate,
+          endDate: requestFilters.endDate,
+          field: "startDate",
+          endExclusive: true,
+        }),
+      }),
+    });
+
+    return res.status(200).json(payload);
+  } catch (error) {
+    return next(error);
+  }
+}
+
+// const getMeetings = async (req, res, next) => {
+//   try {
+//     const { user, company, roles, departments } = req;
+
+//     const meetings = await Meeting.find({
+//       company,
+//     })
+//       .populate({
+//         path: "bookedRoom",
+//         select: "name housekeepingStatus",
+//         populate: {
+//           path: "location",
+//           select: "unitName unitNo",
+//           populate: {
+//             path: "building",
+//             select: "buildingName",
+//           },
+//         },
+//       })
+//       .populate([
+//         {
+//           path: "bookedBy",
+//           select: "departments firstName lastName email",
+//           populate: { path: "departments", select: "name" },
+//         },
+//         { path: "clientBookedBy", select: "employeeName email" },
+//         { path: "externalBookedBy", select: "firstName middleName lastName" },
+//         {
+//           path: "receptionist",
+//           select: "firstName lastName departments",
+//           populate: { path: "departments", select: "name" },
+//         },
+//         { path: "client", select: "clientName" },
+//         { path: "externalClient", select: "registeredClientCompany" },
+//         // { path: "externalClient", select: "companyName pocName mobileNumber" },
+//         { path: "internalParticipants", select: "firstName lastName email" },
+//         { path: "clientParticipants", select: "employeeName email" },
+//         { path: "externalParticipants", select: "firstName lastName email" },
+//       ]);
+
+//     const departmentIds = departments.map((dept) => dept._id);
+
+//     const department = await Department.find({
+//       _id: { $in: departmentIds },
+//     });
+
+//     let filteredMeetings = meetings;
+
+//     const currentUserId = user?.toString();
+
+//     if (
+//       !roles.includes("Administration Admin") &&
+//       !roles.includes("Finance Admin") &&
+//       !roles.includes("Administration Employee") &&
+//       !roles.includes("Master Admin") &&
+//       !roles.includes("Super Admin") &&
+//       !roles.includes("Tech Admin") &&
+//       !roles.includes("Tech Employee")
+//     ) {
+//       filteredMeetings = meetings.filter((meeting) => {
+//         const isMeetingParticipant =
+//           meeting?.bookedBy?._id?.toString() === currentUserId ||
+//           meeting?.clientBookedBy?._id?.toString() === currentUserId ||
+//           (meeting?.internalParticipants || []).some(
+//             (participant) => participant?._id?.toString() === currentUserId,
+//           ) ||
+//           (meeting?.clientParticipants || []).some(
+//             (participant) => participant?._id?.toString() === currentUserId,
+//           );
+
+//         if (isMeetingParticipant) return true;
+
+//         if (!meeting.bookedBy || !Array.isArray(meeting.bookedBy.departments)) {
+//           return false;
+//         }
+
+//         const bookedDeptIds = meeting.bookedBy.departments.map((dept) =>
+//           dept._id?.toString(),
+//         );
+
+//         return bookedDeptIds.some((deptId) => departmentIds.includes(deptId));
+//       });
+//     }
+
+//     const reviews = await Review.find().select(
+//       "-createdAt -updatedAt -__v -company",
+//     );
+
+//     if (!reviews) {
+//       return res.status(400).json({ message: "No reviews found" });
+//     }
+
+//     const internalParticipants = filteredMeetings.map((meeting) =>
+//       meeting.internalParticipants.map((participant) => participant),
+//     );
+//     const clientParticipants = filteredMeetings.map((meeting) =>
+//       meeting.clientParticipants.map((participant) => participant),
+//     );
+
+// const transformedMeetings = filteredMeetings.map((meeting, index) => {
+//   // let totalParticipants = [];
+//   // if (
+//   //   internalParticipants[index].length &&
+//   //   clientParticipants[index].length &&
+//   //   meeting.externalParticipants.length
+//   // ) {
+//   //   totalParticipants = [
+//   //     ...internalParticipants[index],
+//   //     ...meeting.externalParticipants,
+//   //   ];
+//   // }
+//   const totalParticipants = [
+//     ...(internalParticipants[index] || []),
+//     ...(clientParticipants[index] || []),
+//     ...(meeting.externalParticipants || []),
+//   ];
+
+//   const meetingReviews = reviews.find(
+//     (review) => review.meeting.toString() === meeting._id.toString(),
+//   );
+
+//   const isClient = meeting.client ? true : false;
+
+//   const isReceptionist = meeting.receptionist.departments.some(
+//     (dept) => dept.name === "Administration",
+//   );
+
+//   let receptionist;
+//   if (isReceptionist) {
+//     receptionist = meeting.receptionist
+//       ? [
+//           meeting.receptionist.firstName,
+//           meeting.receptionist.middleName,
+//           meeting.receptionist.lastName,
+//         ]
+//           .filter(Boolean)
+//           .join(" ")
+//       : "";
+//   }
+
+//   return {
+//     _id: meeting._id,
+//     name: meeting.bookedBy?.name,
+//     receptionist: isReceptionist ? receptionist : "N/A",
+//     // bookedBy: { ...meeting.bookedBy },
+//     clientBookedBy: meeting.clientBookedBy,
+//     department: meeting?.bookedBy?.departments,
+//     roomName: meeting.bookedRoom.name,
+//     bookedBy:
+//       meeting.bookedBy ||
+//       (meeting.externalBookedBy
+//         ? {
+//             _id: meeting.externalBookedBy._id,
+//             firstName: meeting.externalBookedBy.firstName,
+//             middleName: meeting.externalBookedBy.middleName,
+//             lastName: meeting.externalBookedBy.lastName,
+//           }
+//         : null),
+//     location: meeting.bookedRoom.location,
+//     client: isClient
+//       ? meeting.client.clientName
+//       : meeting.externalClient
+//         ? null
+//         : "BIZNest",
+//     externalClient: meeting.externalClient
+//       ? meeting.externalClient.registeredClientCompany
+//       : null,
+//     paymentAmount: meeting.paymentAmount ? meeting.paymentAmount : null,
+//     paymentMode: meeting.paymentMode ? meeting.paymentMode : null,
+//     paymentStatus: meeting?.paymentStatus ? "Paid" : "Unpaid",
+//     paymentProof: meeting.paymentProof ? meeting.paymentProof.link : null,
+//     meetingType: meeting.meetingType,
+//     housekeepingStatus: meeting.houeskeepingStatus,
+//     date: meeting.startDate,
+//     endDate: meeting.endDate,
+//     startTime: meeting.startTime,
+//     endTime: meeting.endTime,
+//     extendTime: meeting.extendTime,
+//     credits: meeting.credits,
+//     duration: formatDuration(meeting.startTime, meeting.endTime),
+//     meetingStatus: meeting.status,
+//     action: meeting.extend,
+//     agenda: meeting.agenda,
+//     subject: meeting.subject,
+//     housekeepingChecklist: [...(meeting.housekeepingChecklist ?? [])],
+//     // participants:
+//     //   totalParticipants.length > 0
+//     //     ? totalParticipants
+//     //     : internalParticipants[index].length > 0
+//     //     ? internalParticipants[index]
+//     //     : clientParticipants[index].length > 0
+//     //     ? clientParticipants[index]
+//     //     : meeting.externalParticipants,
+//     participants: totalParticipants,
+//     reviews: meetingReviews ? meetingReviews : [],
+//     discountAmount: meeting.discountAmount,
+//     paymentVerification: meeting.paymentVerification,
+//     company: meeting.company,
+//   };
+// });
+
+//     return res.status(200).json(transformedMeetings);
+//   } catch (error) {
+//     next(error);
+//   }
+// };
 
 const getMyMeetings = async (req, res, next) => {
   try {
     const { user, company, roles } = req;
 
     let meetings = [];
+    const normalizeText = (value) =>
+      String(value || "")
+        .trim()
+        .toLowerCase();
+
+    const currentUser = await User.findById(user)
+      .select("email firstName lastName phone")
+      .lean();
+
+    const currentUserFullName = normalizeText(
+      [currentUser?.firstName, currentUser?.lastName]
+        .filter(Boolean)
+        .join(" "),
+    );
+
+    const memberLookupConditions = [
+      ...(currentUser?.email ? [{ email: currentUser.email }] : []),
+      ...(currentUserFullName ? [{ employeeName: currentUserFullName }] : []),
+      ...(currentUser?.phone ? [{ mobileNo: currentUser.phone }] : []),
+    ];
+
+    const currentClientMembers = memberLookupConditions.length
+      ? await CoworkingMember.find({
+          company,
+          $or: memberLookupConditions,
+        })
+          .select("_id")
+          .collation({ locale: "en", strength: 2 })
+          .lean()
+      : [];
+
+    const fallbackClientMembers =
+      currentClientMembers.length || !memberLookupConditions.length
+        ? []
+        : await CoworkingMember.find({
+            $or: memberLookupConditions,
+          })
+            .select("_id")
+            .collation({ locale: "en", strength: 2 })
+            .lean();
+
+    const currentClientMemberIds = (
+      currentClientMembers.length > 0
+        ? currentClientMembers
+        : fallbackClientMembers
+    ).map((member) => member._id);
+
 
     meetings = await Meeting.find({
       company,
@@ -553,6 +1167,12 @@ const getMyMeetings = async (req, res, next) => {
         {
           externalParticipants: { $in: [new mongoose.Types.ObjectId(user)] },
         },
+         ...(currentClientMemberIds.length
+          ? [
+              { clientBookedBy: { $in: currentClientMemberIds } },
+              { clientParticipants: { $in: currentClientMemberIds } },
+            ]
+          : []),
       ],
     })
       .populate({
@@ -570,9 +1190,10 @@ const getMyMeetings = async (req, res, next) => {
       .populate([
         {
           path: "bookedBy",
-          selected: "firstName lastName email departments",
+          select: "firstName lastName email departments",
           populate: { path: "departments" },
         },
+        { path: "externalBookedBy", select: "firstName lastName" },
         { path: "clientBookedBy", select: "employeeName email" },
         {
           path: "receptionist",
@@ -590,7 +1211,7 @@ const getMyMeetings = async (req, res, next) => {
       ]);
 
     const reviews = await Review.find().select(
-      "-createdAt -updatedAt -__v -company"
+      "-createdAt -updatedAt -__v -company",
     );
 
     if (!reviews) {
@@ -598,28 +1219,22 @@ const getMyMeetings = async (req, res, next) => {
     }
 
     const internalParticipants = meetings.map((meeting) =>
-      meeting.internalParticipants.map((participant) => participant)
+      meeting.internalParticipants.map((participant) => participant),
     );
 
     const clientParticipants = meetings.map((meeting) =>
-      meeting.clientParticipants.map((participant) => participant)
+      meeting.clientParticipants.map((participant) => participant),
     );
 
     const transformedMeetings = meetings.map((meeting, index) => {
-      let totalParticipants = [];
-      if (
-        internalParticipants[index].length &&
-        clientParticipants[index].length &&
-        meeting.externalParticipants.length
-      ) {
-        totalParticipants = [
-          ...internalParticipants[index],
-          ...meeting.externalParticipants,
-        ];
-      }
+      const totalParticipants = [
+        ...(internalParticipants[index] || []),
+        ...(clientParticipants[index] || []),
+        ...(meeting.externalParticipants || []),
+      ];
 
       const meetingReviews = reviews.find(
-        (review) => review.meeting.toString() === meeting._id.toString()
+        (review) => review.meeting.toString() === meeting._id.toString(),
       );
 
       const isClient = meeting.client ? true : false;
@@ -635,7 +1250,7 @@ const getMyMeetings = async (req, res, next) => {
         : "";
 
       const isReceptionist = meeting.receptionist.departments.some(
-        (dept) => dept.name === "Administration"
+        (dept) => dept.name === "Administration",
       );
 
       let receptionist;
@@ -651,10 +1266,41 @@ const getMyMeetings = async (req, res, next) => {
           : "";
       }
 
+      const isCurrentUserInvolved = Boolean(
+        meeting?.bookedBy?._id?.toString() === user?.toString() ||
+          (meeting?.internalParticipants || []).some(
+            (participant) => participant?._id?.toString() === user?.toString(),
+          ) ||
+          currentClientMemberIds.some(
+            (memberId) =>
+              memberId?.toString() ===
+              meeting?.clientBookedBy?._id?.toString(),
+          ) ||
+          (meeting?.clientParticipants || []).some((participant) =>
+            currentClientMemberIds.some(
+              (memberId) => memberId?.toString() === participant?._id?.toString(),
+            ),
+          ),
+      );
+      const isCurrentUserBooked = Boolean(
+        meeting?.bookedBy?._id?.toString() === user?.toString() ||
+          currentClientMemberIds.some(
+            (memberId) =>
+              memberId?.toString() ===
+              meeting?.clientBookedBy?._id?.toString(),
+          ),
+      );
+
       return {
         _id: meeting._id,
         receptionist: receptionist,
-        bookedBy: bookedBy,
+        bookedById: meeting?.bookedBy?._id || null,
+        clientBookedById: meeting?.clientBookedBy?._id || null,
+        isCurrentUserInvolved,
+        isCurrentUserBooked,
+        // bookedBy: bookedBy,
+         bookedBy:
+          bookedBy || meeting.clientBookedBy?.employeeName || "Unknown",
         clientBookedBy: meeting.clientBookedBy,
         department: meeting?.bookedBy?.departments,
         roomName: meeting.bookedRoom.name,
@@ -662,8 +1308,8 @@ const getMyMeetings = async (req, res, next) => {
         client: isClient
           ? meeting.client.clientName
           : meeting.externalClient
-          ? null
-          : "BIZ Nest",
+            ? null
+            : "BIZNest",
         externalClient: meeting.externalClient
           ? meeting.externalClient.companyName
           : null,
@@ -679,7 +1325,10 @@ const getMyMeetings = async (req, res, next) => {
         endTime: meeting.endTime,
         extendTime: meeting.extendTime,
         credits: meeting.credits,
-        duration: formatDuration(meeting.startTime, meeting.endTime),
+        duration: formatDuration(
+          meeting.startTime,
+          getEffectiveEndTime(meeting),
+        ),
         meetingStatus: meeting.status,
         action: meeting.extend,
         agenda: meeting.agenda,
@@ -689,10 +1338,10 @@ const getMyMeetings = async (req, res, next) => {
           totalParticipants.length > 0
             ? totalParticipants
             : internalParticipants[index].length > 0
-            ? internalParticipants[index]
-            : clientParticipants[index].length > 0
-            ? clientParticipants[index]
-            : meeting.externalParticipants,
+              ? internalParticipants[index]
+              : clientParticipants[index].length > 0
+                ? clientParticipants[index]
+                : meeting.externalParticipants,
         reviews: meetingReviews ? meetingReviews : [],
         discountAmount: meeting.discountAmount,
         paymentVerification: meeting.paymentVerification,
@@ -716,7 +1365,7 @@ const addHousekeepingTask = async (req, res, next) => {
         "All fields are required",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
 
@@ -725,12 +1374,12 @@ const addHousekeepingTask = async (req, res, next) => {
         "Invalid meeting id provided",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
 
     const inCompleteTasks = housekeepingTasks.filter(
-      (task) => task.status === "Pending"
+      (task) => task.status === "Pending",
     );
 
     if (inCompleteTasks.length > 0) {
@@ -738,7 +1387,7 @@ const addHousekeepingTask = async (req, res, next) => {
         "Please check out the tasks before submitting",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
 
@@ -752,13 +1401,13 @@ const addHousekeepingTask = async (req, res, next) => {
         $set: { housekeepingChecklist: completedTasks },
         houeskeepingStatus: "Completed",
       },
-      { new: true }
+      { new: true },
     );
 
     const room = await Room.findOneAndUpdate(
       { name: roomName },
       { housekeepingStatus: "Completed", status: "Available" },
-      { new: true }
+      { new: true },
     );
 
     if (!foundMeeting) {
@@ -766,7 +1415,7 @@ const addHousekeepingTask = async (req, res, next) => {
         "Failed to add the housekeeping tasks",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
 
@@ -775,7 +1424,7 @@ const addHousekeepingTask = async (req, res, next) => {
         "Failed to update the room status",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
 
@@ -844,7 +1493,7 @@ const deleteHousekeepingTask = async (req, res, next) => {
         "All fields are required",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
 
@@ -853,14 +1502,14 @@ const deleteHousekeepingTask = async (req, res, next) => {
         "Invalid meeting ID provided",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
 
     const updatedMeeting = await Meeting.findByIdAndUpdate(
       meetingId,
       { $pull: { housekeepingChecklist: { name: housekeepingTask } } },
-      { new: true }
+      { new: true },
     );
 
     if (!updatedMeeting) {
@@ -868,7 +1517,7 @@ const deleteHousekeepingTask = async (req, res, next) => {
         "Failed to delete housekeeping task",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
 
@@ -893,7 +1542,7 @@ const deleteHousekeepingTask = async (req, res, next) => {
       next(error);
     } else {
       next(
-        new CustomError(error.message, logPath, logAction, logSourceKey, 500)
+        new CustomError(error.message, logPath, logAction, logSourceKey, 500),
       );
     }
   }
@@ -910,7 +1559,7 @@ const getMeetingsByTypes = async (req, res, next) => {
         400,
         "meetings/MeetingLog",
         "Delete Meeting",
-        "meeting"
+        "meeting",
       );
     }
 
@@ -973,7 +1622,7 @@ const cancelMeeting = async (req, res, next) => {
         "Meeting ID is required",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
 
@@ -986,15 +1635,109 @@ const cancelMeeting = async (req, res, next) => {
         "Reason should be within 100 characters",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
+    }
+
+    const meetingToCancel = await Meeting.findById(meetingId).select(
+      "status meetingType creditsUsed client clientBookedBy internalParticipants bookedBy startTime",
+    );
+
+    if (!meetingToCancel) {
+      throw new CustomError(
+        "Meeting not found, please check the ID",
+        logPath,
+        logAction,
+        logSourceKey,
+      );
+    }
+
+    if (meetingToCancel.status === "Cancelled") {
+      throw new CustomError(
+        "Meeting is already cancelled",
+        logPath,
+        logAction,
+        logSourceKey,
+      );
+    }
+
+    // Refund used credits only for internal meetings
+    if (meetingToCancel.meetingType === "Internal") {
+      const creditsToRefund = Number(meetingToCancel.creditsUsed || 0);
+      const BookingModel = meetingToCancel.clientBookedBy
+        ? CoworkingClient
+        : Company;
+
+      if (meetingToCancel.client && creditsToRefund > 0) {
+        const meetingDate = new Date(meetingToCancel.startTime || new Date());
+        // const meetingMonthStart = new Date(
+        //   meetingDate.getFullYear(),
+        //   meetingDate.getMonth(),
+        //   1,
+        // );
+        const meetingMonthStart = getMonthStartUTC(meetingDate);
+
+        const now = new Date();
+        // const currentMonthStart = new Date(
+        //   now.getFullYear(),
+        //   now.getMonth(),
+        //   1,
+        // );
+        const currentMonthStart = getMonthStartUTC(now);
+        const isCurrentMonth =
+          meetingMonthStart.getTime() === currentMonthStart.getTime();
+
+        const creditRecord = await resetMeetingCreditsIfNeeded(
+          BookingModel,
+          meetingToCancel.client,
+          meetingDate,
+        );
+
+        if (!creditRecord) {
+          throw new CustomError(
+            "Booking client/company not found",
+            logPath,
+            logAction,
+            logSourceKey,
+          );
+        }
+
+        const updateFields = {
+          $inc: {
+            "meetingCreditBalanceHistory.$.remainingCredit": creditsToRefund,
+            "meetingCreditBalanceHistory.$.consumedCredit": -creditsToRefund,
+          },
+        };
+
+        if (isCurrentMonth) {
+          updateFields.$inc.meetingCreditBalance = creditsToRefund;
+        }
+
+        await BookingModel.findOneAndUpdate(
+          {
+            _id: meetingToCancel.client,
+            meetingCreditBalanceHistory: {
+              $elemMatch: {
+                monthStartDate: {
+                  $gte: new Date(
+                    meetingMonthStart.getTime() - 12 * 60 * 60 * 1000,
+                  ),
+                  $lte: new Date(
+                    meetingMonthStart.getTime() + 12 * 60 * 60 * 1000,
+                  ),
+                },
+              },
+            },
+          },
+          updateFields,
+        );
+      }
     }
 
     const cancelledMeeting = await Meeting.findByIdAndUpdate(
       meetingId,
-      { status: "Cancelled" },
-      { reason },
-      { new: true }
+      { $set: { status: "Cancelled", reason } },
+      { new: true },
     ).populate({ path: "bookedBy", select: "firstName lastName" });
 
     if (!cancelledMeeting) {
@@ -1002,7 +1745,7 @@ const cancelMeeting = async (req, res, next) => {
         "Meeting not found, please check the ID",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
 
@@ -1027,7 +1770,7 @@ const cancelMeeting = async (req, res, next) => {
       next(error);
     } else {
       next(
-        new CustomError(error.message, logPath, logAction, logSourceKey, 500)
+        new CustomError(error.message, logPath, logAction, logSourceKey, 500),
       );
     }
   }
@@ -1039,6 +1782,10 @@ const extendMeeting = async (req, res, next) => {
   const logSourceKey = "meeting";
   const { meetingId, newEndTime } = req.body;
   const { user, ip, company } = req;
+  let extensionCreditDeduction;
+  let extensionWasSaved = false;
+  let extensionLockToken;
+  let extensionLockedRoomId;
 
   try {
     if (!meetingId || !newEndTime) {
@@ -1046,7 +1793,7 @@ const extendMeeting = async (req, res, next) => {
         "Meeting ID and new end time are required",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
 
@@ -1055,11 +1802,11 @@ const extendMeeting = async (req, res, next) => {
         "Invalid meeting ID",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
 
-    const meeting = await Meeting.findById(meetingId).populate([
+    let meeting = await Meeting.findById(meetingId).populate([
       { path: "bookedRoom" },
       { path: "bookedBy", select: "firstName lastName" },
     ]);
@@ -1068,7 +1815,50 @@ const extendMeeting = async (req, res, next) => {
         "Meeting not found",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
+      );
+    }
+
+    extensionLockToken = new mongoose.Types.ObjectId().toString();
+    extensionLockedRoomId = meeting.bookedRoom._id;
+    const lockNow = new Date();
+    const lockedRoom = await Room.findOneAndUpdate(
+      {
+        _id: extensionLockedRoomId,
+        $or: [
+          { bookingLockExpiresAt: { $exists: false } },
+          { bookingLockExpiresAt: { $lte: lockNow } },
+        ],
+      },
+      {
+        $set: {
+          bookingLockToken: extensionLockToken,
+          bookingLockExpiresAt: new Date(lockNow.getTime() + 5 * 60 * 1000),
+        },
+      },
+      { new: true },
+    );
+
+    if (!lockedRoom) {
+      throw new CustomError(
+        "Room timing is currently being updated. Please try again.",
+        logPath,
+        logAction,
+        logSourceKey,
+        409,
+      );
+    }
+
+    meeting = await Meeting.findById(meetingId).populate([
+      { path: "bookedRoom" },
+      { path: "bookedBy", select: "firstName lastName" },
+    ]);
+    if (!meeting) {
+      throw new CustomError(
+        "Meeting not found",
+        logPath,
+        logAction,
+        logSourceKey,
       );
     }
 
@@ -1078,25 +1868,33 @@ const extendMeeting = async (req, res, next) => {
         "Invalid new end time format",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
 
-    if (newEndTimeObj <= meeting.endTime) {
+    const normalizedNewEndTime = newEndTimeObj;
+    const currentEffectiveEndTime = getEffectiveEndTime(meeting);
+
+    if (normalizedNewEndTime <= currentEffectiveEndTime) {
       throw new CustomError(
         "New end time must be later than the current end time",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
 
     // Check for conflicting meeting
     const conflictingMeeting = await Meeting.findOne({
       bookedRoom: meeting.bookedRoom._id,
-      startDate: meeting.startDate,
-      startTime: { $lt: newEndTimeObj },
-      endTime: { $gt: meeting.endTime },
+      status: { $ne: "Cancelled" },
+      startTime: { $lt: normalizedNewEndTime },
+      $expr: {
+        $gt: [
+          { $ifNull: ["$extendTime", "$endTime"] },
+          currentEffectiveEndTime,
+        ],
+      },
       _id: { $ne: meetingId },
     });
     if (conflictingMeeting) {
@@ -1104,57 +1902,144 @@ const extendMeeting = async (req, res, next) => {
         "Room is already booked during the extended time",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
 
     // Step 1: Calculate additional duration
-    const oldEndTime = new Date(meeting.endTime);
-    const addedMs = newEndTimeObj - oldEndTime;
-    const addedHours = addedMs / (1000 * 60 * 60);
-
     const creditPerHour = meeting.bookedRoom.perHourCredit || 0;
-    const addedCredits = addedHours * creditPerHour;
+    const currentTotalCredits = calculateCredits(
+      meeting.startTime,
+      currentEffectiveEndTime,
+      creditPerHour,
+    );
+    const newTotalCredits = calculateCredits(
+      meeting.startTime,
+      normalizedNewEndTime,
+      creditPerHour,
+    );
+    const addedCredits = Number(
+      (newTotalCredits - currentTotalCredits).toFixed(2),
+    );
 
     // Step 2: Deduct credits from the user
-    const isClient = meeting.client.toString() !== company;
+    const isInternal = meeting.meetingType === "Internal";
+    const isClient =
+      isInternal &&
+      meeting.client &&
+      meeting.client.toString() !== company.toString();
     const bookingUserModel = isClient ? CoworkingClient : Company;
 
-    const bookingUserCompany = await bookingUserModel.findById(meeting.client);
-    if (!bookingUserCompany) {
-      throw new CustomError(
-        "Booking user company not found for credit deduction",
-        logPath,
-        logAction,
-        logSourceKey
+    if (isInternal) {
+      // Ensure credit records are initialized for the month of the meeting
+      const bookingUserCompany = await resetMeetingCreditsIfNeeded(
+        bookingUserModel,
+        meeting.client,
+        meeting.startTime,
       );
-    }
 
-    if (bookingUserCompany.meetingCreditBalance < addedCredits) {
-      throw new CustomError(
-        "Insufficient credits to extend this meeting",
-        logPath,
-        logAction,
-        logSourceKey
+      if (!bookingUserCompany) {
+        throw new CustomError(
+          "Booking user company not found for credit deduction",
+          logPath,
+          logAction,
+          logSourceKey,
+        );
+      }
+
+      // Month-aware credit check
+      const meetingMonthStart = getMonthStartUTC(new Date(meeting.startTime));
+      const monthHistory = bookingUserCompany.meetingCreditBalanceHistory.find(
+        (h) => {
+          const d = new Date(h.monthStartDate);
+          // Robust check: match UTC or Local month to handle legacy/mismatched records
+          return (
+            (d.getUTCFullYear() === meetingMonthStart.getUTCFullYear() &&
+              d.getUTCMonth() === meetingMonthStart.getUTCMonth()) ||
+            (d.getFullYear() === meetingMonthStart.getUTCFullYear() &&
+              d.getMonth() === meetingMonthStart.getUTCMonth())
+          );
+        },
       );
-    }
 
-    // Atomic deduction of credits
-    await bookingUserModel.findOneAndUpdate(
-      { _id: bookingUserCompany },
-      { $inc: { meetingCreditBalance: -addedCredits } }
-    );
+      const availableCredits = monthHistory
+        ? monthHistory.remainingCredit
+        : bookingUserCompany.meetingCreditBalance;
+
+      // if (meeting.meetingType === "Internal" && availableCredits < addedCredits) {
+      //   throw new CustomError(
+      //     "Insufficient credits to extend this meeting",
+      //     logPath,
+      //     logAction,
+      //     logSourceKey,
+      //   );
+      // }
+
+      const updateFields = {
+        $inc: {
+          "meetingCreditBalanceHistory.$.remainingCredit": -addedCredits,
+          "meetingCreditBalanceHistory.$.consumedCredit": addedCredits,
+        },
+      };
+
+      const now = new Date();
+      const currentMonthStart = getMonthStartUTC(now);
+      const isCurrentMonth =
+        meetingMonthStart.getTime() === currentMonthStart.getTime();
+
+      if (isCurrentMonth) {
+        updateFields.$inc.meetingCreditBalance = -addedCredits;
+      }
+
+      // Atomic deduction across both balances using fuzzy date match for history entry
+      const updatedCreditRecord = await bookingUserModel.findOneAndUpdate(
+        {
+          _id: meeting.client,
+          meetingCreditBalanceHistory: {
+            $elemMatch: {
+              monthStartDate: {
+                $gte: new Date(
+                  meetingMonthStart.getTime() - 12 * 60 * 60 * 1000,
+                ),
+                $lte: new Date(
+                  meetingMonthStart.getTime() + 12 * 60 * 60 * 1000,
+                ),
+              },
+            },
+          },
+        },
+        updateFields,
+      );
+
+      if (!updatedCreditRecord) {
+        throw new CustomError(
+          "Unable to update meeting credits for the selected month",
+          logPath,
+          logAction,
+          logSourceKey,
+        );
+      }
+
+      extensionCreditDeduction = {
+        bookingUserModel,
+        client: meeting.client,
+        meetingMonthStart,
+        addedCredits,
+        isCurrentMonth,
+      };
+    }
 
     // Step 3: Update meeting details
     // meeting.endTime = newEndTimeObj;
     // meeting.endDate = newEndTimeObj;
-    meeting.extendTime = newEndTimeObj;
-    meeting.creditsUsed = (meeting.creditsUsed || 0) + addedCredits;
+    meeting.extendTime = normalizedNewEndTime;
+    meeting.creditsUsed = isInternal ? newTotalCredits : 0;
     await meeting.save();
+    extensionWasSaved = true;
 
-    const isInternal = meeting.bookedBy;
+    const isInternalBooking = meeting.bookedBy;
 
-    if (isInternal && meeting.internalParticipants.length > 0) {
+    if (isInternalBooking && meeting.internalParticipants.length > 0) {
       const bookedBy = meeting.bookedBy;
       emitter.emit("notification", {
         initiatorData: user,
@@ -1171,12 +2056,61 @@ const extendMeeting = async (req, res, next) => {
       message: "Meeting extended successfully",
     });
   } catch (error) {
+    if (extensionCreditDeduction && !extensionWasSaved) {
+      const {
+        bookingUserModel,
+        client: bookingClient,
+        meetingMonthStart,
+        addedCredits,
+        isCurrentMonth,
+      } = extensionCreditDeduction;
+      const rollbackFields = {
+        $inc: {
+          "meetingCreditBalanceHistory.$.remainingCredit": addedCredits,
+          "meetingCreditBalanceHistory.$.consumedCredit": -addedCredits,
+        },
+      };
+      if (isCurrentMonth) {
+        rollbackFields.$inc.meetingCreditBalance = addedCredits;
+      }
+      await bookingUserModel
+        .findOneAndUpdate(
+          {
+            _id: bookingClient,
+            meetingCreditBalanceHistory: {
+              $elemMatch: {
+                monthStartDate: {
+                  $gte: new Date(
+                    meetingMonthStart.getTime() - 12 * 60 * 60 * 1000,
+                  ),
+                  $lte: new Date(
+                    meetingMonthStart.getTime() + 12 * 60 * 60 * 1000,
+                  ),
+                },
+              },
+            },
+          },
+          rollbackFields,
+        )
+        .catch(() => {});
+    }
+
     if (error instanceof CustomError) {
       next(error);
     } else {
       next(
-        new CustomError(error.message, logPath, logAction, logSourceKey, 500)
+        new CustomError(error.message, logPath, logAction, logSourceKey, 500),
       );
+    }
+  } finally {
+    if (extensionLockedRoomId && extensionLockToken) {
+      await Room.updateOne(
+        {
+          _id: extensionLockedRoomId,
+          bookingLockToken: extensionLockToken,
+        },
+        { $unset: { bookingLockToken: 1, bookingLockExpiresAt: 1 } },
+      ).catch(() => {});
     }
   }
 };
@@ -1218,8 +2152,20 @@ const updateMeeting = async (req, res, next) => {
 
   try {
     const { user, ip, company } = req;
-    const { paymentAmount, paymentMode, paymentStatus, discountAmount } =
-      req.body;
+    const {
+      paymentAmount,
+      paymentMode,
+      paymentStatus,
+      discountAmount,
+      paymentBaseAmount,
+      paymentGstAmount,
+      client,
+      taxable,
+      gst,
+      status,
+      unitsOrHours,
+      meetingRoomName,
+    } = req.body;
     const { meetingId } = req.params;
     const paymentProofFile = req.file;
 
@@ -1227,7 +2173,7 @@ const updateMeeting = async (req, res, next) => {
       return res.status(400).json({ message: "Invalid meeting Id provided" });
     }
 
-    if (!paymentAmount || !paymentMode || !paymentStatus || !paymentProofFile) {
+    if (!paymentAmount || !paymentMode || !paymentStatus) {
       return res.status(400).json({ message: "Missing required fields" });
     }
 
@@ -1241,7 +2187,7 @@ const updateMeeting = async (req, res, next) => {
         "Meeting not found",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
 
@@ -1250,14 +2196,20 @@ const updateMeeting = async (req, res, next) => {
         "Meeting type is not external",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
 
-    const durationInMs = updatedMeeting.endTime - updatedMeeting.startTime;
-    const durationInHours = durationInMs / (1000 * 60 * 60);
-    const perHourCost = updatedMeeting.bookedRoom.perHourPrice;
-    const amountToBePaid = durationInHours * perHourCost;
+    const { durationInHours, resolvedBaseAmount, resolvedGstAmount } =
+      recalculateAndUpdatePayment({
+        meeting: updatedMeeting,
+        paymentAmount,
+        paymentBaseAmount,
+        paymentGstAmount,
+        discountAmount,
+        paymentMode,
+        paymentStatus,
+      });
 
     // Validate actual amount (optional)
     // if (Number(paymentAmount) !== amountToBePaid) {
@@ -1275,6 +2227,9 @@ const updateMeeting = async (req, res, next) => {
         "application/pdf",
         "application/msword",
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "image/jpeg",
+        "image/png",
+        "image/jpg",
       ];
 
       if (!allowedMimeTypes.includes(paymentProofFile.mimetype)) {
@@ -1282,7 +2237,7 @@ const updateMeeting = async (req, res, next) => {
           "Invalid payment proof file type",
           logPath,
           logAction,
-          logSourceKey
+          logSourceKey,
         );
       }
 
@@ -1290,15 +2245,34 @@ const updateMeeting = async (req, res, next) => {
       const originalFilename = paymentProofFile.originalname;
 
       if (paymentProofFile.mimetype === "application/pdf") {
-        const pdfDoc = await PDFDocument.load(paymentProofFile.buffer);
-        pdfDoc.setTitle(originalFilename.split(".")[0] || "Untitled");
-        processedBuffer = await pdfDoc.save();
+        try {
+          const pdfDoc = await PDFDocument.load(paymentProofFile.buffer);
+          pdfDoc.setTitle(originalFilename.split(".")[0] || "Payment Proof");
+          processedBuffer = await pdfDoc.save();
+        } catch (pdfErr) {
+          console.error("PDF processing failed:", pdfErr);
+          // Decide: fail or fallback to original buffer?
+          // Most secure: fail the request
+          throw new CustomError("Invalid or corrupted PDF file");
+        }
+      }
+
+      const foundCompany =
+        await Company.findById(company).select("companyName");
+
+      if (!foundCompany) {
+        throw new CustomError(
+          "Company not found",
+          logPath,
+          logAction,
+          logSourceKey,
+        );
       }
 
       const response = await handleDocumentUpload(
         processedBuffer,
-        `${company}/meetings/${meetingId}/payment-proof`,
-        originalFilename
+        `${foundCompany.companyName}/meetings/${meetingId}/payment-proof`,
+        originalFilename,
       );
 
       if (!response.public_id) {
@@ -1306,7 +2280,7 @@ const updateMeeting = async (req, res, next) => {
           "Failed to upload payment proof",
           logPath,
           logAction,
-          logSourceKey
+          logSourceKey,
         );
       }
 
@@ -1315,24 +2289,36 @@ const updateMeeting = async (req, res, next) => {
         link: response.secure_url,
         id: response.public_id,
         date: new Date(),
+        mimeType: paymentProofFile.mimetype,
       };
     }
 
-    updatedMeeting.paymentAmount = paymentAmount;
-    updatedMeeting.paymentMode = paymentMode;
-    updatedMeeting.paymentStatus = paymentStatus === "Paid";
-    updatedMeeting.discountAmount = discountAmount ?? 0;
+    // updatedMeeting.paymentBaseAmount = paymentBaseAmount;
+    // updatedMeeting.paymentGstAmount = paymentGstAmount;
+    // updatedMeeting.paymentAmount = paymentAmount;
+    // updatedMeeting.paymentMode = paymentMode;
+    // updatedMeeting.paymentStatus = paymentStatus === "Paid";
+    // updatedMeeting.discountAmount = discountAmount ?? 0;
 
     await updatedMeeting.save();
+
+    const resolvedPaymentStatus = paymentStatus === "Paid" ? "Paid" : "Unpaid";
+    const resolvedClientName =
+      client || updatedMeeting.externalClient?.registeredClientCompany || "";
 
     const meetingRevenue = new MeetingRevenue({
       date: updatedMeeting.startDate,
       company,
-      clientName: updatedMeeting.externalClient.registeredClientCompany,
+      client: resolvedClientName,
       particulars: "Meeting room booking",
+      unitsOrHours: unitsOrHours || "Hours",
       costPerHour: updatedMeeting.bookedRoom.perHourPrice,
-      totalAmount: paymentAmount,
+      meetingRoomName: meetingRoomName || updatedMeeting.bookedRoom?.name,
+      taxable: Number(taxable ?? resolvedBaseAmount ?? 0),
+      gst: Number(gst ?? resolvedGstAmount ?? 0),
+      totalAmount: Number(updatedMeeting.paymentAmount || 0),
       paymentDate: updatedMeeting.startDate,
+      status: status || resolvedPaymentStatus,
       remarks: paymentMode,
       meeting: updatedMeeting._id,
       hoursBooked: durationInHours,
@@ -1345,34 +2331,77 @@ const updateMeeting = async (req, res, next) => {
         "Failed to save meeting revenue",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
 
-    const updatedVisitor = await Visitor.findOneAndUpdate(
-      {
-        clientCompany: updatedMeeting.externalClient.clientCompany,
+    // const updatedVisitor = await Visitor.findOneAndUpdate(
+    //   {
+    //     clientCompany: updatedMeeting.externalClient.clientCompany,
+    //   },
+    //   {
+    //     meeting: updatedMeeting._id,
+    //   },
+    // );
+
+    // if (!updatedVisitor) {
+    //   throw new CustomError(
+    //     "Failed to update visitor meeting reference",
+    //     logPath,
+    //     logAction,
+    //     logSourceKey,
+    //   );
+    // }
+
+    const visitorPaymentDetails = {
+      meeting: updatedMeeting._id,
+      amount: updatedMeeting.paymentBaseAmount,
+      discount: updatedMeeting.discountAmount,
+      gstAmount: updatedMeeting.paymentGstAmount,
+      totalAmount: updatedMeeting.paymentAmount,
+      paymentMode: updatedMeeting.paymentMode,
+      paymentStatus: updatedMeeting.paymentStatus,
+      paymentProof: {
+        url: updatedMeeting.paymentProof?.link,
+        id: updatedMeeting.paymentProof?.id,
       },
-      {
-        meeting: updatedMeeting._id,
-      }
+    };
+
+    const updatedVisitor = await Visitor.findByIdAndUpdate(
+      updatedMeeting.externalClient._id,
+      visitorPaymentDetails,
+      { new: true },
     );
 
     if (!updatedVisitor) {
       throw new CustomError(
-        "Failed to update visitor meeting reference",
+        "Failed to update visitor payment details",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
+
+    await ExternalVisits.updateMany(
+      {
+        company,
+        $or: [
+          { meeting: updatedMeeting._id },
+          {
+            visitorId: updatedVisitor._id,
+            legacyVisitorEntryId: updatedVisitor._id,
+          },
+        ],
+      },
+      visitorPaymentDetails,
+    );
 
     return res.status(200).json({ message: "Meeting updated successfully" });
   } catch (error) {
     next(
       error instanceof CustomError
         ? error
-        : new CustomError(error.message, logPath, logAction, logSourceKey, 500)
+        : new CustomError(error.message, logPath, logAction, logSourceKey, 500),
     );
   }
 };
@@ -1384,7 +2413,7 @@ const updateMeetingPaymentStatus = async (req, res, next) => {
   const updatedMeeting = await Meeting.findByIdAndUpdate(
     meetingId,
     { paymentVerification: status },
-    { new: true }
+    { new: true },
   ).populate("bookedBy", "firstName lastName");
 
   if (!updatedMeeting) {
@@ -1399,10 +2428,44 @@ const updateMeetingPaymentStatus = async (req, res, next) => {
 const updateMeetingStatus = async (req, res, next) => {
   const { status, meetingId } = req.body;
   const { user } = req;
+
+  const validStatuses = ["Ongoing", "Completed"];
+  if (!validStatuses.includes(status)) {
+    return res.status(400).json({ message: "Invalid status value" });
+  }
+  const meeting = await Meeting.findById(meetingId);
+
+  if (!meeting) {
+    return res.status(404).json({ message: "Meeting not found" });
+  }
+
+  const currDate = new Date();
+
+  // Prevent completing/ongoing meeting before start date/time
+  if (currDate < meeting.startTime) {
+    return res.status(400).json({
+      message: `Meeting cannot be marked ${status.toLowerCase()} before its start time`,
+    });
+  }
+
+  // if (status === "Completed" && currDate < getEffectiveEndTime(meeting)) {
+  //   return res.status(400).json({
+  //     message: "Meeting cannot be marked completed before its end time",
+  //   });
+  // }
+
+  const updatePayload = {
+    status,
+    ...(status === "Completed" && {
+      completedAt: currDate,
+      completedBy: user,
+    }),
+  };
+
   const updatedMeeting = await Meeting.findByIdAndUpdate(
     meetingId,
-    { status },
-    { new: true }
+    updatePayload,
+    { new: true },
   ).populate("bookedBy", "firstName lastName");
 
   const updateRoomStatus = await Room.findByIdAndUpdate(
@@ -1410,7 +2473,7 @@ const updateMeetingStatus = async (req, res, next) => {
       _id: updatedMeeting.bookedRoom,
     },
     { status: "Available" },
-    { new: true }
+    { new: true },
   );
 
   if (!updatedMeeting) {
@@ -1449,10 +2512,10 @@ const getAllCompanies = async (req, res, next) => {
 
   //Fetching all the companies
   const foundCompany = await Company.find({ _id: company }).select(
-    "companyName"
+    "companyName",
   );
   const coworkingCompanies = await CoworkingClient.find({ company }).select(
-    "clientName"
+    "clientName",
   );
   const visitorCompanies = await ExternalCompany.find().select("companyName");
 
@@ -1493,7 +2556,7 @@ const getAllCompanies = async (req, res, next) => {
     return {
       ...client._doc,
       members: companyEmployees.filter(
-        (member) => member?.company._id.toString() === client?._id.toString()
+        (member) => member?.company._id.toString() === client?._id.toString(),
       ),
     };
   });
@@ -1502,7 +2565,7 @@ const getAllCompanies = async (req, res, next) => {
     return {
       ...client._doc,
       members: coworkingMembers.filter(
-        (member) => member?.client._id.toString() === client?._id.toString()
+        (member) => member?.client._id.toString() === client?._id.toString(),
       ),
     };
   });
@@ -1529,9 +2592,12 @@ const getAllCompanies = async (req, res, next) => {
 };
 
 const updateMeetingDetails = async (req, res, next) => {
+  const { roles } = req;
+
   try {
     const {
       meetingId,
+      date,
       startTime,
       endTime,
       internalParticipants,
@@ -1560,24 +2626,120 @@ const updateMeetingDetails = async (req, res, next) => {
       return res.status(404).json({ message: "Meeting not found" });
     }
 
-    const internalMeetingParticipants =
-      internalParticipants && internalParticipants.length > 0
-        ? internalParticipants
-        : clientParticipants && clientParticipants.length > 0
-        ? clientParticipants
-        : [];
-
     const isClient = !!meeting.clientBookedBy;
-    const BookingCompanyModel = isClient ? CoworkingClient : Company;
-    const BookingUserModel = isClient ? CoworkingMember : User;
-    const bookedUserId = meeting.client;
+    const isExternal = !!meeting.externalBookedBy;
+    const BookingCompanyModel = isClient
+      ? CoworkingClient
+      : isExternal
+        ? Visitor
+        : Company;
+    const BookingUserModel = isClient
+      ? CoworkingMember
+      : isExternal
+        ? Visitor
+        : User;
+    const bookedClientId = meeting.client
+      ? meeting.client
+      : meeting.externalClient;
 
     const currDate = new Date();
-    const startTimeObj = new Date(startTime);
-    const endTimeObj = new Date(endTime);
+    let startTimeObj = new Date(startTime);
+    let endTimeObj = new Date(endTime);
 
     if (isNaN(startTimeObj.getTime()) || isNaN(endTimeObj.getTime())) {
       return res.status(400).json({ message: "Invalid date/time format" });
+    }
+
+    const allowedRoles = ["Tech Admin", "Tech Employee"];
+    const adminTimingRoles = [
+      "Admin Admin",
+      "Admin Manager",
+      "Admin Employee",
+      "Administration Admin",
+      "Administration Manager",
+      "Administration Employee",
+    ];
+    const dateEditRoles = [
+      "Super Admin",
+      "Master Admin",
+      "Tech Admin",
+      "Tech Employee",
+    ];
+    const departmentNames =
+      req.user?.departments?.map((dept) => dept?.name?.trim()) || [];
+    const isTech = roles?.some((r) => allowedRoles.includes(r));
+    const isAdminTimingUser =
+      roles?.some((r) => adminTimingRoles.includes(r)) ||
+      departmentNames.some((deptName) =>
+        ["Admin", "Administration"].includes(deptName),
+      );
+    const canEditMeetingDate = roles?.some((r) => dateEditRoles.includes(r));
+    const hasSpecialEditWindowAccess = isAdminTimingUser || canEditMeetingDate;
+    const isAdminTimingRestrictedUser = isAdminTimingUser;
+    const meetingStartTime = new Date(meeting.startTime);
+    const meetingEndTime = getEffectiveEndTime(meeting);
+    const isUpcoming = meetingStartTime > currDate;
+    const editWindowEndTime = new Date(meetingStartTime.getTime() + 30 * 60000);
+    const hasMeetingStarted = meetingStartTime <= currDate;
+    const isAdminTimingBufferExpired =
+      isAdminTimingRestrictedUser && currDate > editWindowEndTime;
+    const requestedDateObj = date ? new Date(date) : null;
+
+    if (date && isNaN(requestedDateObj.getTime())) {
+      return res.status(400).json({ message: "Invalid meeting date format" });
+    }
+
+    if (canEditMeetingDate && requestedDateObj) {
+      const normalizeDateTime = (selectedDate, sourceTime) => {
+        const normalizedDateTime = new Date(selectedDate);
+        const sourceDateTime = new Date(sourceTime);
+
+        normalizedDateTime.setHours(
+          sourceDateTime.getHours(),
+          sourceDateTime.getMinutes(),
+          sourceDateTime.getSeconds(),
+          sourceDateTime.getMilliseconds(),
+        );
+
+        return normalizedDateTime;
+      };
+
+      startTimeObj = normalizeDateTime(requestedDateObj, startTimeObj);
+      endTimeObj = normalizeDateTime(requestedDateObj, endTimeObj);
+    }
+
+    if (!isTech && !isUpcoming && !hasSpecialEditWindowAccess) {
+      return res.status(403).json({
+        message: "You are not allowed to edit meeting timings to past time",
+      });
+    }
+
+    if (isAdminTimingRestrictedUser && isAdminTimingBufferExpired) {
+      return res.status(403).json({
+        message:
+          "Meeting edit is allowed only until 30 minutes after the original start time",
+      });
+    }
+
+    if (
+      ["Internal", "External"].includes(meeting.meetingType) &&
+      isAdminTimingRestrictedUser
+    ) {
+      const allowedStartLowerBound = isAdminTimingBufferExpired
+        ? meetingStartTime
+        : new Date(meetingStartTime.getTime() - 30 * 60000);
+      const allowedEndLowerBound = isAdminTimingBufferExpired
+        ? meetingEndTime
+        : new Date(meetingEndTime.getTime() - 30 * 60000);
+      const isStartTimeInAllowedRange = startTimeObj >= allowedStartLowerBound;
+      const isEndTimeInAllowedRange = endTimeObj >= allowedEndLowerBound;
+
+      if (!isStartTimeInAllowedRange || !isEndTimeInAllowedRange) {
+        return res.status(403).json({
+          message:
+            "Meeting timing edits are allowed from 30 minutes before start time until 30 minutes after start time",
+        });
+      }
     }
 
     if (startTimeObj > endTimeObj) {
@@ -1589,28 +2751,11 @@ const updateMeetingDetails = async (req, res, next) => {
     const conflictingMeeting = await Meeting.findOne({
       _id: { $ne: meetingId },
       bookedRoom: meeting.bookedRoom._id,
-      startDate: { $lte: currDate },
-      endDate: { $gte: currDate },
-      $or: [
-        {
-          $and: [
-            { startTime: { $lte: startTimeObj } },
-            { endTime: { $gt: startTimeObj } },
-          ],
-        },
-        {
-          $and: [
-            { startTime: { $lt: endTimeObj } },
-            { endTime: { $gte: endTimeObj } },
-          ],
-        },
-        {
-          $and: [
-            { startTime: { $gte: startTimeObj } },
-            { endTime: { $lte: endTimeObj } },
-          ],
-        },
-      ],
+      status: { $ne: "Cancelled" },
+      startTime: { $lt: endTimeObj },
+      $expr: {
+        $gt: [{ $ifNull: ["$extendTime", "$endTime"] }, startTimeObj],
+      },
     });
 
     if (conflictingMeeting) {
@@ -1619,10 +2764,32 @@ const updateMeetingDetails = async (req, res, next) => {
         .json({ message: "Room is already booked for the specified time" });
     }
 
+    const normalizeParticipantIds = (ids = []) =>
+      Array.from(
+        new Set(
+          (Array.isArray(ids) ? ids : [])
+            .filter(Boolean)
+            .map((id) => String(id).trim())
+            .filter(Boolean),
+        ),
+      );
+
+    const requestedInternalParticipantIds = normalizeParticipantIds(
+      internalParticipants,
+    );
+    const requestedClientParticipantIds = normalizeParticipantIds(
+      clientParticipants,
+    );
+    const requestedParticipantIds = Array.from(
+      new Set([...requestedInternalParticipantIds, ...requestedClientParticipantIds]),
+    );
+
     let internalUsers = [];
-    if (internalMeetingParticipants) {
-      const invalidIds = internalMeetingParticipants.filter(
-        (id) => !mongoose.Types.ObjectId.isValid(id)
+    let clientUsers = [];
+
+    if (requestedParticipantIds.length > 0) {
+      const invalidIds = requestedParticipantIds.filter(
+        (id) => !mongoose.Types.ObjectId.isValid(id),
       );
       if (invalidIds.length > 0) {
         return res
@@ -1630,11 +2797,22 @@ const updateMeetingDetails = async (req, res, next) => {
           .json({ message: "Invalid internal participant IDs" });
       }
 
-      const users = await BookingUserModel.find({
-        _id: { $in: internalMeetingParticipants },
-      });
-      const unmatchedIds = internalMeetingParticipants.filter(
-        (id) => !users.find((u) => u._id.toString() === id.toString())
+      const [matchedInternalUsers, matchedClientUsers] = await Promise.all([
+        User.find({ _id: { $in: requestedParticipantIds } }).select("_id"),
+        CoworkingMembers.find({ _id: { $in: requestedParticipantIds } }).select(
+          "_id",
+        ),
+      ]);
+
+      const internalIdSet = new Set(
+        matchedInternalUsers.map((user) => user._id.toString()),
+      );
+      const clientIdSet = new Set(
+        matchedClientUsers.map((user) => user._id.toString()),
+      );
+
+      const unmatchedIds = requestedParticipantIds.filter(
+        (id) => !internalIdSet.has(id) && !clientIdSet.has(id),
       );
 
       if (unmatchedIds.length > 0) {
@@ -1643,88 +2821,203 @@ const updateMeetingDetails = async (req, res, next) => {
         });
       }
 
-      internalUsers = users.map((u) => u._id);
+      internalUsers = matchedInternalUsers.map((user) => user._id);
+      clientUsers = matchedClientUsers.map((user) => user._id);
     }
 
-    const oldCreditsUsed = meeting.creditsUsed || 0;
-    const durationInMs = endTimeObj - startTimeObj;
-    const durationInHours = durationInMs / (1000 * 60 * 60);
-    const creditPerHour = meeting.bookedRoom.perHourCredit || 0;
-    const newCreditsUsed = durationInHours * creditPerHour;
-    const creditDifference = newCreditsUsed - oldCreditsUsed;
+    // const oldCreditsUsed = meeting.creditsUsed || 0;
+    // const durationInMs = endTimeObj - startTimeObj;
+    // const durationInHours = durationInMs / (1000 * 60 * 60);
+    // const creditPerHour = meeting.bookedRoom.perHourCredit || 0;
+    // const newCreditsUsed = durationInHours * creditPerHour;
+    // const creditDifference = newCreditsUsed - oldCreditsUsed;
 
-    if (creditDifference > 0) {
-      // Deduct extra credits
-      const updatedUser = await BookingCompanyModel.findOneAndUpdate(
-        {
-          _id: bookedUserId,
-          meetingCreditBalance: { $gte: creditDifference },
+    //Credits calculation
+    const durationInMinutes = (endTimeObj - startTimeObj) / (1000 * 60);
+
+    if (durationInMinutes <= 0) {
+      return res
+        .status(400)
+        .json({ message: "End time must be greater than start time" });
+    }
+
+    const creditPerHour = meeting.bookedRoom.perHourCredit || 0;
+
+    //deduction based on minutes
+    const normalizeCredits = (minutes) =>
+      Number(((minutes / 60) * creditPerHour).toFixed(2));
+
+    // Deduction based on exact minutes (not rounded hours)
+    const newCreditsUsed = normalizeCredits(durationInMinutes);
+
+    // Recompute old credits from previous timings so credit diffs also stay minute-based
+    const oldDurationInMinutes =
+      (getEffectiveEndTime(meeting) - new Date(meeting.startTime)) /
+      (1000 * 60);
+    const oldCreditsUsed =
+      oldDurationInMinutes > 0
+        ? normalizeCredits(oldDurationInMinutes)
+        : meeting.creditsUsed || 0;
+
+    const creditDifference = Number(
+      (newCreditsUsed - oldCreditsUsed).toFixed(2),
+    );
+
+    const isCreditApplicable = !isExternal;
+
+    if (creditDifference !== 0 && isCreditApplicable) {
+      const meetingDate = new Date(meeting.startTime);
+      // const meetingMonthStart = new Date(
+      //   meetingDate.getFullYear(),
+      //   meetingDate.getMonth(),
+      //   1,
+      // );
+      const meetingMonthStart = getMonthStartUTC(meetingDate);
+
+      const now = new Date();
+      // const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      const currentMonthStart = getMonthStartUTC(now);
+      const isCurrentMonth =
+        meetingMonthStart.getTime() === currentMonthStart.getTime();
+
+      const updateFields = {
+        $inc: {
+          "meetingCreditBalanceHistory.$.remainingCredit": -creditDifference,
+          "meetingCreditBalanceHistory.$.consumedCredit": creditDifference,
         },
-        { $inc: { meetingCreditBalance: -creditDifference } },
-        { new: true }
+      };
+
+      if (isCurrentMonth) {
+        updateFields.$inc.meetingCreditBalance = -creditDifference;
+      }
+
+      console.log("bookedClientId", bookedClientId);
+      console.log("updateFields", updateFields);
+      const updatedEntity = await BookingCompanyModel.findOneAndUpdate(
+        {
+          _id: bookedClientId,
+          meetingCreditBalanceHistory: {
+            $elemMatch: {
+              monthStartDate: {
+                $gte: new Date(
+                  meetingMonthStart.getTime() - 12 * 60 * 60 * 1000,
+                ),
+                $lte: new Date(
+                  meetingMonthStart.getTime() + 12 * 60 * 60 * 1000,
+                ),
+              },
+            },
+          },
+        },
+        updateFields,
+        { new: true },
       );
 
-      if (!updatedUser) {
+      if (!updatedEntity) {
         return res
-          .status(400)
-          .json({ message: "Insufficient credits for the update" });
+          .status(404)
+          .json({ message: "Booking entity or history entry not found" });
       }
-    } else if (creditDifference < 0) {
-      // Refund excess credits
-      await BookingCompanyModel.findByIdAndUpdate(bookedUserId, {
-        $inc: { meetingCreditBalance: Math.abs(creditDifference) },
-      });
     }
 
+    // if (creditDifference > 0) {
+    //   // Deduct extra credits
+    //   console.log("booked client ID", bookedClientId);
+    //   const updatedUser = await BookingCompanyModel.findOneAndUpdate(
+    //     {
+    //       _id: bookedClientId,
+    //       meetingCreditBalance: { $gte: creditDifference },
+    //     },
+    //     { $inc: { meetingCreditBalance: -creditDifference } },
+    //     { new: true },
+    //   );
+
+    //   if (!updatedUser) {
+    //     return res
+    //       .status(400)
+    //       .json({ message: "Insufficient credits for the update" });
+    //   }
+    // } else if (creditDifference < 0) {
+    //   // Refund excess credits
+    //   await BookingCompanyModel.findByIdAndUpdate(bookedClientId, {
+    //     $inc: { meetingCreditBalance: Math.abs(creditDifference) },
+    //   });
+    // }
+
     const changes = {
+      ...(canEditMeetingDate && requestedDateObj
+        ? {
+            startDate: requestedDateObj,
+            endDate: requestedDateObj,
+          }
+        : {}),
       startTime: startTimeObj,
       endTime: endTimeObj,
-      creditsUsed: newCreditsUsed,
-      internalParticipants: !isClient ? internalUsers : [],
-      clientParticipants: isClient ? internalUsers : [],
+      extendTime: null,
+      // creditsUsed: externalParticipants ? newCreditsUsed : 0,
+      creditsUsed: isExternal ? 0 : newCreditsUsed,
+      internalParticipants: internalUsers,
+      clientParticipants: clientUsers,
       externalParticipants: externalParticipants || [],
-      paymentAmount: externalParticipants ? paymentAmount : 0,
+      paymentAmount: isExternal
+        ? paymentAmount
+          ? paymentAmount
+          : meeting.paymentAmount
+        : 0,
     };
 
-    const updatedMeeting = await Meeting.findByIdAndUpdate(
+    let updatedMeeting = await Meeting.findByIdAndUpdate(
       meetingId,
       { $set: changes },
-      { new: true }
+      { new: true },
     ).populate([
       { path: "bookedRoom" },
       { path: "externalClient", select: "clientCompany" },
     ]);
 
-    // if (externalParticipants && externalParticipants.length > 0) {
-    //   const meetingRevenue = await MeetingRevenue.findByIdAndUpdate({
-    //     meeting: updatedMeeting._id,
-    //     totalAmount: paymentAmount,
-    //   });
-
-    //   if (!meetingRevenue) {
-    //     return res
-    //       .status(400)
-    //       .json({ message: "Failed to update the meeting revenue" });
-    //   }
-
-    //   const updatedVisitor = await Visitor.findOneAndUpdate(
-    //     {
-    //       clientCompany: updatedMeeting.externalClient.clientCompany,
-    //     },
-    //     {
-    //       meeting: updatedMeeting._id,
-    //     }
-    //   );
-
-    //   if (!updatedVisitor) {
-    //     return res
-    //       .status(400)
-    //       .json({ message: "Failed to update the visitor" });
-    //   }
-    // }
-
     if (!updatedMeeting) {
       return res.status(500).json({ message: "Failed to update meeting" });
+    }
+
+    // if (isExternal) {
+    //   updatedMeeting = await recalculateAndUpdatePayment({
+    //     meeting: updatedMeeting,
+    //     startTime: startTimeObj,
+    //     endTime: endTimeObj,
+    //     company: updatedMeeting.company,
+    //   });
+    // }
+
+    if (isExternal) {
+      const {
+        durationInHours,
+        resolvedBaseAmount,
+        resolvedGstAmount,
+        resolvedPaymentAmount,
+      } = recalculateAndUpdatePayment({
+        meeting: updatedMeeting,
+        paymentAmount,
+      });
+
+      await updatedMeeting.save();
+
+      // 🔥 Update Meeting Revenue (THIS WAS MISSING)
+      await MeetingRevenue.findOneAndUpdate(
+        { meeting: updatedMeeting._id },
+        {
+          $set: {
+            taxable: resolvedBaseAmount,
+            gst: resolvedGstAmount,
+            totalAmount: resolvedPaymentAmount,
+            hoursBooked: durationInHours,
+            costPerHour: updatedMeeting.bookedRoom?.perHourPrice,
+            meetingRoomName: updatedMeeting.bookedRoom?.name,
+            date: updatedMeeting.startDate,
+            paymentDate: updatedMeeting.startDate,
+          },
+        },
+        { upsert: true, new: true },
+      );
     }
 
     if (!isClient && internalParticipants?.length > 0) {

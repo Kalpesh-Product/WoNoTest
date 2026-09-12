@@ -1,6 +1,8 @@
 import AgTable from "../../../components/AgTable";
 import {
   Autocomplete,
+  Checkbox,
+  FormControlLabel,
   Chip,
   CircularProgress,
   LinearProgress,
@@ -13,6 +15,7 @@ import { toast } from "sonner";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient } from "../../../main";
 import MuiModal from "../../../components/MuiModal";
+import TicketAttachments from "../../../components/TicketAttachments";
 import { Controller, useForm } from "react-hook-form";
 import PrimaryButton from "../../../components/PrimaryButton";
 import { useEffect, useState } from "react";
@@ -21,19 +24,31 @@ import { IoMdClose } from "react-icons/io";
 import DetalisFormatted from "../../../components/DetalisFormatted";
 import humanTime from "../../../utils/humanTime";
 import humanDate from "./../../../utils/humanDateForamt";
+import formatDateTime from "../../../utils/formatDateTime";
 // import { isAlphanumeric, noOnlyWhitespace } from "../../../utils/validators";
 import { noOnlyWhitespace } from "../../../utils/validators";
 import { useTopDepartment } from "../../../hooks/useTopDepartment";
 import StatusChip from "../../../components/StatusChip";
+import useAuth from "../../../hooks/useAuth";
+import { MdOutlineRemoveRedEye } from "react-icons/md";
 
-const AcceptedTickets = ({ title, departmentId }) => {
+const AcceptedTickets = ({
+  title,
+  departmentId,
+  isItDepartment,
+  isTechDepartment,
+}) => {
   const axios = useAxiosPrivate();
+  const { auth } = useAuth();
   const [openModal, setOpenModal] = useState(false);
   const [esCalateModal, setEscalateModal] = useState(false);
   const [esCalatedTicket, setEscalatedTicket] = useState(null);
   const [openView, setOpenView] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState(null);
-  const topManagementDepartment = "67b2cf85b9b6ed5cedeb9a2e";
+  const topManagementDepartments = [
+    "67b2cf85b9b6ed5cedeb9a2e",
+    "6798ba9de469e809084e2494",
+  ];
   const { isTop } = useTopDepartment();
 
   const [selectedTicketId, setSelectedTicketId] = useState(null);
@@ -70,8 +85,21 @@ const AcceptedTickets = ({ title, departmentId }) => {
   } = useForm({
     defaultValues: {
       closingRemark: "",
+      closingCategories: [],
     },
   });
+  const closingCategoryOptions = isItDepartment
+    ? [
+        "Daily Task",
+        "ISP/External Issue",
+        "Client Support",
+        "Client/User Side Issue",
+        "IT Internal Issue",
+        "Others Issue",
+      ]
+    : isTechDepartment
+      ? ["Others Issue"]
+      : [];
 
   const handleViewTicket = (ticket) => {
     setSelectedTicket({
@@ -109,11 +137,11 @@ const AcceptedTickets = ({ title, departmentId }) => {
     queryFn: async () => {
       try {
         const response = await axios.get(
-          `/api/tickets/ticket-filter/accept-assign/${departmentId}`
+          `/api/tickets/ticket-filter/accept/${departmentId}`,
         );
         const filtered = response.data;
         const hasAssigned = filtered.some(
-          (ticket) => ticket.assignees?.length > 0
+          (ticket) => ticket.assignees?.length > 0,
         );
         return filtered;
       } catch (error) {
@@ -123,12 +151,38 @@ const AcceptedTickets = ({ title, departmentId }) => {
     },
   });
 
+  const formatAssignments = (assignments = []) => {
+    const assignmentDetails = Array.isArray(assignments)
+      ? assignments.map((assignment) => {
+        const assignee = assignment?.assignee;
+        const assigneeName =
+          assignee?.firstName && assignee?.lastName
+            ? `${assignee.firstName} ${assignee.lastName}`
+            : "Unknown";
+        const assignedAtFormatted = formatDateTime(assignment?.assignedAt);
+
+        return { assigneeName, assignedAtFormatted };
+      })
+      : [];
+
+    const assignedToDisplay = assignmentDetails
+      .map(({ assigneeName, assignedAtFormatted }) =>
+        assignedAtFormatted && assignedAtFormatted !== "N/A"
+          ? `${assigneeName} (${assignedAtFormatted})`
+          : assigneeName,
+      )
+      .join(", ");
+
+    return { assignedToDisplay, assignmentDetails };
+  };
+
   const { mutate: closeTicket, isPending: isClosing } = useMutation({
     mutationKey: ["close-ticket"],
-    mutationFn: async ({ ticketId, closingRemark }) => {
+     mutationFn: async ({ ticketId, closingRemark, closingCategories }) => {
       const response = await axios.patch("/api/tickets/close-ticket", {
         ticketId,
         closingRemark,
+        closingCategories,
       });
       return response.data;
     },
@@ -159,7 +213,7 @@ const AcceptedTickets = ({ title, departmentId }) => {
     },
     onError: function (error) {
       toast.error(
-        error.response.data.message || "Failed to create support ticket"
+        error.response.data.message || "Failed to create support ticket",
       );
     },
   });
@@ -212,59 +266,78 @@ const AcceptedTickets = ({ title, departmentId }) => {
   };
 
   const recievedTicketsColumns = [
-    { field: "srNo", headerName: "Sr No", width: 100 },
+    { field: "srNo", headerName: "Sr No", width: 200, minWidth: 190, maxWidth: 220 },
 
-    { field: "raisedUser", headerName: "Raised By" },
+    { field: "ticketTitle", headerName: "Ticket Title", flex: 1, minWidth: 220, wrapText: true },
     {
       field: "raisedToDepartment",
       headerName: "From Department",
-      width: 100,
+      flex: 1.2,
+      minWidth: 210,
+      wrapText: true,
     },
-    { field: "ticketTitle", headerName: "Ticket Title" },
+    { field: "raisedUser", headerName: "Raised By", flex: 1, minWidth: 180, wrapText: true },
+    { field: "acceptedBy", headerName: "Accepted By", flex: 1, minWidth: 180, wrapText: true },
     {
       field: "status",
       headerName: "Status",
+      width: 150,
+      minWidth: 140,
       cellRenderer: (params) => {
         return <StatusChip status={params.value} />;
       },
     },
-    { field: "acceptedBy", headerName: "Accepted By" },
     {
       field: "actions",
       headerName: "Actions",
       pinned: "right",
+      // width: 120,
+      // minWidth: 120,
+      // maxWidth: 140,
       cellRenderer: (params) => {
-        const commonItems = [
-          { label: "View", onClick: () => handleViewTicket(params.data) },
-        ];
+        // const commonItems = [
+        //   { label: "View", onClick: () => handleViewTicket(params.data) },
+        // ];
 
         const showOtherActions =
-          !isTop || (isTop && departmentId === topManagementDepartment);
+          !isTop ||
+          (isTop && topManagementDepartments.includes(String(departmentId)));
+
+        const roleTitle = auth?.user?.role?.[0]?.roleTitle || "";
+        const canManageAssignments = roleTitle.endsWith("Admin");
 
         const additionalItems = showOtherActions
           ? [
-              {
-                label: "Close",
-                onClick: () => handleCloseTicket(params.data.id),
-              },
+            {
+              label: "Support",
+              onClick: () => handleSupportTicket(params.data.id),
+            },
+            ...(canManageAssignments
+              ? [
+                {
+                  label: "Escalate",
+                  onClick: () => handleEscalateTicket(params.data),
+                },
+              ]
+              : []),
 
-              {
-                label: "Support",
-                onClick: () => handleSupportTicket(params.data.id),
-              },
-              {
-                label: "Escalate",
-                onClick: () => handleEscalateTicket(params.data),
-              },
-            ]
+            {
+              label: "Close",
+              onClick: () => handleCloseTicket(params.data.id),
+            },
+          ]
           : [];
 
         return (
           <div className="flex gap-2">
-            <ThreeDotMenu
-              rowId={params.data.id}
-              menuItems={[...commonItems, ...additionalItems]}
-            />
+            <div
+              role="button"
+              onClick={() => handleViewTicket(params.data)}
+              className="p-2 rounded-full hover:bg-borderGray cursor-pointer"
+            >
+              <MdOutlineRemoveRedEye />
+            </div>
+            <ThreeDotMenu rowId={params.data.id} menuItems={additionalItems} />
           </div>
         );
       },
@@ -275,9 +348,8 @@ const AcceptedTickets = ({ title, departmentId }) => {
       ...ticket,
       srNo: index + 1,
       id: ticket._id,
-      raisedUser: `${ticket.raisedBy?.firstName || ""} ${
-        ticket.raisedBy?.lastName || ""
-      }`,
+      raisedUser: `${ticket.raisedBy?.firstName || ""} ${ticket.raisedBy?.lastName || ""
+        }`,
 
       description: ticket.description,
       raisedByDepartment:
@@ -287,22 +359,34 @@ const AcceptedTickets = ({ title, departmentId }) => {
       status: ticket.status || "Pending",
       acceptedBy: ticket?.acceptedBy
         ? `${ticket.acceptedBy.firstName} ${ticket.acceptedBy.lastName}`
-        : `${
-            ticket.assignees.map(
-              (item) => `${item.firstName} ${item.lastName}`
-            )[0]
-          }`,
-      assignees: `${ticket.assignees.map((item) => item.firstName)[0]}`,
+        : `${ticket.assignees.map(
+          (item) => `${item.firstName} ${item.lastName}`,
+        )[0]
+        }`,
+      // assignees: `${ticket.assignees.map((item) => item.firstName)[0]}`,
+      ...(() => {
+        const { assignedToDisplay, assignmentDetails } = formatAssignments(
+          ticket.assignedTo,
+        );
+        return {
+          assignees: assignedToDisplay,
+          assignedToDetails: assignmentDetails,
+        };
+      })(),
       acceptedAt: ticket.acceptedAt ? humanTime(ticket.acceptedAt) : "-",
       priority: ticket.priority,
       image: ticket.image ? ticket.image.url : null,
+      attachments: ticket.attachments || [],
     })),
   ]);
 
   return (
     <div className="p-4 border-default border-borderGray rounded-md">
       <div className="pb-4">
-        <Typography variant="h6">{title}</Typography>
+        {/* <Typography variant="h6">{title}</Typography> */}
+        <span className="text-mobileTitle lg:text-widgetTitle text-primary font-pmedium uppercase">
+          {title}
+        </span>
       </div>
       <div className="w-full">
         {isLoading && (
@@ -320,34 +404,39 @@ const AcceptedTickets = ({ title, departmentId }) => {
                 ...ticket,
                 srNo: index + 1,
                 id: ticket._id,
-                raisedUser: `${ticket.raisedBy?.firstName || ""} ${
-                  ticket.raisedBy?.lastName || ""
-                }`,
+                raisedUser: `${ticket.raisedBy?.firstName || ""} ${ticket.raisedBy?.lastName || ""
+                  }`,
 
                 description: ticket.description,
                 raisedByDepartment:
                   ticket.raisedBy?.departments?.map((dept) => dept.name) ||
                   "N/A",
                 raisedToDepartment: ticket.raisedBy?.departments?.map(
-                  (item) => item.name || "N/A"
+                  (item) => item.name || "N/A",
                 ),
                 ticketTitle: ticket?.ticket || "No Title",
                 status: ticket.status || "Pending",
                 acceptedBy: ticket?.acceptedBy
                   ? `${ticket.acceptedBy.firstName} ${ticket.acceptedBy.lastName}`
-                  : `${
-                      ticket.assignees.map(
-                        (item) => `${item.firstName} ${item.lastName}`
-                      )[0]
-                    }`,
-                assignees: `${
-                  ticket.assignees.map((item) => item.firstName)[0]
-                }`,
-                acceptedAt: ticket.acceptedAt
-                  ? humanTime(ticket.acceptedAt)
-                  : "-",
+                  : `${ticket.assignees.map(
+                    (item) => `${item.firstName} ${item.lastName}`,
+                  )[0]
+                  }`,
+                // assignees: `${
+                //   ticket.assignees.map((item) => item.firstName)[0]
+                // }`,
+                ...(() => {
+                  const { assignedToDisplay, assignmentDetails } =
+                    formatAssignments(ticket.assignedTo);
+                  return {
+                    assignees: assignedToDisplay,
+                    assignedToDetails: assignmentDetails,
+                  };
+                })(),
+                acceptedAt: ticket.acceptedAt ? ticket.acceptedAt : "-",
                 priority: ticket.priority,
                 image: ticket.image ? ticket.image.url : null,
+                attachments: ticket.attachments || [],
               })),
             ]}
             columns={recievedTicketsColumns}
@@ -464,20 +553,12 @@ const AcceptedTickets = ({ title, departmentId }) => {
         {selectedTicket && (
           <div className="grid grid-cols-1 lg:grid-cols-1 gap-4">
             <DetalisFormatted
-              title="Ticket"
+              title="Ticket Title"
               detail={selectedTicket.ticketTitle}
             />
             <DetalisFormatted
               title="Description"
               detail={selectedTicket.description || "N/A"}
-            />
-            <DetalisFormatted
-              title="Raised By"
-              detail={selectedTicket.raisedUser}
-            />
-            <DetalisFormatted
-              title="Raised At"
-              detail={humanDate(selectedTicket.createdAt)}
             />
             <DetalisFormatted
               title="From Department"
@@ -489,28 +570,67 @@ const AcceptedTickets = ({ title, departmentId }) => {
               detail={selectedTicket?.raisedByDepartment}
             />
             <DetalisFormatted
+              title="Raised By"
+              detail={selectedTicket.raisedUser}
+            />
+            <DetalisFormatted
+              title="Raised At"
+              // detail={humanDate(selectedTicket.createdAt)}
+              detail={formatDateTime(selectedTicket.createdAt)}
+            />
+            <DetalisFormatted
               title="Raised To Department"
               detail={selectedTicket.raisedToDepartment || "N/A"}
             />
-            <DetalisFormatted title="Status" detail={selectedTicket.status} />
+
+            <DetalisFormatted
+              title="Accepted By"
+              detail={selectedTicket?.acceptedBy}
+            />
+            <DetalisFormatted
+              title="Accepted At"
+              // detail={selectedTicket?.acceptedAt}
+              detail={formatDateTime(selectedTicket?.acceptedAt)}
+            />
+
+            {selectedTicket?.assignedToDetails?.length ? (
+              <div className="text-content flex items-start w-full">
+                <span className="w-[50%]">Assigned At</span>
+                <span>:</span>
+                <div className="text-content flex flex-col gap-2 items-start w-full justify-start pl-4">
+                  {selectedTicket.assignedToDetails.map((assignment, index) => (
+                    <div key={`${assignment.assigneeName}-${index}`}>
+                      <div className="font-medium">
+                        {assignment.assigneeName}
+                      </div>
+                      <div className="text-borderGray">
+                        {assignment.assignedAtFormatted || "N/A"}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <DetalisFormatted
+                title="Assigned At"
+                detail={selectedTicket?.assignees || ""}
+              />
+            )}
             <DetalisFormatted
               title="Priority"
               detail={selectedTicket?.priority}
             />
-            <DetalisFormatted
-              title="Accepted by"
-              detail={selectedTicket?.acceptedBy}
-            />
-            <DetalisFormatted
-              title="Accepted at"
-              detail={selectedTicket?.acceptedAt}
+            <DetalisFormatted title="Status" detail={selectedTicket.status} />
+            <TicketAttachments
+              attachments={selectedTicket?.attachments}
+              legacyImage={selectedTicket?.image}
             />
             {/* <DetalisFormatted title="Assigned to" detail={selectedTicket?.assignees} /> */}
           </div>
         )}
       </MuiModal>
 
-      <MuiModal
+      {/* <MuiModal
         open={closeModal}
         onClose={() => setCloseModal(false)}
         title={"Close Ticket"}
@@ -520,7 +640,7 @@ const AcceptedTickets = ({ title, departmentId }) => {
             closeTicket({
               ticketId: closingTicketId,
               closingRemark: data.closingRemark,
-            })
+            }),
           )}
           className="grid grid-cols-1 gap-4"
         >
@@ -544,6 +664,83 @@ const AcceptedTickets = ({ title, departmentId }) => {
 
           <PrimaryButton
             title={"Close Ticket"}
+            isLoading={isClosing}
+            disabled={isClosing}
+            type="submit"
+          />
+        </form>
+      </MuiModal> */}
+       <MuiModal
+        open={closeModal}
+        onClose={() => {
+          resetCloseForm();
+          setCloseModal(false);
+        }}
+        title="Close Ticket"
+      >
+        <form
+          onSubmit={handleCloseSubmit((data) =>
+            closeTicket({ ticketId: closingTicketId, ...data }),
+          )}
+          className="grid grid-cols-1 gap-5"
+        >
+          {closingCategoryOptions.length > 0 && (
+            <Controller
+              name="closingCategories"
+              control={closeControl}
+              render={({ field }) => (
+                <div>
+                  <div className="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2 lg:grid-cols-3">
+                    {closingCategoryOptions.map((category) => (
+                      <FormControlLabel
+                        key={category}
+                        control={
+                          <Checkbox
+                            checked={field.value.includes(category)}
+                            onChange={(event) =>
+                              field.onChange(
+                                event.target.checked
+                                  ? [...field.value, category]
+                                  : field.value.filter(
+                                      (item) => item !== category,
+                                    ),
+                              )
+                            }
+                          />
+                        }
+                        label={category}
+                      />
+                    ))}
+                  </div>
+                  {closeErrors.closingCategories && (
+                    <p className="mt-1 text-xs text-red-600">
+                      {closeErrors.closingCategories.message}
+                    </p>
+                  )}
+                </div>
+              )}
+            />
+          )}
+          <Controller
+            name="closingRemark"
+            control={closeControl}
+            rules={{
+              required: "Closing remark is required",
+            }}
+            render={({ field }) => (
+              <TextField
+                {...field}
+                label="Closing Remark"
+                fullWidth
+                multiline
+                rows={4}
+                error={!!closeErrors.closingRemark}
+                helperText={closeErrors.closingRemark?.message}
+              />
+            )}
+          />
+          <PrimaryButton
+            title="Close Ticket"
             isLoading={isClosing}
             disabled={isClosing}
             type="submit"

@@ -3,6 +3,8 @@ import AgTable from "../../../components/AgTable";
 import MuiModal from "../../../components/MuiModal";
 import {
   Autocomplete,
+  Checkbox,
+  FormControlLabel,
   Chip,
   CircularProgress,
   MenuItem,
@@ -17,20 +19,31 @@ import { Controller, useForm } from "react-hook-form";
 import PrimaryButton from "../../../components/PrimaryButton";
 import { IoMdClose } from "react-icons/io";
 import DetalisFormatted from "../../../components/DetalisFormatted";
+import TicketAttachments from "../../../components/TicketAttachments";
 import humanDate from "../../../utils/humanDateForamt";
 import { isAlphanumeric, noOnlyWhitespace } from "../../../utils/validators";
 import { useTopDepartment } from "../../../hooks/useTopDepartment";
 import { DateEnv } from "@fullcalendar/core/internal";
+import useAuth from "../../../hooks/useAuth";
+import formatDateTime from "../../../utils/formatDateTime";
+import { MdOutlineRemoveRedEye } from "react-icons/md";
 
-const AssignedTickets = ({ title, departmentId }) => {
+const AssignedTickets = ({
+  title,
+  departmentId,
+  isItDepartment,
+  isTechDepartment,
+}) => {
+  const { auth } = useAuth();
   const [openModal, setopenModal] = useState(false);
   const [esCalateModal, setEscalateModal] = useState(false);
   const [esCalatedTicket, setEscalatedTicket] = useState(null);
+  const [openSupportModal, setOpenSupportModal] = useState(false);
   const axios = useAxiosPrivate();
   const [selectedTicketId, setSelectedTicketId] = useState(null);
   const [openView, setOpenView] = useState(false);
   const [selectedTicket, setSelectedTicket] = useState(null);
-  const topManagementDepartment = "67b2cf85b9b6ed5cedeb9a2e";
+  // const topManagementDepartment = "67b2cf85b9b6ed5cedeb9a2e";
   const { isTop } = useTopDepartment();
 
   // Fetch Supported Tickets
@@ -39,7 +52,7 @@ const AssignedTickets = ({ title, departmentId }) => {
     queryFn: async () => {
       try {
         const response = await axios.get(
-          `/api/tickets/ticket-filter/assign/${departmentId}`
+          `/api/tickets/ticket-filter/assign/${departmentId}`,
         );
 
         return response.data;
@@ -54,8 +67,24 @@ const AssignedTickets = ({ title, departmentId }) => {
     setopenModal(true);
   };
 
+  const handleSupportTicket = (ticketId) => {
+    setSelectedTicketId(ticketId);
+    setOpenSupportModal(true);
+  };
+
   const [closeModal, setCloseModal] = useState(false);
   const [closingTicketId, setClosingTicketId] = useState(null);
+
+  const {
+    handleSubmit: handleSupportTicketSubmit,
+    reset: resetSupportTicketForm,
+    control: supportTicketControl,
+    formState: { errors: supportTicketsError },
+  } = useForm({
+    defaultValues: {
+      reason: "",
+    },
+  });
 
   const {
     handleSubmit: handleCloseSubmit,
@@ -65,8 +94,21 @@ const AssignedTickets = ({ title, departmentId }) => {
   } = useForm({
     defaultValues: {
       closingRemark: "",
+      closingCategories: [],
     },
   });
+  const closingCategoryOptions = isItDepartment
+    ? [
+        "Daily Task",
+        "ISP/External Issue",
+        "Client Support",
+        "Client/User Side Issue",
+        "IT Internal Issue",
+        "Others Issue",
+      ]
+    : isTechDepartment
+      ? ["Others Issue"]
+      : [];
 
   const handleViewTicket = (ticket) => {
     setSelectedTicket({
@@ -78,58 +120,109 @@ const AssignedTickets = ({ title, departmentId }) => {
     setOpenView(true);
   };
 
+  const formatAssignments = (assignments = []) => {
+    const assignmentDetails = Array.isArray(assignments)
+      ? assignments.map((assignment) => {
+        const assignee = assignment?.assignee;
+        const assigneeName =
+          assignee?.firstName && assignee?.lastName
+            ? `${assignee.firstName} ${assignee.lastName}`
+            : "Unknown";
+        const assignedAtFormatted = formatDateTime(assignment?.assignedAt);
+
+        return { assigneeName, assignedAtFormatted };
+      })
+      : [];
+
+    const assignedToDisplay = assignmentDetails
+      .map(({ assigneeName, assignedAtFormatted }) =>
+        assignedAtFormatted && assignedAtFormatted !== "N/A"
+          ? `${assigneeName} (${assignedAtFormatted})`
+          : assigneeName,
+      )
+      .join(", ");
+
+    return { assignedToDisplay, assignmentDetails };
+  };
+
   // Transform Tickets Data
   const transformTicketsData = (tickets) => {
     return !tickets.length
       ? []
       : tickets.map((ticket, index) => {
-          const supportTicket = {
-            id: ticket._id,
-            srno: index + 1,
-            description: ticket.description,
-            raisedBy:
-              ticket.raisedBy?.firstName && ticket.raisedBy?.lastName
-                ? `${ticket.raisedBy.firstName} ${ticket.raisedBy.lastName}`
-                : "Unknown",
-            raisedAt: ticket.createdAt,
-            raisedToDepartment: ticket.raisedToDepartment.name,
-            selectedDepartment:
-              Array.isArray(ticket.raisedBy?.departments) &&
+        const mostRecentAssignment = Array.isArray(ticket.assignedTo)
+          ? ticket.assignedTo[ticket.assignedTo.length - 1]
+          : null;
+        const mostRecentAssigneeName =
+          mostRecentAssignment?.assignee?.firstName &&
+            mostRecentAssignment?.assignee?.lastName
+            ? `${mostRecentAssignment.assignee.firstName} ${mostRecentAssignment.assignee.lastName}`
+            : ticket.assignees?.length
+              ? `${ticket.assignees[ticket.assignees.length - 1]?.firstName || ""} ${ticket.assignees[ticket.assignees.length - 1]?.lastName || ""}`.trim() ||
+              "N/A"
+              : "N/A";
+
+        const supportTicket = {
+          id: ticket._id,
+          srno: index + 1,
+          description: ticket.description,
+          raisedBy:
+            ticket.raisedBy?.firstName && ticket.raisedBy?.lastName
+              ? `${ticket.raisedBy.firstName} ${ticket.raisedBy.lastName}`
+              : "Unknown",
+          recentAssignee: mostRecentAssigneeName,
+          raisedAt: ticket.createdAt,
+          raisedToDepartment: ticket.raisedToDepartment.name,
+          selectedDepartment:
+            Array.isArray(ticket.raisedBy?.departments) &&
               ticket.raisedBy.departments.length > 0
-                ? ticket.raisedBy.departments.map((dept) => dept.name)
-                : ["N/A"],
-            priority: ticket.priority,
-            ticketTitle: ticket.ticket || "No Title",
-            assignees:
-              ticket.assignees.length > 0
-                ? `${ticket.assignees.map(
-                    (item) => `${item.firstName} ${item.lastName}`
-                  )}`
-                : "N/A",
-            tickets:
-              ticket.assignees.length > 0
-                ? "Assigned Ticket"
-                : ticket.ticket?.acceptedBy
+              ? ticket.raisedBy.departments.map((dept) => dept.name)
+              : ["N/A"],
+          priority: ticket.priority,
+          ticketTitle: ticket.ticket || "No Title",
+          ...(() => {
+            const { assignedToDisplay, assignmentDetails } =
+              formatAssignments(ticket.assignedTo);
+            return {
+              assignees: assignedToDisplay || "N/A",
+              assignedToDetails: assignmentDetails,
+            };
+          })(),
+          assignees:
+            ticket.assignees.length > 0
+              ? `${ticket.assignees.map(
+                (item) => `${item.firstName} ${item.lastName}`,
+              )}`
+              : "N/A",
+          tickets:
+            ticket.assignees.length > 0
+              ? "Assigned Ticket"
+              : ticket.ticket?.acceptedBy
                 ? "Accepted Ticket"
                 : "N/A",
-            assignedAt: ticket.assignedAt || "N/A",
-            status: ticket.status || "Pending",
-          };
+          assignedAt: ticket.assignedAt || "N/A",
+          status: ticket.status || "Pending",
+          image: ticket.image?.url || null,
+          attachments: ticket.attachments || [],
+        };
 
-          return supportTicket;
-        });
+        return supportTicket;
+      });
   };
 
   const recievedTicketsColumns = [
-    { field: "srno", headerName: "Sr No" },
-    { field: "raisedBy", headerName: "Raised By" },
+    { field: "srno", headerName: "Sr No", width: 200, minWidth: 190, maxWidth: 220 },
+    { field: "ticketTitle", headerName: "Ticket Title", flex: 1, minWidth: 220, wrapText: true },
     {
       field: "selectedDepartment",
       headerName: "From Department",
-      width: 100,
+      flex: 1.2,
+      minWidth: 210,
+      wrapText: true,
     },
-    { field: "ticketTitle", headerName: "Ticket Title", flex: 1 },
-    { field: "assignees", headerName: "Assigned To", width: 300 },
+    { field: "raisedBy", headerName: "Raised By", flex: 1, minWidth: 180, wrapText: true },
+    { field: "recentAssignee", headerName: "Assignees", flex: 1, minWidth: 180, wrapText: true },
+    // { field: "assignees", headerName: "Assigned To", width: 300 },
     // {
     //   field: "tickets",
     //   headerName: "Tickets",
@@ -191,6 +284,8 @@ const AssignedTickets = ({ title, departmentId }) => {
     {
       field: "status",
       headerName: "Status",
+      width: 150,
+      minWidth: 140,
       cellRenderer: (params) => {
         const statusColorMap = {
           Pending: { backgroundColor: "#FFECC5", color: "#CC8400" }, // Light orange bg, dark orange font
@@ -221,39 +316,60 @@ const AssignedTickets = ({ title, departmentId }) => {
       field: "actions",
       headerName: "Actions",
       pinned: "right",
+      // width: 120,
+      // minWidth: 120,
+      // maxWidth: 140,
       cellRenderer: (params) => {
-        const commonItems = [
-          {
-            label: "View",
-            onClick: () => handleViewTicket(params.data),
-          },
-        ];
+        // const commonItems = [
+        //   {
+        //     label: "View",
+        //     onClick: () => handleViewTicket(params.data),
+        //   },
+        // ];
 
-        const showOtherActions =
-          !isTop || (isTop && departmentId === topManagementDepartment);
+        const roleTitle = auth?.user?.role?.[0]?.roleTitle || "";
+        const canReassignTicket = isTop;
+        const canEscalateTicket = roleTitle.endsWith("Admin") || isTop;
 
-        const conditionalItems = showOtherActions
-          ? [
+        const conditionalItems = [
+          ...(canReassignTicket
+            ? [
               {
                 label: "Re-Assign",
                 onClick: () => handleOpenAssignModal(params.data.id),
               },
+            ]
+            : []),
+          ...(canEscalateTicket
+            ? [
               {
                 label: "Escalate",
                 onClick: () => handleEscalateTicket(params.data),
               },
-              {
-                label: "Close",
-                onClick: () => handleCloseTicket(params.data.id),
-              },
             ]
-          : [];
+            : []),
+          {
+            label: "Support",
+            onClick: () => handleSupportTicket(params.data.id),
+          },
+
+          {
+            label: "Close",
+            onClick: () => handleCloseTicket(params.data.id),
+          },
+        ];
 
         return (
-          <ThreeDotMenu
-            rowId={params.data.id}
-            menuItems={[...commonItems, ...conditionalItems]}
-          />
+          <div className="flex items-center gap-2">
+            <div
+              role="button"
+              onClick={() => handleViewTicket(params.data)}
+              className="p-2 rounded-full hover:bg-borderGray cursor-pointer"
+            >
+              <MdOutlineRemoveRedEye />
+            </div>
+            <ThreeDotMenu rowId={params.data.id} menuItems={conditionalItems} />
+          </div>
         );
       },
     },
@@ -263,10 +379,11 @@ const AssignedTickets = ({ title, departmentId }) => {
 
   const { mutate: closeTicket, isPending: isClosingTicket } = useMutation({
     mutationKey: ["close-ticket"],
-    mutationFn: async ({ ticketId, closingRemark }) => {
+    mutationFn: async ({ ticketId, closingRemark, closingCategories }) => {
       const response = await axios.patch("/api/tickets/close-ticket", {
         ticketId,
         closingRemark,
+        closingCategories,
       });
       return response.data;
     },
@@ -282,10 +399,30 @@ const AssignedTickets = ({ title, departmentId }) => {
     },
   });
 
+  const { mutate: getSupport, isPending: isGetSupportPending } = useMutation({
+    mutationKey: ["get-support"],
+    mutationFn: async (data) => {
+      const response = await axios.post(`/api/tickets/support-ticket`, data);
+      return response.data;
+    },
+    onSuccess: function (data) {
+      toast.success(data.message || "Support ticket created successfully");
+      queryClient.invalidateQueries({ queryKey: ["assigned-tickets"] });
+      queryClient.invalidateQueries({ queryKey: ["tickets-data"] });
+      resetSupportTicketForm();
+      setOpenSupportModal(false);
+    },
+    onError: function (error) {
+      toast.error(
+        error.response?.data?.message || "Failed to create support ticket",
+      );
+    },
+  });
+
   const fetchSubOrdinates = async () => {
     try {
       const response = await axios.get(
-        `/api/users/assignees?deptId=${departmentId}`
+        `/api/users/assignees?deptId=${departmentId}`,
       );
 
       return response.data;
@@ -311,7 +448,7 @@ const AssignedTickets = ({ title, departmentId }) => {
         `/api/tickets/assign-ticket/${data.ticketId}`,
         {
           assignees: data.assignedEmployees,
-        }
+        },
       );
 
       return response.data.message;
@@ -330,7 +467,7 @@ const AssignedTickets = ({ title, departmentId }) => {
 
   const onSubmit = (formData) => {
     const assignedEmployeeIds = Object.keys(formData.selectedEmployees).filter(
-      (id) => formData.selectedEmployees[id]
+      (id) => formData.selectedEmployees[id],
     ); // ✅ Keep only selected IDs
 
     if (assignedEmployeeIds.length === 0) {
@@ -343,12 +480,18 @@ const AssignedTickets = ({ title, departmentId }) => {
       assignedEmployees: assignedEmployeeIds,
     }); // ✅ Send array of IDs
   };
+
+  const onSupportSubmit = (data) => {
+    if (!selectedTicketId) return;
+    getSupport({ ticketId: selectedTicketId, reason: data.reason });
+  };
+
   const { data: departments = [], isPending: isDepartmentsPending } = useQuery({
     queryKey: ["departments"],
     queryFn: async () => {
       try {
         const response = await axios.get(
-          "api/company/get-company-data?field=selectedDepartments"
+          "api/company/get-company-data?field=selectedDepartments",
         );
         return response.data?.selectedDepartments;
       } catch (error) {
@@ -413,7 +556,10 @@ const AssignedTickets = ({ title, departmentId }) => {
   return (
     <div className="p-4 border-default border-borderGray rounded-md">
       <div className="pb-4">
-        <span className="text-subtitle">{title}</span>
+        {/* <span className="text-subtitle">{title}</span> */}
+        <span className="text-mobileTitle lg:text-widgetTitle text-primary font-pmedium uppercase">
+          {title}
+        </span>
       </div>
       <div className="w-full">
         {!isClosingTicket ? (
@@ -464,6 +610,42 @@ const AssignedTickets = ({ title, departmentId }) => {
         </form>
       </MuiModal>
 
+      <MuiModal
+        open={openSupportModal}
+        onClose={() => setOpenSupportModal(false)}
+        title={"Support Ticket"}
+      >
+        <form
+          onSubmit={handleSupportTicketSubmit(onSupportSubmit)}
+          className="flex flex-col gap-4"
+        >
+          <Controller
+            name="reason"
+            control={supportTicketControl}
+            rules={{
+              required: "Reason is required",
+              validate: { noOnlyWhitespace },
+            }}
+            render={({ field }) => (
+              <TextField
+                {...field}
+                label={"Reason"}
+                multiline
+                rows={5}
+                error={!!supportTicketsError.reason}
+                helperText={supportTicketsError.reason?.message}
+              />
+            )}
+          />
+          <PrimaryButton
+            title={"Submit"}
+            isLoading={isGetSupportPending}
+            disabled={isGetSupportPending}
+            type={"submit"}
+          />
+        </form>
+      </MuiModal>
+
       <MuiModal open={esCalateModal} onClose={() => setEscalateModal(false)}>
         <div>
           <form
@@ -486,7 +668,7 @@ const AssignedTickets = ({ title, departmentId }) => {
                       getOptionLabel={(dept) => `${dept.department.name}`}
                       onChange={(_, newValue) =>
                         field.onChange(
-                          newValue.map((dept) => dept.department._id)
+                          newValue.map((dept) => dept.department._id),
                         )
                       }
                       renderTags={(selected, getTagProps) =>
@@ -553,20 +735,12 @@ const AssignedTickets = ({ title, departmentId }) => {
         {selectedTicket && (
           <div className="grid grid-cols-1 lg:grid-cols-1 gap-4">
             <DetalisFormatted
-              title="Ticket"
+              title="Ticket Title"
               detail={selectedTicket.ticketTitle || "N/A"}
             />
             <DetalisFormatted
               title="Description"
               detail={selectedTicket.description || "N/A"}
-            />
-            <DetalisFormatted
-              title="Raised By"
-              detail={selectedTicket.raisedBy || "Unknown"}
-            />
-            <DetalisFormatted
-              title="Raised At"
-              detail={humanDate(new Date(selectedTicket.raisedAt))}
             />
             <DetalisFormatted
               title="From Department"
@@ -577,27 +751,54 @@ const AssignedTickets = ({ title, departmentId }) => {
               }
             />
             <DetalisFormatted
+              title="Raised By"
+              detail={selectedTicket.raisedBy || "Unknown"}
+            />
+            <DetalisFormatted
+              title="Raised At"
+              detail={formatDateTime(selectedTicket.raisedAt)}
+            />
+            <DetalisFormatted
               title="Raised To Department"
               detail={selectedTicket.raisedToDepartment || "N/A"}
             />
-            <DetalisFormatted title="Status" detail={selectedTicket.status} />
+            {selectedTicket?.assignedToDetails?.length ? (
+              <div className="text-content flex items-start w-full">
+                <span className="w-[50%]">Assignees</span>
+                <span>:</span>
+                <div className="text-content flex flex-col gap-2 items-start w-full justify-start pl-4">
+                  {selectedTicket.assignedToDetails.map((assignment, index) => (
+                    <div key={`${assignment.assigneeName}-${index}`}>
+                      <div className="font-medium">
+                        {assignment.assigneeName}
+                      </div>
+                      <div className="text-borderGray">
+                        {assignment.assignedAtFormatted || "N/A"}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <DetalisFormatted
+                title="Assignees"
+                detail={selectedTicket?.assignees || "N/A"}
+              />
+            )}
             <DetalisFormatted
               title="Priority"
               detail={selectedTicket?.priority || "N/A"}
             />
-            <DetalisFormatted
-              title="Assignees"
-              detail={selectedTicket?.assignees || "N/A"}
-            />
-            <DetalisFormatted
-              title="Assigned at"
-              detail={humanDate(selectedTicket?.assignedAt) || "N/A"}
+            <DetalisFormatted title="Status" detail={selectedTicket.status} />
+            <TicketAttachments
+              attachments={selectedTicket?.attachments}
+              legacyImage={selectedTicket?.image}
             />
           </div>
         )}
       </MuiModal>
 
-      <MuiModal
+      {/* <MuiModal
         open={closeModal}
         onClose={() => setCloseModal(false)}
         title="Close Ticket"
@@ -607,7 +808,7 @@ const AssignedTickets = ({ title, departmentId }) => {
             closeTicket({
               ticketId: closingTicketId,
               closingRemark: data.closingRemark,
-            })
+            }),
           )}
           className="grid grid-cols-1 gap-4"
         >
@@ -629,6 +830,83 @@ const AssignedTickets = ({ title, departmentId }) => {
             )}
           />
 
+          <PrimaryButton
+            title="Close Ticket"
+            isLoading={isClosingTicket}
+            disabled={isClosingTicket}
+            type="submit"
+          />
+        </form>
+      </MuiModal> */}
+        <MuiModal
+        open={closeModal}
+        onClose={() => {
+          resetCloseForm();
+          setCloseModal(false);
+        }}
+        title="Close Ticket"
+      >
+        <form
+          onSubmit={handleCloseSubmit((data) =>
+            closeTicket({ ticketId: closingTicketId, ...data }),
+          )}
+          className="grid grid-cols-1 gap-5"
+        >
+          {closingCategoryOptions.length > 0 && (
+            <Controller
+              name="closingCategories"
+              control={closeControl}
+              render={({ field }) => (
+                <div>
+                  <div className="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2 lg:grid-cols-3">
+                    {closingCategoryOptions.map((category) => (
+                      <FormControlLabel
+                        key={category}
+                        control={
+                          <Checkbox
+                            checked={field.value.includes(category)}
+                            onChange={(event) =>
+                              field.onChange(
+                                event.target.checked
+                                  ? [...field.value, category]
+                                  : field.value.filter(
+                                      (item) => item !== category,
+                                    ),
+                              )
+                            }
+                          />
+                        }
+                        label={category}
+                      />
+                    ))}
+                  </div>
+                  {closeErrors.closingCategories && (
+                    <p className="mt-1 text-xs text-red-600">
+                      {closeErrors.closingCategories.message}
+                    </p>
+                  )}
+                </div>
+              )}
+            />
+          )}
+          <Controller
+            name="closingRemark"
+            control={closeControl}
+            rules={{
+              required: "Closing remark is required",
+            }}
+            render={({ field }) => (
+              <TextField
+                {...field}
+                label="Closing Remark"
+                fullWidth
+                multiline
+                rows={4}
+                error={!!closeErrors.closingRemark}
+                helperText={closeErrors.closingRemark?.message}
+              />
+            )}
+          />
           <PrimaryButton
             title="Close Ticket"
             isLoading={isClosingTicket}

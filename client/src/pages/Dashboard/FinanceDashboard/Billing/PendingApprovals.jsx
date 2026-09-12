@@ -18,7 +18,8 @@ import { useDispatch } from "react-redux";
 import { setVoucherDetails } from "../../../../redux/slices/financeSlice";
 import PageFrame from "../../../../components/Pages/PageFrame";
 import YearWiseTable from "../../../../components/Tables/YearWiseTable";
-
+import { MdOutlineRemoveRedEye } from "react-icons/md";
+import StatusChip from "../../../../components/StatusChip";
 const PendingApprovals = () => {
   const navigate = useNavigate();
   const [modalOpen, setModalOpen] = useState(false);
@@ -35,13 +36,24 @@ const PendingApprovals = () => {
         try {
           const response = await axios.get(`/api/budget/pending-approvals`);
           const budgets = response.data.allBudgets;
-          return Array.isArray(budgets) ? budgets : [];
+          //return Array.isArray(budgets) ? budgets : [];
+          return Array.isArray(budgets)
+            ? budgets.filter((budget) => {
+                const expenseType = String(budget.expanseType || "")
+                  .trim()
+                  .toLowerCase();
+                return (
+                  expenseType.includes("reimbursement") ||
+                  expenseType.includes("voucher")
+                );
+              })
+            : [];
         } catch (error) {
           console.error("Error fetching budget:", error);
           return [];
         }
       },
-    }
+    },
   );
   const {
     handleSubmit: reasonSubmit,
@@ -62,7 +74,7 @@ const PendingApprovals = () => {
     mutationFn: async (data) => {
       const response = await axios.patch(
         `/api/budget/reject-budget/${selectedBudget._id}`,
-        data
+        data,
       );
       return response.data;
     },
@@ -76,23 +88,23 @@ const PendingApprovals = () => {
     },
   });
 
-  const { mutate: submitRequest, isPending: isSubmitRequest } = useMutation({
-    mutationKey: ["approve"],
-    mutationFn: async (formData) => {
-      const response = await axios.patch(`/api/budget/approve-budget`, {
-        budgetId: formData,
-      });
-      return response.data;
-    },
-    onSuccess: (data) => {
-      toast.success(data.message);
-      reset();
-      navigate("/app/dashboard/finance-dashboard/billing/pending-approvals");
-    },
-    onError: (error) => {
-      toast.error(error.message);
-    },
-  });
+  // const { mutate: submitRequest, isPending: isSubmitRequest } = useMutation({
+  //   mutationKey: ["approve"],
+  //   mutationFn: async (formData) => {
+  //     const response = await axios.patch(`/api/budget/approve-budget`, {
+  //       budgetId: formData,
+  //     });
+  //     return response.data;
+  //   },
+  //   onSuccess: (data) => {
+  //     toast.success(data.message);
+  //     reset();
+  //     navigate("/app/dashboard/finance-dashboard/billing/voucher-request/pending-approvals-voucher");
+  //   },
+  //   onError: (error) => {
+  //     toast.error(error.message);
+  //   },
+  // });
 
   useEffect(() => {
     console.log("selected budget : ", selectedBudget);
@@ -100,14 +112,16 @@ const PendingApprovals = () => {
 
   const kraColumn = [
     { field: "srno", headerName: "Sr No", width: 100 },
-    { field: "expanseName", headerName: "Expense Name ", width: 200 },
-    { field: "department", headerName: "Department", width: 150 },
-    { field: "expanseType", headerName: "Expense Type " },
-    { field: "projectedAmount", headerName: "Amount (INR)" },
-    { field: "reimbursementDate", headerName: "Date" },
+    { field: "expanseName", headerName: "Expense Name ", flex: 1 },
+    { field: "department", headerName: "Department", flex: 1},
+    { field: "expanseType", headerName: "Expense Type ", flex: 1},
+    { field: "projectedAmount", headerName: "Particular Amount (INR)" ,flex: 1},
+    { field: "reimbursementDate", headerName: "Raised Date",flex: 1 },
+    {field: "status", headerName: "Approval Status", flex: 1,cellRenderer: (params) => <StatusChip status={params.value} />},
     {
       field: "actions",
       headerName: "Actions",
+      pinned: "right",
       cellRenderer: (params) => {
         return (
           <>
@@ -116,44 +130,39 @@ const PendingApprovals = () => {
                 <CircularProgress />
               </div>
             ) : (
-              <ThreeDotMenu
-                rowId={params.data.id}
-                menuItems={[
-                  {
-                    label: "View",
-                    onClick: () => {
-                      setSelectedBudget(params.data);
-                      setModalType("view");
-                      setModalOpen(true);
-                    },
-                  },
-                  params.data.expanseType === "Reimbursement"
-                    ? {
-                        label: "Review",
-                        onClick: () => {
-                          dispatch(setVoucherDetails(params.data));
-                          setSelectedBudget(params.data);
-                          navigate(
-                            `/app/dashboard/finance-dashboard/billing/pending-approvals/review-request`
-                          );
-                        },
-                      }
-                    : {
-                        label: "Accept",
-                        onClick: () => {
-                          submitRequest(params.data._id);
-                        },
+              <div className="h-10 flex items-center gap-3">
+                <MdOutlineRemoveRedEye
+                  className="cursor-pointer text-lg"
+                  onClick={() => {
+                    setSelectedBudget(params.data);
+                    setModalType("view");
+                    setModalOpen(true);
+                  }}
+                />
+                <ThreeDotMenu
+                  rowId={params.data.id}
+                  menuItems={[
+                    {
+                      label: "Review",
+                      onClick: () => {
+                        dispatch(setVoucherDetails(params.data));
+                        setSelectedBudget(params.data);
+                        navigate(
+                          `/app/dashboard/finance-dashboard/billing/voucher-request/pending-approvals-voucher/review-request`,
+                        );
                       },
-                  {
-                    label: "Reject",
-                    onClick: () => {
-                      setSelectedBudget(params.data);
-                      setModalType("reject");
-                      setModalOpen(true);
                     },
-                  },
-                ]}
-              />
+                    {
+                      label: "Reject",
+                      onClick: () => {
+                        setSelectedBudget(params.data);
+                        setModalType("reject");
+                        setModalOpen(true);
+                      },
+                    },
+                  ]}
+                />
+              </div>
             )}
           </>
         );
@@ -167,13 +176,16 @@ const PendingApprovals = () => {
         <YearWiseTable
           dateColumn={"date"}
           search={true}
-          tableTitle={"Pending Approvals"}
+          tableTitle={"Pending Approvals Voucher"}
           data={pendingApprovals.map((item, index) => {
             return {
               ...item,
               srNo: item.srNo,
               srno: index + 1,
               department: item.department?.name,
+              unitName: item.unit?.unitName || "-",
+              unitNo: item.unit?.unitNo || "-",
+              buildingName: item.unit?.building?.buildingName || "-",
               reimbursementDate: humanDate(item.reimbursementDate),
               projectedAmount: inrFormat(item.projectedAmount),
             };
@@ -215,11 +227,11 @@ const PendingApprovals = () => {
 
           {modalType === "view" && selectedBudget && (
             <div className="flex flex-col gap-4">
+              <span className="text-subtitle font-pmedium text-primary my-0.5 uppercase">
+                Pending Approval Voucher
+              </span>
               {/* <DetalisFormatted title="Sr No" detail={selectedBudget.srNo} /> */}
-              <DetalisFormatted
-                title="Department"
-                detail={selectedBudget.department}
-              />
+              <DetalisFormatted title="Sr No" detail={selectedBudget.srNo} />
               <DetalisFormatted
                 title="Expense Name"
                 detail={selectedBudget.expanseName}
@@ -229,11 +241,52 @@ const PendingApprovals = () => {
                 detail={selectedBudget.expanseType}
               />
               <DetalisFormatted
-                title="Amount (INR)"
+                title="Department"
+                detail={selectedBudget.department}
+              />
+
+              <DetalisFormatted title="Unit" detail={selectedBudget.unitName} />
+              <DetalisFormatted
+                title="Unit No"
+                detail={selectedBudget.unitNo}
+              />
+              <DetalisFormatted
+                title="Building"
+                detail={selectedBudget.buildingName}
+              />
+
+              {Array.isArray(selectedBudget.particulars) &&
+              selectedBudget.particulars.length > 0 ? (
+                <>
+                  {selectedBudget.particulars.map((item, idx) => (
+                    <DetalisFormatted
+                      key={`${item.particularName}-${idx}`}
+                      title={`Particular ${idx + 1}`}
+                      detail={`${item.particularName || "-"} — INR ${inrFormat(
+                        item.particularAmount || 0,
+                      )}`}
+                    />
+                  ))}
+                </>
+              ) : (
+                <DetalisFormatted title="Particulars" detail="-" />
+              )}
+
+              {/* <DetalisFormatted
+                title="Particular Amount"
                 detail={selectedBudget.projectedAmount?.toLocaleString()}
+              /> */}
+
+              <DetalisFormatted
+                title="Total Amount"
+                // detail={`₹${(selectedBudget.projectedAmount || 0).toLocaleString()}`}
+                detail={`INR ${(selectedBudget.projectedAmount || 0).toLocaleString()}`}
               />
               <DetalisFormatted title="GSTIN" detail={selectedBudget.gstIn} />
-              <DetalisFormatted title="Status" detail={selectedBudget.status} />
+              <DetalisFormatted
+                title="Approval Status"
+                detail={selectedBudget.status}
+              />
               <DetalisFormatted
                 title="Paid Status"
                 detail={selectedBudget.isPaid}
@@ -244,19 +297,23 @@ const PendingApprovals = () => {
               />
               <DetalisFormatted
                 title="Pre-Approved"
-                detail={selectedBudget.preApproved}
+                detail={selectedBudget.preApproved ? "Yes" : "No"}
+                //detail={selectedBudget.preApproved}
               />
               <DetalisFormatted
                 title="Emergency Approval"
-                detail={selectedBudget.emergencyApproval}
+                detail={selectedBudget.emergencyApproval ? "Yes" : "No"}
+                //detail={selectedBudget.emergencyApproval}
               />
               <DetalisFormatted
                 title="Budget Approval"
-                detail={selectedBudget.budgetApproval}
+                detail={selectedBudget.budgetApproval ? "Yes" : "No"}
+                //detail={selectedBudget.budgetApproval}
               />
               <DetalisFormatted
                 title="L1 Approval"
-                detail={selectedBudget.l1Approval}
+                detail={selectedBudget.l1Approval ? "Yes" : "No"}
+                //detail={selectedBudget.l1Approval}
               />
               <DetalisFormatted
                 title="Invoice Attached"
@@ -269,19 +326,23 @@ const PendingApprovals = () => {
               <DetalisFormatted
                 title="Invoice Link"
                 detail={
-                  <a
-                    href={selectedBudget.invoice?.link}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-600 underline"
-                  >
-                    View Invoice
-                  </a>
+                  selectedBudget.invoice?.link ? (
+                    <a
+                      href={selectedBudget.invoice.link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 underline cursor-pointer"
+                    >
+                      View Invoice
+                    </a>
+                  ) : (
+                    "-"
+                  )
                 }
               />
               <DetalisFormatted
                 title="Invoice Date"
-                detail={humanDate(selectedBudget.invoiceDate)}
+                detail={humanDate(selectedBudget.invoice?.date)}
               />
               <DetalisFormatted
                 title="Voucher Name"
@@ -290,14 +351,18 @@ const PendingApprovals = () => {
               <DetalisFormatted
                 title="Voucher Link"
                 detail={
-                  <a
-                    href={selectedBudget.voucher?.link}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-600 underline cursor-pointer"
-                  >
-                    View Voucher
-                  </a>
+                  selectedBudget.voucher?.link ? (
+                    <a
+                      href={selectedBudget.voucher.link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 underline cursor-pointer"
+                    >
+                      View Voucher
+                    </a>
+                  ) : (
+                    "-"
+                  )
                 }
               />
 
@@ -332,10 +397,10 @@ const PendingApprovals = () => {
                   FY{" "}
                   {new Date().getMonth() + 1 >= 4
                     ? `${String(new Date().getFullYear()).slice(2)}-${String(
-                        new Date().getFullYear() + 1
+                        new Date().getFullYear() + 1,
                       ).slice(2)}`
                     : `${String(new Date().getFullYear() - 1).slice(
-                        2
+                        2,
                       )}-${String(new Date().getFullYear()).slice(2)}`}
                 </div>
 
@@ -397,7 +462,7 @@ const PendingApprovals = () => {
                           ?.reduce(
                             (sum, item) =>
                               sum + Number(item.particularAmount || 0),
-                            0
+                            0,
                           )
                           .toFixed(0)}
                       </td>

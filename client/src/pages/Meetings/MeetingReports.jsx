@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import AgTable from "../../components/AgTable";
 import YearWiseTable from "../../components/Tables/YearWiseTable";
 import { Chip, CircularProgress } from "@mui/material";
@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import MuiModal from "../../components/MuiModal";
 import ThreeDotMenu from "../../components/ThreeDotMenu";
 import { MdOutlineRemoveRedEye } from "react-icons/md";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import DetalisFormatted from "../../components/DetalisFormatted";
 import dayjs from "dayjs";
 import PageFrame from "../../components/Pages/PageFrame";
@@ -16,12 +16,89 @@ import useAuth from "../../hooks/useAuth";
 import humanDate from "../../utils/humanDateForamt";
 import humanTime from "../../utils/humanTime";
 import StatusChip from "../../components/StatusChip";
+import { inrFormat } from "../../utils/currencyFormat";
+import { useSearchParams } from "react-router-dom";
+import { toLocalDayBoundary } from "../../utils/dateRange";
+import {
+  DEFAULT_PAGE_SIZE,
+  PAGE_SIZE_OPTIONS,
+} from "../../constants/pagination";
 
 const MeetingReports = () => {
   const axios = useAxiosPrivate();
   const { auth } = useAuth();
+  const [searchParams] = useSearchParams();
+  const sourceFilter = searchParams.get("source");
   const [openModal, setOpenModal] = useState(false);
   const [selectedMeeting, setSelectedMeeting] = useState(null);
+  // const [pagination, setPagination] = useState({
+  //   page: 1,
+  //   limit: 10,
+  //   total: 0,
+  // });
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: DEFAULT_PAGE_SIZE,
+    total: 0,
+  });
+  const [meetingSearch, setMeetingSearch] = useState("");
+  const [debouncedMeetingSearch, setDebouncedMeetingSearch] = useState("");
+
+  useEffect(() => {
+    const timeoutId = setTimeout(
+      () => setDebouncedMeetingSearch(meetingSearch.trim()),
+      400,
+    );
+
+    return () => clearTimeout(timeoutId);
+  }, [meetingSearch]);
+
+  const handleMeetingSearchChange = useCallback((value) => {
+    setMeetingSearch(value);
+    setPagination((current) => ({ ...current, page: 1 }));
+  }, []);
+  const initialMeetingDateRange = useMemo(
+    () => ({
+      startDate: dayjs().startOf("month").toDate(),
+      endDate: dayjs().endOf("month").toDate(),
+      key: "selection",
+    }),
+    [],
+  );
+  const [meetingDateRange, setMeetingDateRange] = useState(
+    initialMeetingDateRange,
+  );
+  const meetingDateRangeRef = useRef(initialMeetingDateRange);
+  const meetingFilters = useMemo(
+    () => ({
+      startDate: meetingDateRange?.startDate
+        ? toLocalDayBoundary(meetingDateRange.startDate)
+        : undefined,
+      endDate: meetingDateRange?.endDate
+        ? toLocalDayBoundary(meetingDateRange.endDate, true)
+        : undefined,
+    }),
+    [meetingDateRange],
+  );
+  const handleMeetingDateFilterChange = useCallback(({ selectedRange }) => {
+    if (!selectedRange?.startDate || !selectedRange?.endDate) return;
+
+    const currentRange = meetingDateRangeRef.current;
+    const currentStart = currentRange?.startDate
+      ? new Date(currentRange.startDate).getTime()
+      : null;
+    const currentEnd = currentRange?.endDate
+      ? new Date(currentRange.endDate).getTime()
+      : null;
+    const nextStart = new Date(selectedRange.startDate).getTime();
+    const nextEnd = new Date(selectedRange.endDate).getTime();
+
+    if (currentStart === nextStart && currentEnd === nextEnd) return;
+
+    meetingDateRangeRef.current = selectedRange;
+    setMeetingDateRange(selectedRange);
+    setPagination((current) => ({ ...current, page: 1 }));
+  }, []);
   const { isTop } = useTopDepartment({
     additionalTopUserIds: ["67b83885daad0f7bab2f1864"],
     additionalTopDepartmentIds: [
@@ -34,43 +111,251 @@ const MeetingReports = () => {
     isPending: isMeetingsPending,
     error,
   } = useQuery({
-    queryKey: ["meetings"],
+    // queryKey: ["meetings", pagination.page, pagination.limit],
+    queryKey: [
+      "meetings",
+      meetingFilters.startDate,
+      meetingFilters.endDate,
+      pagination.page,
+      pagination.limit,
+      debouncedMeetingSearch,
+    ],
     queryFn: async () => {
       try {
-        const response = await axios.get("/api/meetings/get-meetings");
-        return response.data;
+        //  const response = await axios.get("/api/meetings/get-meetings", {
+        //   params: {
+        //     page: pagination.page,
+        //     limit: pagination.limit,
+        //   },
+        // });
+        // const responsePagination = response.data.pagination || response.data;
+
+        // setPagination((current) => ({
+        //   page: Number(responsePagination.page) || current.page,
+        //   limit: Number(responsePagination.limit) || current.limit,
+        //   total: Number(responsePagination.total) || 0,
+        // }));
+
+        // return response.data.data || [];
+        const response = await axios.get("/api/meetings/get-meetings", {
+          params: {
+            filters: meetingFilters,
+            page: pagination.page,
+            limit: pagination.limit,
+            search: debouncedMeetingSearch || undefined,
+          },
+        });
+        const responsePagination = response.data.pagination || response.data;
+
+        setPagination((current) => ({
+          page: Number(responsePagination.page) || current.page,
+          limit: Number(responsePagination.limit) || current.limit,
+          total: Number(responsePagination.total) || 0,
+        }));
+
+        return response.data.data || [];
       } catch (error) {
         toast.error("Failed to fetch meetings");
         throw error;
       }
     },
+    placeholderData: keepPreviousData,
   });
 
   const loggedDeptIds = auth.user?.departments?.map((d) => d._id) || [];
+  const currentUserId = auth?.user?._id;
+  const roleTitles = auth?.user?.role?.map((role) => role?.roleTitle) || [];
+  const isTechEmployee = roleTitles.includes("Tech Employee"); // With Tech Employee and show report only own Department
+  const hasGlobalReportsAccess =
+    (isTop && !isTechEmployee) ||
+    roleTitles.some((roleTitle) =>
+      [
+        "Super Admin",
+        "Master Admin",
+        "Admin",
+        "Top Management",
+        "Admin Manager",
+      ].includes(roleTitle),
+    );
+
+  // Without Tech Employee and show report All Derpartment
+
+  // const loggedDeptIds = auth.user?.departments?.map((d) => d._id) || [];
+  // const currentUserId = auth?.user?._id;
+  // const roleTitles = auth?.user?.role?.map((role) => role?.roleTitle) || [];
+
+  // const hasGlobalReportsAccess =
+  //   isTop ||
+  //   roleTitles.some((roleTitle) =>
+  //     [
+  //       "Super Admin",
+  //       "Master Admin",
+  //       "Admin",
+  //       "Top Management",
+  //       "Admin Manager",
+  //     ].includes(roleTitle),
+  //   );
+
+  const isEmployeeLevelUser = roleTitles.some((roleTitle) =>
+    roleTitle?.toLowerCase().includes("employee"),
+  );
+
+  const isCurrentUserParticipant = (meeting) => {
+    if (meeting?.isCurrentUserInvolved === true) {
+      return true;
+    }
+
+    const bookedById =
+      typeof meeting?.bookedBy === "object"
+        ? meeting?.bookedBy?._id
+        : meeting?.bookedBy;
+
+    return (
+      bookedById?.toString() === currentUserId?.toString() ||
+      meeting?.clientBookedBy?._id?.toString() === currentUserId?.toString() ||
+      (meeting?.participants || []).some(
+        (participant) =>
+          participant?._id?.toString() === currentUserId?.toString(),
+      )
+    );
+  };
 
   const filteredMeetings = isMeetingsPending
     ? []
     : meetings.filter((meeting) => {
+        if (isCurrentUserParticipant(meeting)) return true;
         const bookedByDepts =
           meeting.bookedBy?.departments?.map((d) => d._id) || [];
         return bookedByDepts.some((deptId) => loggedDeptIds.includes(deptId));
       });
+
+  const employeeOwnMeetings = isMeetingsPending
+    ? []
+    : meetings.filter((meeting) => isCurrentUserParticipant(meeting));
+
+  // : meetings.filter((meeting) => {
+  //   const bookedById =
+  //     typeof meeting?.bookedBy === "object"
+  //       ? meeting?.bookedBy?._id
+  //       : meeting?.bookedBy;
+  //   return bookedById?.toString() === currentUserId?.toString();
+  // });
+
+  const getEffectiveEndTime = (meeting) => {
+    const extendTime = meeting?.extendTime;
+    const endTime = meeting?.endTime;
+
+    if (!extendTime) return endTime;
+    if (!endTime) return extendTime;
+
+    return dayjs(extendTime).isAfter(dayjs(endTime)) ? extendTime : endTime;
+  };
+
+  const getDisplayDuration = (meeting) => {
+    const startTime = meeting?.startTime;
+    const endTime = getEffectiveEndTime(meeting);
+
+    if (!startTime || !endTime) return meeting?.duration || "N/A";
+
+    const durationInMinutes = dayjs(endTime).diff(dayjs(startTime), "minute");
+
+    if (!Number.isFinite(durationInMinutes) || durationInMinutes < 0) {
+      return meeting?.duration || "N/A";
+    }
+
+    return `${durationInMinutes}min`;
+  };
 
   const handleSelectedMeeting = (meeting) => {
     setSelectedMeeting(meeting);
     setOpenModal(true);
   };
 
-  const meetingReportsData = isTop ? meetings : filteredMeetings;
+  // const meetingReportsData = hasGlobalReportsAccess  // Without Tech Employee and show report All Derpartment
+  //   ? meetings
+  //   : isEmployeeLevelUser
+  //     ? employeeOwnMeetings
+  //     : filteredMeetings;
+
+  const meetingReportsData = hasGlobalReportsAccess // With Tech Employee and show report only own Department (Self Booking)
+    ? meetings
+    : isTechEmployee
+      ? employeeOwnMeetings
+      : isEmployeeLevelUser
+        ? employeeOwnMeetings
+        : filteredMeetings;
+
+  const displayMeetings = useMemo(() => {
+    if (sourceFilter === "biz-nest") {
+      return meetingReportsData.filter(
+        (meeting) =>
+          meeting?.meetingType === "Internal" && meeting?.client === "BIZNest",
+      );
+    }
+    if (sourceFilter === "cancelled") {
+      return meetingReportsData.filter(
+        (meeting) => meeting?.meetingStatus === "Cancelled",
+      );
+    }
+    if (sourceFilter === "guest-bookings") {
+      return meetingReportsData.filter(
+        (meeting) => meeting?.meetingType === "External",
+      );
+    }
+
+    return meetingReportsData;
+  }, [meetingReportsData, sourceFilter]);
 
   const meetingReportsColumn = [
     { field: "srNo", headerName: "Sr No" },
-    { field: "roomName", headerName: "Room Name" },
+    { field: "client", headerName: "Client" },
+    { field: "bookedBy", headerName: "Booked By" },
     { field: "buildingName", headerName: "Building Name" },
+    { field: "roomName", headerName: "Room Name" },
     { field: "unitName", headerName: "Unit Name" },
-    { field: "date", headerName: "Date" },
+
     { field: "meetingType", headerName: "Meeting Type" },
+    { field: "subject", headerName: "Subject", hide: true },
+    { field: "agenda", headerName: "Agenda", hide: true },
+    { field: "date", headerName: "Date" },
     { field: "duration", headerName: "Duration" },
+
+    {
+      field: "startTime",
+      headerName: "Start Time",
+      hide: true,
+      exportFormat: "datetime-comma",
+    },
+    {
+      field: "endTime",
+      headerName: "End Time",
+      hide: true,
+      exportFormat: "datetime-comma",
+    },
+    {
+      field: "housekeepingStatus",
+      headerName: "Housekeeping Status",
+      hide: true,
+    },
+    { field: "companyName", headerName: "Company", hide: true },
+    { field: "participants", headerName: "Participants", hide: true },
+    { field: "receptionist", headerName: "Receptionist", hide: true },
+    { field: "department", headerName: "Department", hide: true },
+    { field: "location", headerName: "Location", hide: true },
+    { field: "paymentAmount", headerName: "Payment Amount", hide: true },
+    {
+      field: "paymnetDiscountAmount",
+      headerName: "Payment Discount",
+      hide: true,
+    },
+    { field: "paymentMode", headerName: "Payment Mode", hide: true },
+    { field: "paymentStatus", headerName: "Payment Status", hide: true },
+    {
+      field: "paymentVerification",
+      headerName: "Payment Verification",
+      hide: true,
+    },
+    { field: "paymentProofUrl", headerName: "Payment Proof", hide: true },
     {
       field: "meetingStatus",
       headerName: "Status",
@@ -79,6 +364,8 @@ const MeetingReports = () => {
     {
       field: "action",
       headerName: "Actions",
+      // suppressExport: true,
+      pinned: "right",
       cellRenderer: (params) => {
         return (
           <>
@@ -108,18 +395,40 @@ const MeetingReports = () => {
             <YearWiseTable
               search={true}
               exportData
+              taskExportDateTimeFormatting
               dateColumn={"date"}
+              initialDateRange={meetingDateRange}
+              onDateFilterChange={handleMeetingDateFilterChange}
               tableTitle={"Meetings Reports"}
               data={[
-                ...meetingReportsData.map((item, index) => {
+                ...displayMeetings.map((item, index) => {
                   return {
-                    srNo: index + 1,
+                    srNo: (pagination.page - 1) * pagination.limit + index + 1,
                     id: index + 1,
+                    client:
+                      item?.company?.companyName ||
+                      item?.client ||
+                      item?.companyName ||
+                      item?.externalClient ||
+                      "N/A",
                     bookedBy: item.bookedBy
                       ? `${item.bookedBy.firstName} ${item.bookedBy.lastName}`
                       : item.clientBookedBy?.employeeName || "Unknown",
+                    companyName:
+                      item?.company?.companyName ||
+                      item?.client ||
+                      item?.companyName ||
+                      item?.externalClient ||
+                      "N/A",
+
                     receptionist: item?.receptionist,
-                    department: item.department,
+                    // department: item.department,
+                    department: item.department?.length
+                      ? item.department
+                          .map((dept) => dept?.name)
+                          .filter(Boolean)
+                          .join(", ")
+                      : "",
                     roomName: item.roomName,
                     location: item.location?.unitNo,
                     unitName: item.location?.unitName,
@@ -128,23 +437,61 @@ const MeetingReports = () => {
                     housekeepingStatus: item.housekeepingStatus,
                     date: item.date,
                     startTime: item.startTime,
-                    endTime: item.endTime,
-                    duration: item.duration,
+                    endTime: getEffectiveEndTime(item),
+                    duration: getDisplayDuration(item),
                     meetingStatus: item.meetingStatus,
                     agenda: item.agenda,
                     subject: item.subject,
                     housekeepingChecklist: item.housekeepingChecklist,
+                    paymentAmount: item.paymentAmount ?? 0,
+                    paymnetDiscountAmount: item.discountAmount ?? 0,
+                    paymentMode: item.paymentMode,
+                    paymentStatus: item.paymentStatus,
+                    paymentVerification: item.paymentVerification,
+                    paymentProofUrl: item?.paymentProof,
+                    // participants: item.participants
+                    //   ?.map((p) =>
+                    //     p.firstName
+                    //       ? `${p.firstName || ""} ${p.lastName || ""} `
+                    //       : `${p.name || ""}`
+                    //   )
+                    //   .join(", "),
                     participants: item.participants
-                      ?.map((p) =>
-                        p.firstName
-                          ? `${p.firstName || ""} ${p.lastName || ""} `
-                          : `${p.name || ""}`
-                      )
+                      ?.map((participant) => {
+                        if (participant?.firstName) {
+                          return `${participant.firstName || ""} ${
+                            participant.lastName || ""
+                          }`.trim();
+                        }
+                        if (participant?.employeeName) {
+                          return participant.employeeName;
+                        }
+                        return participant?.name || "";
+                      })
+                      .filter(Boolean)
                       .join(", "),
                   };
                 }),
               ]}
               columns={meetingReportsColumn}
+              serverPagination
+              pageSizeOptions={PAGE_SIZE_OPTIONS}
+              paginationPageSize={pagination.limit}
+              paginationPage={pagination.page}
+              paginationTotal={pagination.total}
+              onPaginationPageChange={(page) =>
+                setPagination((current) => ({ ...current, page }))
+              }
+              onPaginationPageSizeChange={(limit) =>
+                setPagination((current) =>
+                  current.limit === limit
+                    ? current
+                    : { ...current, page: 1, limit },
+                )
+              }
+              serverSearch
+              searchValue={meetingSearch}
+              onSearchChange={handleMeetingSearchChange}
             />
           ) : (
             <CircularProgress />
@@ -180,12 +527,12 @@ const MeetingReports = () => {
             <DetalisFormatted
               title="Time"
               detail={`${humanTime(selectedMeeting?.startTime)} - ${humanTime(
-                selectedMeeting?.endTime
+                selectedMeeting?.endTime,
               )}`}
             />
             <DetalisFormatted
               title="Duration"
-              detail={selectedMeeting?.duration || "N/A"}
+              detail={getDisplayDuration(selectedMeeting)}
             />
             <DetalisFormatted
               title="Meeting Status"
@@ -194,6 +541,16 @@ const MeetingReports = () => {
             <DetalisFormatted
               title="Housekeeping Status"
               detail={selectedMeeting?.housekeepingStatus || "N/A"}
+            />
+            <DetalisFormatted
+              title="Company"
+              detail={
+                selectedMeeting?.companyName ||
+                selectedMeeting?.company?.companyName ||
+                selectedMeeting?.client ||
+                selectedMeeting?.externalClient ||
+                "N/A"
+              }
             />
 
             {/* Section 2: People Involved */}
@@ -213,7 +570,7 @@ const MeetingReports = () => {
               title="Receptionist"
               detail={selectedMeeting?.receptionist || "Unknown"}
             />
-            <DetalisFormatted
+            {/* <DetalisFormatted
               title="Department"
               detail={
                 selectedMeeting?.department?.length
@@ -221,6 +578,17 @@ const MeetingReports = () => {
                       .map((item) => item.name)
                       .join(", ")
                   : "Top Management"
+              }
+            /> */}
+            <DetalisFormatted
+              title="Department"
+              detail={
+                Array.isArray(selectedMeeting?.department)
+                  ? selectedMeeting.department
+                      .map((item) => item.name)
+                      .filter(Boolean)
+                      .join(", ") || ""
+                  : selectedMeeting?.department || ""
               }
             />
 
@@ -239,6 +607,53 @@ const MeetingReports = () => {
               title="Building"
               detail={selectedMeeting?.buildingName || "N/A"}
             />
+
+            {/* Section 2: Payment Details */}
+            {selectedMeeting?.meetingType
+              ?.toLowerCase()
+              ?.includes("external") && (
+              <>
+                <br />
+                <div className="font-bold">Payment Details</div>
+                <DetalisFormatted
+                  title="Amount"
+                  detail={`INR ${inrFormat(selectedMeeting?.paymentAmount)}`}
+                />
+                <DetalisFormatted
+                  title="Discount"
+                  detail={`INR ${inrFormat(
+                    selectedMeeting?.paymnetDiscountAmount,
+                  )}`}
+                />
+                <DetalisFormatted
+                  title="Mode"
+                  detail={selectedMeeting?.paymentMode || "N/A"}
+                />
+                <DetalisFormatted
+                  title="Status"
+                  detail={selectedMeeting?.paymentStatus ? "Paid" : "Unpaid"}
+                />
+                <DetalisFormatted
+                  title="Verification"
+                  detail={selectedMeeting?.paymentVerification || "N/A"}
+                />
+                {selectedMeeting?.paymentProofUrl && (
+                  <DetalisFormatted
+                    title="Proof"
+                    detail={
+                      <a
+                        href={selectedMeeting.paymentProofUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-600 underline"
+                      >
+                        View File
+                      </a>
+                    }
+                  />
+                )}
+              </>
+            )}
           </div>
         ) : (
           <CircularProgress />

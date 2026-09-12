@@ -2,9 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import AgTable from "../../components/AgTable";
 import PrimaryButton from "../../components/PrimaryButton";
 import {
-  Avatar,
   Box,
-  Button,
   Chip,
   CircularProgress,
   FormHelperText,
@@ -16,7 +14,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { TextField, MenuItem } from "@mui/material";
 import useAxiosPrivate from "../../hooks/useAxiosPrivate";
 import { Controller, useForm } from "react-hook-form";
-import { LuImageUp, LuImageUpscale } from "react-icons/lu";
+import { LuImageUp } from "react-icons/lu";
 import { MdDelete, MdOutlineRemoveRedEye } from "react-icons/md";
 import MuiModal from "../../components/MuiModal";
 import { queryClient } from "../../main";
@@ -25,6 +23,8 @@ import humanTime from "../../utils/humanTime";
 import YearWiseTable from "../../components/Tables/YearWiseTable";
 import humanDate from "../../utils/humanDateForamt";
 import { isAlphanumeric, noOnlyWhitespace } from "../../utils/validators";
+import formatDateTime from "../../utils/formatDateTime";
+import TicketAttachments from "../../components/TicketAttachments";
 
 const RaiseTicket = () => {
   const [selectedDepartment, setSelectedDepartment] = useState(null);
@@ -41,7 +41,7 @@ const RaiseTicket = () => {
   const fetchDepartments = async () => {
     try {
       const response = await axios.get(
-        "api/company/get-company-data?field=selectedDepartments"
+        "api/company/get-company-data?field=selectedDepartments",
       );
       return response.data?.selectedDepartments;
     } catch (error) {
@@ -67,7 +67,7 @@ const RaiseTicket = () => {
       ticketTitle: "",
       newIssue: "",
       message: "",
-      issue: null,
+      attachments: [],
     },
     mode: "onSubmit",
   });
@@ -85,10 +85,7 @@ const RaiseTicket = () => {
         formData.append("newIssue", data.newIssue);
       }
 
-      // Append image if exists
-      if (data.image) {
-        formData.append("issue", data.image); // Key name should match backend expectations
-      }
+      data.attachments?.forEach((file) => formData.append("issues", file));
 
       const response = await axios.post("/api/tickets/raise-ticket", formData, {
         headers: {
@@ -101,12 +98,13 @@ const RaiseTicket = () => {
     onSuccess: function (data) {
       toast.success(data.message);
       queryClient.invalidateQueries({ queryKey: ["my-tickets"] });
-      imageRef.current.value = "";
+      if (imageRef.current) imageRef.current.value = "";
+      if (preview?.url) URL.revokeObjectURL(preview.url);
       setPreview(null);
       reset();
     },
     onError: function (data) {
-      toast.error(data.response.data.message || "Something went wrong");
+      toast.error(data.response?.data?.message || "Something went wrong");
     },
   });
 
@@ -122,12 +120,50 @@ const RaiseTicket = () => {
     },
   });
 
+  const formatAssignments = (assignments = []) => {
+    const assignmentDetails = Array.isArray(assignments)
+      ? assignments.map((assignment) => {
+        const assignee = assignment?.assignee;
+        const assigneeName =
+          assignee?.firstName && assignee?.lastName
+            ? `${assignee.firstName} ${assignee.lastName}`
+            : "Unknown";
+        const assignedAtFormatted = formatDateTime(assignment?.assignedAt);
+
+        return { assigneeName, assignedAtFormatted };
+      })
+      : [];
+
+    const assignedToDisplay = assignmentDetails
+      .map(({ assigneeName, assignedAtFormatted }) =>
+        assignedAtFormatted && assignedAtFormatted !== "N/A"
+          ? `${assigneeName} (${assignedAtFormatted})`
+          : assigneeName,
+      )
+      .join(", ");
+
+    return { assignedToDisplay, assignmentDetails };
+  };
+
+  const formatEscalation = (escalations = []) => {
+    if (!Array.isArray(escalations) || !escalations.length) {
+      return { escalatedTo: "", escalatedStatus: "", escalatedAt: "" };
+    }
+
+    const latest = escalations[escalations.length - 1];
+    return {
+      escalatedTo: latest?.raisedToDepartment?.name || "",
+      escalatedStatus: latest?.status || "",
+      escalatedAt: latest?.createdAt ? formatDateTime(latest.createdAt) : "",
+    };
+  };
+
   const handleDepartmentSelect = (deptId) => {
     setSelectedDepartment(deptId);
 
     // Find the selected department and get its ticketIssues
     const selectedDept = fetchedDepartments.find(
-      (dept) => dept.department._id === deptId
+      (dept) => dept?.department?._id === deptId,
     );
 
     setTicketIssues(selectedDept?.ticketIssues || []);
@@ -145,52 +181,79 @@ const RaiseTicket = () => {
   };
 
   const recievedTicketsColumns = [
-    { field: "srNo", headerName: "Sr No", width: 80 },
-    { field: "raisedBy", headerName: "Raised By", width: 150 },
-    { field: "raisedTo", headerName: "To Department", width: 150 },
-    { field: "ticketTitle", headerName: "Ticket Title", width: 250 },
-    { field: "description", headerName: "Description", width: 300 },
-    { field: "acceptedBy", headerName: "Accepted By", width: 300 },
+    { field: "srNo", headerName: "Sr No", width: 80, minWidth: 70, flex: 0.6 },
     {
-      field: "acceptedAt",
-      headerName: "Accepted Time",
+      field: "ticketTitle",
+      headerName: "Ticket Title",
+      width: 250,
+      minWidth: 180,
+      flex: 2,
+    },
+    {
+      field: "raisedTo",
+      headerName: "To Department",
+      width: 150,
+      minWidth: 130,
+      flex: 1.2,
+    },
+    // { field: "raisedBy", headerName: "Raised By", width: 150 },
+    // {
+    //   field: "raisedAt",
+    //   headerName: "Raised At",
+    //   width: 200,
+    //   cellRenderer: (params) => formatDateTime(params.value),
+    // },
+
+    // { field: "description", headerName: "Description", width: 300 },
+    {
+      field: "acceptedBy",
+      headerName: "Accepted By",
       width: 300,
-      cellRenderer: (params) => humanDate(params.value),
+      minWidth: 200,
+      flex: 2,
     },
+    // {
+    //   field: "acceptedAt",
+    //   headerName: "Accepted At",
+    //   width: 300,
+    //   cellRenderer: (params) => formatDateTime(params.value),
+    // },
 
-    {
-      field: "priority",
-      headerName: "Priority",
-      width: 130,
-      cellRenderer: (params) => {
-        const statusColorMap = {
-          High: { backgroundColor: "#FFC5C5", color: "#8B0000" },
-          Medium: { backgroundColor: "#FFECC5", color: "#CC8400" },
-          Low: { backgroundColor: "#ADD8E6", color: "#00008B" },
-        };
+    // {
+    //   field: "priority",
+    //   headerName: "Priority",
+    //   width: 130,
+    //   cellRenderer: (params) => {
+    //     const statusColorMap = {
+    //       High: { backgroundColor: "#FFC5C5", color: "#8B0000" },
+    //       Medium: { backgroundColor: "#FFECC5", color: "#CC8400" },
+    //       Low: { backgroundColor: "#ADD8E6", color: "#00008B" },
+    //     };
 
-        const { backgroundColor, color } = statusColorMap[
-          params.value === "high" ? "High" : params.value
-        ] || {
-          backgroundColor: "gray",
-          color: "white",
-        };
+    //     const { backgroundColor, color } = statusColorMap[
+    //       params.value === "high" ? "High" : params.value
+    //     ] || {
+    //       backgroundColor: "gray",
+    //       color: "white",
+    //     };
 
-        return (
-          <Chip
-            label={params.value === "high" ? "High" : params.value}
-            style={{
-              backgroundColor,
-              color,
-            }}
-          />
-        );
-      },
-    },
+    //     return (
+    //       <Chip
+    //         label={params.value === "high" ? "High" : params.value}
+    //         style={{
+    //           backgroundColor,
+    //           color,
+    //         }}
+    //       />
+    //     );
+    //   },
+    // },
     {
       field: "status",
       headerName: "Status",
       width: 140,
+      minWidth: 120,
+      flex: 1,
       cellRenderer: (params) => {
         const statusColorMap = {
           Pending: { backgroundColor: "#FFECC5", color: "#CC8400" },
@@ -221,11 +284,13 @@ const RaiseTicket = () => {
       headerName: "Actions",
       pinned: "right",
       width: 100,
+      minWidth: 100,
       cellRenderer: (params) => (
         <div className="p-2 mb-2 flex gap-2">
           <span
             className="text-subtitle cursor-pointer"
-            onClick={() => handleViewTicketDetails(params.data)}>
+            onClick={() => handleViewTicketDetails(params.data)}
+          >
             <MdOutlineRemoveRedEye />
           </span>
         </div>
@@ -262,7 +327,8 @@ const RaiseTicket = () => {
                           onChange={(e) => {
                             field.onChange(e.target.value);
                             handleDepartmentSelect(e.target.value);
-                          }}>
+                          }}
+                        >
                           <MenuItem value="" disabled>
                             Select Department
                           </MenuItem>
@@ -277,20 +343,47 @@ const RaiseTicket = () => {
                             fetchedDepartments
                               ?.filter(
                                 (dept) =>
-                                  dept.department.name !== "Cafe" &&
-                                  dept.department.name !== "Marketing" &&
-                                  dept.department.name !== "Expansion" &&
-                                  dept.department.name !== "Compliance" &&
-                                  dept.department.name !== "Legal"
+                                  //dept?.department?.name !== "Sales" &&
+                                  // dept?.department?.name !== "HR" &&
+                                  dept?.department?.name !== "Tik Department" &&
+                                  //dept?.department?.name !== "Finance" &&
+                                  // dept.department.name !== "IT" &&
+                                  //dept?.department?.name !== "Maintenance" &&
+                                  dept?.department?.name !== "Top Management" &&
+                                  dept?.department?.name !== "Test Dept 1" &&
+                                  dept?.department?.name !== "Cafe" &&
+                                  dept?.department?.name !== "Marketing" &&
+                                  dept?.department?.name !== "Expansion" &&
+                                  dept?.department?.name !== "Compliance" &&
+                                  dept?.department?.name !== "Legal",
                               )
                               .map((dept) => (
                                 <MenuItem
-                                  key={dept.department._id}
-                                  value={dept.department._id}>
-                                  {dept.department.name}
+                                  key={dept?.department?._id}
+                                  value={dept?.department?._id}
+                                >
+                                  {dept?.department?.name}
                                 </MenuItem>
                               ))
                           )}
+                          {/* <MenuItem value="Sales">
+                            Sales
+                          </MenuItem> */}
+                          {/* <MenuItem value="HR" disabled>
+                            HR
+                          </MenuItem> */}
+                          {/* <MenuItem value="Finance" disabled>
+                            Finance
+                          </MenuItem> */}
+                          {/* <MenuItem value="IT" disabled>
+                            IT
+                          </MenuItem> */}
+                          {/* <MenuItem value="Maintainance" disabled>
+                            Maintainance
+                          </MenuItem> */}
+                          <MenuItem value="Top Management" disabled>
+                            Top Management
+                          </MenuItem>
                           <MenuItem value="Cafe" disabled>
                             Cafe
                           </MenuItem>
@@ -311,7 +404,7 @@ const RaiseTicket = () => {
                     )}
                   />
                 </div>
-
+                {/* div  */}
                 <div>
                   <Controller
                     name="ticketTitle"
@@ -327,14 +420,17 @@ const RaiseTicket = () => {
                           label="Issue"
                           helperText={errors.ticketTitle?.message}
                           error={!!errors.ticketTitle}
-                          disabled={!watchFields.department}>
+                          disabled={!watchFields.department}
+                        >
                           <MenuItem value="">Select Ticket Title</MenuItem>
                           {ticketIssues.length > 0 ? (
-                            ticketIssues.map((issue) => (
-                              <MenuItem key={issue._id} value={issue.title}>
-                                {issue.title}
-                              </MenuItem>
-                            ))
+                            ticketIssues
+                              .filter((issue) => issue.title !== "Other")
+                              .map((issue) => (
+                                <MenuItem key={issue._id} value={issue.title}>
+                                  {issue.title}
+                                </MenuItem>
+                              ))
                           ) : (
                             <MenuItem disabled>No Issues Available</MenuItem>
                           )}
@@ -371,87 +467,104 @@ const RaiseTicket = () => {
               )} */}
                 <div>
                   <Controller
-                    name="image"
+                    name="attachments"
                     control={control}
                     render={({ field: { onChange, value } }) => (
                       <Box className="flex flex-col gap-2">
-                        {/* File Input */}
                         <input
                           ref={imageRef}
                           type="file"
-                          accept="image/*"
+                          accept=".jpg,.jpeg,.png,.webp,.pdf,.doc,.docx,.xls,.xlsx,.csv"
+                          multiple
                           hidden
-                          id="image-upload"
+                          id="ticket-attachment-upload"
                           onChange={(e) => {
-                            const file = e.target.files[0];
-                            if (file) {
-                              onChange(file);
+                            const selectedFiles = Array.from(e.target.files || []);
+                            const existingFiles = Array.isArray(value) ? value : [];
+                            const availableSlots = 5 - existingFiles.length;
+                            const validFiles = selectedFiles
+                              .slice(0, Math.max(availableSlots, 0))
+                              .filter((file) => {
+                                if (file.size > 5 * 1024 * 1024) {
+                                  toast.error(`${file.name} exceeds the 5 MB limit`);
+                                  return false;
+                                }
+                                return true;
+                              });
 
-                              setPreview(URL.createObjectURL(file)); // Set preview
-                              imageRef.current.value = null;
+                            if (selectedFiles.length > availableSlots) {
+                              toast.error("You can attach a maximum of 5 files");
                             }
+
+                            onChange([...existingFiles, ...validFiles]);
+                            e.target.value = "";
                           }}
                         />
 
-                        {/* Clickable TextField */}
                         <TextField
                           size="small"
                           variant="outlined"
                           fullWidth
-                          label="Upload Image"
-                          value={value ? value.name : ""}
-                          placeholder="Choose a file..."
+                          label="Upload Files"
+                          value={value?.length ? `${value.length} file(s) selected` : ""}
+                          placeholder="Choose up to 5 files"
                           InputProps={{
                             readOnly: true,
                             endAdornment: (
                               <IconButton
                                 color="primary"
                                 component="label"
-                                htmlFor="image-upload">
+                                htmlFor="ticket-attachment-upload"
+                                disabled={value?.length >= 5}
+                              >
                                 <LuImageUp />
                               </IconButton>
                             ),
                           }}
                         />
 
-                        {/* Image Preview & Delete Icon */}
-                        {preview && (
-                          <>
-                            <span
-                              className="underline text-primary text-content cursor-pointer"
-                              onClick={() => setOpenModal(true)}>
-                              Preview
-                            </span>
-                            <MuiModal
-                              open={openModal}
-                              onClose={() => setOpenModal(false)}
-                              title={"Preview File"}>
-                              <div>
-                                <div className="flex flex-col">
-                                  <IconButton
-                                    color="error"
-                                    onClick={() => {
-                                      onChange(null);
-                                      setPreview(null);
-                                    }}>
-                                    <MdDelete />
-                                  </IconButton>
-                                  <div className="p-2 border-default border-borderGray rounded-md">
-                                    <Avatar
-                                      src={preview}
-                                      alt="Preview"
-                                      sx={{
-                                        width: "100%",
-                                        height: "100%",
-                                        borderRadius: 2,
-                                      }}
-                                    />
-                                  </div>
-                                </div>
-                              </div>
-                            </MuiModal>
-                          </>
-                        )}
+                        <FormHelperText>
+                          Maximum 5 files, 5 MB each. Images, PDF, Word, Excel, and CSV.
+                        </FormHelperText>
+                        {value?.map((file, index) => (
+                          <div
+                            key={`${file.name}-${file.lastModified}`}
+                            className="flex items-center justify-between rounded border border-borderGray px-3 py-2"
+                          >
+                            <button
+                              type="button"
+                              className="truncate text-left text-primary underline"
+                              onClick={() => {
+                                if (!file.type.startsWith("image/")) return;
+                                if (preview?.url) URL.revokeObjectURL(preview.url);
+                                setPreview({ name: file.name, url: URL.createObjectURL(file) });
+                                setOpenModal(true);
+                              }}
+                              title={file.type.startsWith("image/") ? "Preview image" : file.name}
+                            >
+                              {file.name}
+                            </button>
+                            <IconButton
+                              color="error"
+                              size="small"
+                              onClick={() => onChange(value.filter((_, fileIndex) => fileIndex !== index))}
+                              aria-label={`Remove ${file.name}`}
+                            >
+                              <MdDelete />
+                            </IconButton>
+                          </div>
+                        ))}
+                        <MuiModal
+                          open={openModal && !!preview}
+                          onClose={() => setOpenModal(false)}
+                          title={preview?.name || "Preview File"}
+                        >
+                          <img
+                            src={preview?.url}
+                            alt={preview?.name || "Attachment preview"}
+                            className="max-h-[70vh] max-w-full rounded"
+                          />
+                        </MuiModal>
                       </Box>
                     )}
                   />
@@ -464,7 +577,7 @@ const RaiseTicket = () => {
                   control={control}
                   rules={{
                     required: "Please specify your message",
-                    validate: { noOnlyWhitespace, isAlphanumeric },
+                    validate: { noOnlyWhitespace },
                   }}
                   render={({ field }) => (
                     <>
@@ -506,27 +619,46 @@ const RaiseTicket = () => {
             </div>
           ) : (
             <YearWiseTable
-              key={tickets?.length}
+              dateColumn="raisedAt"
+              preserveCurrentMonthRange
+              showEmptyTable
               search
               dropdownColumns={["status", "priority"]}
-              data={tickets?.map((ticket, index) => ({
-                raisedBy: ticket.raisedBy.firstName,
-                raisedTo: ticket.raisedToDepartment.name,
-                description: ticket.description,
-                ticketTitle: ticket.ticket,
-                status: ticket.status,
-                acceptedBy: ticket?.acceptedBy
-                  ? `${ticket.acceptedBy.firstName} ${ticket.acceptedBy.lastName}`
-                  : "None",
-                closedBy: ticket?.closedBy
-                  ? `${ticket.closedBy.firstName} ${ticket.closedBy.lastName}`
-                  : "None",
-                acceptedAt: ticket.acceptedAt,
-                closedAt: ticket.closedAt ? ticket.closedAt : "None",
-                priority: ticket.priority,
-                image: ticket.image ? ticket.image.url : null,
-                raisedAt: ticket.createdAt,
-              }))}
+              data={tickets?.map((ticket, index) => {
+                return {
+                  raisedBy: ticket?.raisedBy?.firstName || "Unknown",
+                  raisedTo: ticket?.raisedToDepartment?.name || "Unknown",
+                  description: ticket?.description,
+                  ticketTitle: ticket?.ticket,
+                  status: ticket?.status,
+                  closingRemark: ticket?.closingRemark,
+                  closingCategories: ticket?.closingCategories,
+                  isItDepartment: ["it", "tech"].includes(
+                    ticket?.raisedToDepartment?.name?.trim().toLowerCase(),
+                  ),
+                  acceptedBy: ticket?.acceptedBy
+                    ? `${ticket.acceptedBy.firstName} ${ticket.acceptedBy.lastName}`
+                    : "None",
+                  closedBy: ticket?.closedBy
+                    ? `${ticket.closedBy.firstName} ${ticket.closedBy.lastName}`
+                    : "None",
+                  acceptedAt: ticket?.acceptedAt ? ticket.acceptedAt : "N/A",
+                  closedAt: ticket?.closedAt ? ticket.closedAt : "N/A",
+                  priority: ticket?.priority,
+                  ...(() => {
+                    const { assignedToDisplay, assignmentDetails } =
+                      formatAssignments(ticket.assignedTo);
+                    return {
+                      assignedTo: assignedToDisplay,
+                      assignedToDetails: assignmentDetails,
+                    };
+                  })(),
+                  image: ticket.image ? ticket.image.url : null,
+                  attachments: ticket.attachments || [],
+                  raisedAt: ticket.createdAt,
+                  ...formatEscalation(ticket.escalatedTo),
+                };
+              })}
               columns={recievedTicketsColumns}
               paginationPageSize={10}
             />
@@ -536,7 +668,8 @@ const RaiseTicket = () => {
       <MuiModal
         open={viewDetails && viewTicketDetails}
         onClose={() => setViewDetails(false)}
-        title={"Ticket Details"}>
+        title={"Ticket Details"}
+      >
         <div className="grid grid-cols-1 md:grid-cols-1 lg:grid-cols-1 gap-4 overflow-y-auto max-h-[70vh]">
           <DetalisFormatted
             title="Ticket Title"
@@ -546,49 +679,76 @@ const RaiseTicket = () => {
             title="Description"
             detail={viewTicketDetails?.description}
           />
-          <DetalisFormatted
+          {/* <DetalisFormatted
             title="Raised By"
             detail={viewTicketDetails?.raisedBy}
-          />
-          <DetalisFormatted
-            title="Raised At"
-            detail={humanTime(viewTicketDetails?.raisedAt) || "N/A"}
-          />
+          /> */}
           <DetalisFormatted
             title="Raised To Department"
             detail={viewTicketDetails?.raisedTo}
           />
-
-          <DetalisFormatted title="Status" detail={viewTicketDetails?.status} />
           <DetalisFormatted
+            title="Raised At"
+            detail={formatDateTime(viewTicketDetails?.raisedAt)}
+          />
+
+          {/* <DetalisFormatted
             title="Priority"
             detail={viewTicketDetails?.priority}
-          />
+          /> */}
           <DetalisFormatted
-            title="Accepted by"
+            title="Accepted By"
             detail={viewTicketDetails?.acceptedBy}
           />
+
           <DetalisFormatted
-            title="Accepted Date"
-            detail={humanDate(viewTicketDetails?.acceptedAt)}
+            title="Accepted At"
+            detail={formatDateTime(viewTicketDetails?.acceptedAt)}
+          />
+          {/* <DetalisFormatted
+            title="Assigned To"
+            detail={viewTicketDetails?.assignedTo || ""}
+          /> */}
+
+          {/* <DetalisFormatted
+            title="Escalated To"
+            detail={viewTicketDetails?.escalatedTo || ""}
           />
           <DetalisFormatted
-            title="Accepted at"
-            detail={humanTime(viewTicketDetails?.acceptedAt)}
+            title="Escalated Status"
+            detail={viewTicketDetails?.escalatedStatus || ""}
           />
           <DetalisFormatted
-            title="Closed by"
+            title="Escalated At"
+            detail={viewTicketDetails?.escalatedAt || ""}
+          /> */}
+          <DetalisFormatted
+            title="Closed By"
             detail={viewTicketDetails?.closedBy}
           />
-          {viewTicketDetails.image && (
-            <div className="lg:col-span-1">
-              <img
-                src={viewTicketDetails.image}
-                alt="Ticket Attachment"
-                className="max-w-full max-h-96 rounded border"
-              />
-            </div>
+          <DetalisFormatted
+            title="Closed At"
+            detail={formatDateTime(viewTicketDetails?.closedAt)}
+          />
+          <DetalisFormatted title="Status" detail={viewTicketDetails?.status} />
+          <DetalisFormatted
+            title="Closing Remark"
+            detail={viewTicketDetails?.closingRemark}
+          />
+           {viewTicketDetails?.isItDepartment &&
+            Array.isArray(viewTicketDetails?.closingCategories) &&
+            viewTicketDetails.closingCategories.length > 0 && (
+            <DetalisFormatted
+              title="Categories"
+              detail={Array.isArray(viewTicketDetails?.closingCategories)
+                ? viewTicketDetails.closingCategories.join(", ")
+                : ""}
+            />
           )}
+          <TicketAttachments
+            attachments={viewTicketDetails.attachments}
+            legacyImage={viewTicketDetails.image}
+          />
         </div>
       </MuiModal>
     </div>

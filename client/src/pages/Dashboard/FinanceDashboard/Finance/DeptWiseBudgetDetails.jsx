@@ -30,7 +30,49 @@ const DeptWiseBudgetDetails = () => {
     },
   });
   const deptId = location.state?.deptId;
-  const [selectedFiscalYear, setSelectedFiscalYear] = useState("FY 2024-25");
+const getFiscalYearStart = (date = dayjs()) => {
+  const parsedDate = dayjs(date);
+  return parsedDate.month() >= 3 ? parsedDate.year() : parsedDate.year() - 1;
+};
+
+const formatFiscalYear = (startYear) =>
+  `FY ${startYear}-${String(startYear + 1).slice(-2)}`;
+
+const getFiscalMonthIndex = (date) => {
+  const parsedDate = dayjs(date);
+  const month = parsedDate.month();
+
+  return month >= 3 ? month - 3 : month + 9;
+};
+
+const getAmount = (value) => {
+  if (typeof value === "number") return value;
+
+  if (typeof value === "string") {
+    const parsed = Number(value.replace(/,/g, ""));
+    return Number.isNaN(parsed) ? 0 : parsed;
+  }
+
+  return 0;
+};
+
+// const getRoundedAxisMax = (value) => {
+//   if (!value || value <= 0) return 500000;
+
+//   const axisStep = 500000;
+//   return Math.ceil((value * 1.1) / axisStep) * axisStep;
+// };
+
+const [selectedFiscalYear, setSelectedFiscalYear] = useState(() =>
+  formatFiscalYear(getFiscalYearStart())
+);
+const [
+  hiddenDepartmentExpenseSeries,
+  setHiddenDepartmentExpenseSeries,
+] = useState({
+  actual: false,
+  projected: false,
+});
   const deptName = location.state?.deptName;
   const { data: departmentBudget = [], isPending: isBudgetLoading } = useQuery({
     queryKey: ["departmentBudget"],
@@ -64,7 +106,8 @@ const DeptWiseBudgetDetails = () => {
             { field: "expanseName", headerName: "Expense Name", flex: 1 },
             // { field: "department", headerName: "Department", flex: 200 },
             { field: "expanseType", headerName: "Expense Type", flex: 1 },
-            { field: "projectedAmount", headerName: "Amount", flex: 1 },
+            { field: "projectedAmount", headerName: "Projected Amount (INR)", flex: 1 },
+            { field: "actualAmount", headerName: "Actual Amount (INR)", flex: 1 },
             { field: "dueDate", headerName: "Due Date", flex: 1 },
             { field: "status", headerName: "Status", flex: 1 },
           ],
@@ -140,141 +183,561 @@ const DeptWiseBudgetDetails = () => {
     }
   }, [isBudgetLoading]);
 
-  const expenseRawSeries = useMemo(() => {
-    // Initialize monthly buckets
-    const months = Array.from({ length: 12 }, (_, index) =>
-      dayjs(`2024-04-01`).add(index, "month").format("MMM")
+  const departmentExpenseByFiscalYear = useMemo(() => {
+  const fyData = {};
+
+  (departmentBudget || []).forEach((item) => {
+    if (
+      !item?.dueDate ||
+      !dayjs(item.dueDate).isValid()
+    ) {
+      return;
+    }
+
+    const fiscalYearStart =
+      getFiscalYearStart(item.dueDate);
+
+    const fiscalYearLabel =
+      formatFiscalYear(fiscalYearStart);
+
+    const monthIndex =
+      getFiscalMonthIndex(item.dueDate);
+
+    if (!fyData[fiscalYearLabel]) {
+      fyData[fiscalYearLabel] = {
+        actual: Array(12).fill(0),
+        projected: Array(12).fill(0),
+      };
+    }
+
+    fyData[fiscalYearLabel].actual[monthIndex] +=
+      getAmount(item?.actualAmount);
+
+    fyData[fiscalYearLabel].projected[monthIndex] +=
+      getAmount(item?.projectedAmount);
+  });
+
+  const currentFiscalYear =
+    formatFiscalYear(getFiscalYearStart());
+
+  if (!fyData[currentFiscalYear]) {
+    fyData[currentFiscalYear] = {
+      actual: Array(12).fill(0),
+      projected: Array(12).fill(0),
+    };
+  }
+
+  return fyData;
+}, [departmentBudget]);
+
+const expenseRawSeries = useMemo(() => {
+  return Object.entries(
+    departmentExpenseByFiscalYear,
+  )
+    .sort(([fyA], [fyB]) => {
+      const startA = Number(fyA.slice(3, 7));
+      const startB = Number(fyB.slice(3, 7));
+
+      return startA - startB;
+    })
+    .flatMap(([fiscalYear, data]) => {
+      const actualForGraph = data.actual.map(
+        (actualAmount) => {
+          if (
+            hiddenDepartmentExpenseSeries.actual
+          ) {
+            return 0;
+          }
+
+          return Number(actualAmount || 0);
+        },
+      );
+
+      const projectedForGraph =
+        data.projected.map(
+          (projectedAmount, monthIndex) => {
+            if (
+              hiddenDepartmentExpenseSeries.projected
+            ) {
+              return 0;
+            }
+
+            if (
+              hiddenDepartmentExpenseSeries.actual
+            ) {
+              return Number(projectedAmount || 0);
+            }
+
+            const actualAmount = Number(
+              data.actual?.[monthIndex] || 0,
+            );
+
+            return actualAmount > 0
+              ? 0
+              : Number(projectedAmount || 0);
+          },
+        );
+
+      return [
+        {
+          name: "Actual Amount",
+          group: fiscalYear,
+          data: actualForGraph,
+        },
+        {
+          name: "Projected Amount",
+          group: fiscalYear,
+          data: projectedForGraph,
+        },
+      ];
+    });
+}, [
+  departmentExpenseByFiscalYear,
+  hiddenDepartmentExpenseSeries.actual,
+  hiddenDepartmentExpenseSeries.projected,
+]);
+
+const { roundedMax, tickAmount } = useMemo(() => {
+  const selectedYearSeries =
+    expenseRawSeries.filter(
+      (series) =>
+        series.group === selectedFiscalYear,
     );
 
-    const fyData = {
-      "FY 2024-25": Array(12).fill(0),
-      "FY 2025-26": Array(12).fill(0),
+  const monthlyTotals = Array.from(
+    { length: 12 },
+    (_, monthIndex) =>
+      selectedYearSeries.reduce(
+        (total, series) =>
+          total +
+          Number(
+            series?.data?.[monthIndex] || 0,
+          ),
+        0,
+      ),
+  );
+
+  const maxExpenseValue = Math.max(
+    ...monthlyTotals,
+    0,
+  );
+
+  if (maxExpenseValue <= 0) {
+    return {
+      roundedMax: 10000,
+      tickAmount: 1,
     };
+  }
 
-    departmentBudget.forEach((item) => {
-      const date = dayjs(item.dueDate);
-      const year = date.year();
-      const monthIndex = date.month(); // 0 = Jan, 11 = Dec
+  const bufferedMax = maxExpenseValue * 1.1;
+  const roughStep = bufferedMax / 6;
 
-      if (year === 2024 && monthIndex >= 3) {
-        // Apr 2024 to Dec 2024 (month 3 to 11)
-        fyData["FY 2024-25"][monthIndex - 3] += item.actualAmount || 0;
-      } else if (year === 2025) {
-        if (monthIndex <= 2) {
-          // Jan to Mar 2025 (months 0–2)
-          fyData["FY 2024-25"][monthIndex + 9] += item.actualAmount || 0;
-        } else if (monthIndex >= 3) {
-          // Apr 2025 to Dec 2025 (months 3–11)
-          fyData["FY 2025-26"][monthIndex - 3] += item.actualAmount || 0;
-        }
-      } else if (year === 2026 && monthIndex <= 2) {
-        // Jan to Mar 2026
-        fyData["FY 2025-26"][monthIndex + 9] += item.actualAmount || 0;
-      }
-    });
+  const magnitude =
+    10 ** Math.floor(Math.log10(roughStep));
 
-    return [
-      {
-        name: "total",
-        group: "FY 2024-25",
-        data: fyData["FY 2024-25"],
-      },
-      {
-        name: "total",
-        group: "FY 2025-26",
-        data: fyData["FY 2025-26"],
-      },
+  const normalizedStep =
+    roughStep / magnitude;
+
+  let step;
+
+  if (normalizedStep <= 1) {
+    step = magnitude;
+  } else if (normalizedStep <= 2) {
+    step = 2 * magnitude;
+  } else if (normalizedStep <= 5) {
+    step = 5 * magnitude;
+  } else {
+    step = 10 * magnitude;
+  }
+
+  const safeRoundedMax =
+    Math.ceil(bufferedMax / step) * step;
+
+  return {
+    roundedMax: safeRoundedMax,
+    tickAmount: Math.max(
+      Math.round(safeRoundedMax / step),
+      1,
+    ),
+  };
+}, [expenseRawSeries, selectedFiscalYear]);
+
+const selectedYearTotals = useMemo(() => {
+  const selectedYearData =
+    departmentExpenseByFiscalYear?.[
+      selectedFiscalYear
     ];
-  }, [departmentBudget]);
+
+  const actualAmounts =
+    selectedYearData?.actual ||
+    Array(12).fill(0);
+
+  const projectedAmounts =
+    selectedYearData?.projected ||
+    Array(12).fill(0);
+
+  return {
+    actualTotal: actualAmounts.reduce(
+      (sum, amount) =>
+        sum + getAmount(amount),
+      0,
+    ),
+
+    projectedTotal:
+      projectedAmounts.reduce(
+        (sum, amount) =>
+          sum + getAmount(amount),
+        0,
+      ),
+  };
+}, [
+  departmentExpenseByFiscalYear,
+  selectedFiscalYear,
+]);
 
   const expenseOptions = {
-    chart: {
-      type: "bar",
-      toolbar: { show: false },
-
-      stacked: false,
-      fontFamily: "Poppins-Regular, Arial, sans-serif",
+  chart: {
+    type: "bar",
+    toolbar: {
+      show: false,
     },
-    colors: ["#54C4A7", "#EB5C45"],
-    plotOptions: {
-      bar: {
-        horizontal: false,
-        columnWidth: "40%",
-        borderRadius: 5,
-        borderRadiusApplication: "none",
-        dataLabels: {
-          position: "top",
+    stacked: true,
+    fontFamily:
+      "Poppins-Regular, Arial, sans-serif",
+
+    events: {
+      legendClick: (
+        _chartContext,
+        seriesIndex,
+      ) => {
+        setHiddenDepartmentExpenseSeries(
+          (currentState) => {
+            if (seriesIndex === 0) {
+              return {
+                ...currentState,
+                actual:
+                  !currentState.actual,
+              };
+            }
+
+            if (seriesIndex === 1) {
+              return {
+                ...currentState,
+                projected:
+                  !currentState.projected,
+              };
+            }
+
+            return currentState;
+          },
+        );
+      },
+    },
+  },
+
+  colors: ["#54C4A7", "#C4C4C4"],
+
+  plotOptions: {
+    bar: {
+      horizontal: false,
+      columnWidth: "40%",
+      borderRadius: 5,
+      borderRadiusApplication: "end",
+
+      dataLabels: {
+        position: "top",
+
+        total: {
+          enabled: true,
+          offsetY: -8,
+
+          formatter: (_, config) => {
+            const total = Number(
+              config?.w?.globals
+                ?.stackedSeriesTotals?.[
+                config?.dataPointIndex
+              ] || 0,
+            );
+
+            if (total <= 0) {
+              return "";
+            }
+
+            return inrFormat(total);
+          },
+
+          style: {
+            fontSize: "12px",
+            fontWeight: 600,
+            color: "#000000",
+          },
         },
       },
     },
-    dataLabels: {
-      enabled: true,
-      formatter: (val) => {
-        return inrFormat(val);
+  },
+
+  dataLabels: {
+    enabled: false,
+  },
+
+  xaxis: {
+    crosshairs: {
+      show: false,
+
+      fill: {
+        opacity: 0,
+      },
+
+      stroke: {
+        opacity: 0,
+      },
+    },
+  },
+
+  yaxis: {
+    min: 0,
+    max: roundedMax,
+    tickAmount,
+    forceNiceScale: false,
+
+    title: {
+      text: "Amount In Lakhs (INR)",
+    },
+
+    labels: {
+      minWidth: 25,
+      maxWidth: 35,
+
+      formatter: (value) => {
+        const axisValue =
+          Number(value || 0) / 10000;
+
+        if (
+          Number.isInteger(axisValue)
+        ) {
+          return String(axisValue);
+        }
+
+        return Number(
+          axisValue.toFixed(2),
+        ).toString();
       },
 
       style: {
-        fontSize: "12px",
-        colors: ["#000"],
-      },
-      offsetY: -22,
-    },
-
-    yaxis: {
-      max: 5000000,
-      title: { text: "Amount In Lakhs (INR)" },
-      labels: {
-        formatter: (val) => `${val / 100000}`,
+        fontFamily:
+          "Poppins-Regular, Arial, sans-serif",
+        fontSize: "11px",
       },
     },
-    fill: {
-      opacity: 1,
-    },
-    legend: {
-      show: true,
-      position: "top",
-    },
+  },
 
-    tooltip: {
-      enabled: false,
-      custom: function ({ series, seriesIndex, dataPointIndex }) {
-        const rawData = expenseRawSeries[seriesIndex]?.data[dataPointIndex];
-        // return `<div style="padding: 8px; font-family: Poppins, sans-serif;">
-        //       HR Expense: INR ${rawData.toLocaleString("en-IN")}
-        //     </div>`;
-        return `
-              <div style="padding: 8px; font-size: 13px; font-family: Poppins, sans-serif">
-          
-                <div style="display: flex; align-items: center; justify-content: space-between; background-color: #d7fff4; color: #00936c; padding: 6px 8px; border-radius: 4px; margin-bottom: 4px;">
-                  <div><strong>Finance Expense:</strong></div>
-                  <div style="width: 10px;"></div>
-               <div style="text-align: left;">INR ${Math.round(
-                 rawData
-               ).toLocaleString("en-IN")}</div>
-  
-                </div>
-       
-              </div>
-            `;
+  fill: {
+    opacity: 1,
+  },
+
+  states: {
+    hover: {
+      filter: {
+        type: "none",
       },
     },
-  };
 
-  const totalUtilised =
-    budgetBar?.[selectedFiscalYear]?.utilisedBudget?.reduce(
-      (acc, val) => acc + val,
-      0
-    ) || 0;
-  const navigate = useNavigate();
+    active: {
+      filter: {
+        type: "none",
+      },
+    },
+  },
+
+  legend: {
+    show: true,
+    position: "top",
+
+    onItemClick: {
+      toggleDataSeries: false,
+    },
+
+    labels: {
+      colors: [
+        hiddenDepartmentExpenseSeries.actual
+          ? "#D5D5D5"
+          : "#4B4B4B",
+
+        hiddenDepartmentExpenseSeries.projected
+          ? "#D5D5D5"
+          : "#4B4B4B",
+      ],
+    },
+
+    markers: {
+      fillColors: [
+        hiddenDepartmentExpenseSeries.actual
+          ? "#E1F5EF"
+          : "#54C4A7",
+
+        hiddenDepartmentExpenseSeries.projected
+          ? "#E2E2E2"
+          : "#C4C4C4",
+      ],
+    },
+  },
+
+  tooltip: {
+    enabled: true,
+    shared: true,
+    intersect: false,
+
+    custom: function ({
+      dataPointIndex,
+      w,
+    }) {
+      const selectedYearData =
+        departmentExpenseByFiscalYear?.[
+          selectedFiscalYear
+        ];
+
+      const actualAmount = Number(
+        selectedYearData?.actual?.[
+          dataPointIndex
+        ] || 0,
+      );
+
+      const projectedAmount = Number(
+        selectedYearData?.projected?.[
+          dataPointIndex
+        ] || 0,
+      );
+
+      const monthLabel =
+        w?.globals?.labels?.[
+          dataPointIndex
+        ] ||
+        `Month ${dataPointIndex + 1}`;
+
+      return `
+        <div
+          class="apexcharts-tooltip-title"
+          style="
+            font-family: Poppins-Regular;
+            font-size: 12px;
+            padding: 6px 10px;
+            margin-bottom: 0;
+          "
+        >
+          ${monthLabel}
+        </div>
+
+        <div
+          style="
+            padding: 8px 10px;
+            font-family: Poppins-Regular;
+            font-size: 12px;
+            background: #ffffff;
+            min-width: 230px;
+          "
+        >
+          <div
+            style="
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+              gap: 14px;
+              margin-bottom: 7px;
+              white-space: nowrap;
+            "
+          >
+            <div
+              style="
+                display: flex;
+                align-items: center;
+                gap: 6px;
+              "
+            >
+              <span
+                style="
+                  width: 12px;
+                  height: 12px;
+                  border-radius: 50%;
+                  background: #C4C4C4;
+                  display: inline-block;
+                  flex-shrink: 0;
+                "
+              ></span>
+
+              <span>Projected Amount:</span>
+            </div>
+
+            <span style="font-weight: 600;">
+              INR ${Math.round(
+                projectedAmount,
+              ).toLocaleString("en-IN")}
+            </span>
+          </div>
+
+          <div
+            style="
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+              gap: 14px;
+              white-space: nowrap;
+            "
+          >
+            <div
+              style="
+                display: flex;
+                align-items: center;
+                gap: 6px;
+              "
+            >
+              <span
+                style="
+                  width: 12px;
+                  height: 12px;
+                  border-radius: 50%;
+                  background: #54C4A7;
+                  display: inline-block;
+                  flex-shrink: 0;
+                "
+              ></span>
+
+              <span>Actual Amount:</span>
+            </div>
+
+            <span style="font-weight: 600;">
+              INR ${Math.round(
+                actualAmount,
+              ).toLocaleString("en-IN")}
+            </span>
+          </div>
+        </div>
+      `;
+    },
+  },
+};  
+
+ const totalUtilised =
+  expenseRawSeries
+    .find(
+      (item) =>
+        item.group === selectedFiscalYear && item.name === "Actual Amount"
+    )
+    ?.data?.reduce((acc, val) => acc + val, 0) || 0;
+  //const navigate = useNavigate();
   // BUDGET NEW END
 
   return (
-    <div className="flex flex-col gap-8">
+    // <div className="flex flex-col gap-8">
+      <div className="p-4 flex flex-col gap-8">
       <YearlyGraph
         data={expenseRawSeries}
         options={expenseOptions}
         title={`BIZ Nest ${deptName.toUpperCase()} DEPARTMENT EXPENSE`}
-        titleAmount={`INR ${Math.round(totalUtilised).toLocaleString("en-IN")}`}
+        TitleAmountTotal={`INR ${inrFormat(selectedYearTotals.projectedTotal)}`}
+        TitleAmountGreen={`INR ${inrFormat(selectedYearTotals.actualTotal)}`}
+        totalTitle="PROJECTED"
+        greenTitle="ACTUAL"
+        summaryChipVariant="budget"
         onYearChange={setSelectedFiscalYear}
       />
 
@@ -321,7 +784,7 @@ const DeptWiseBudgetDetails = () => {
         />
       </div> */}
 
-      <AllocatedBudget financialData={financialData} noInvoice />
+      <AllocatedBudget financialData={financialData} noInvoice exportData />
       <MuiModal
         title="Request Budget"
         open={openModal}

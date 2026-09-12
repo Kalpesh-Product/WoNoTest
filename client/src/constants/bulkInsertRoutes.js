@@ -14,6 +14,7 @@ const bulkInsertRoutes = [
       },
       {
         name: "performance",
+        // aliases: ["KRA", "KPA", "KRA KPA", "KRA/KPA", "performance tasks"],
         fileKey: "performance-tasks",
         route:
           "/api/performance/bulk-insert-performance-tasks/6798bae6e469e809084e24a4",
@@ -49,6 +50,52 @@ const bulkInsertRoutes = [
     ],
   },
   {
+    department: "6798ba9de469e809084e2494", // Tech / Frontend Department
+    bulkInsertRoutes: [
+      {
+        name: "performance",
+        aliases: ["KRA", "KPA", "KRA KPA", "KRA/KPA", "performance"],
+        fileKey: "performance",
+        route: "/api/performance/bulk-upload-performance-tasks",
+      },
+      {
+        name: "tasks",
+        fileKey: "file",
+        route: "api/tasks/bulk-insert",
+      },
+    ],
+  },
+  {
+    department: "6798bab0e469e809084e249a", // Finance Department
+    bulkInsertRoutes: [
+      {
+        name: "Alternate Revenue",
+        fileKey: "alternate-revenue",
+        route: "/api/sales/bulk-insert-alternate-revenue",
+      },
+      {
+        name: "Coworking Revenue",
+        fileKey: "coworking-revenues",
+        route: "/api/sales/bulk-insert-coworking-client-revenue",
+      },
+      {
+        name: "Virtual Office Revenue",
+        fileKey: "virtual-office-revenue",
+        route: "/api/sales/bulk-insert-virtual-office-revenue",
+      },
+      {
+        name: "Workation Revenues",
+        fileKey: "workation-revenue",
+        route: "/api/sales/bulk-insert-workation-revenue",
+      },
+      {
+        name: "Expense And Budget",
+        fileKey: "budgets",
+        route: "/api/budget/bulk-insert-budget/6798bab0e469e809084e249a",
+      },
+    ],
+  },
+  {
     department: "6798bacce469e809084e24a1", //sales Department
     bulkInsertRoutes: [
       {
@@ -63,6 +110,7 @@ const bulkInsertRoutes = [
       },
       {
         name: "performance", //working
+        //aliases: ["KRA", "KPA", "KRA KPA", "KRA/KPA", "performance tasks"],
         fileKey: "performance-tasks",
         route:
           "/api/performance/bulk-insert-performance-tasks/6798bacce469e809084e24a1",
@@ -78,8 +126,37 @@ const bulkInsertRoutes = [
         route: "/api/sales/bulk-insert-co-working-client-members",
       },
       {
+        name: "Virtual Office Clients",
+        aliases: ["Virtual Office Client"],
+        fileKey: "virtualoffice",
+        route: "/api/sales/bulk-insert-virtual-office-clients",
+      },
+      {
+        name: "Virtual Office Revenue",
+        aliases: ["Virtual Office Revenues"],
+        fileKey: "virtual-office-revenue",
+        route: "/api/sales/bulk-insert-virtual-office-revenue",
+      },
+      {
         name: "inventory",
         route: "/api/invenotry/bulk-insert-inventory/6798bacce469e809084e24a1",
+      },
+    ],
+  },
+  {
+    department: "6798bab9e469e809084e249e",
+    bulkInsertRoutes: [
+      {
+        name: "Attendance",
+        aliases: ["Employee Attendance"],
+        fileKey: "attendance",
+        route: "/api/attendance/bulk-insert-attendance",
+      },
+      {
+        name: "Leave",
+        aliases: ["Leaves", "Employee Leave", "Employee Leaves"],
+        fileKey: "leaves",
+        route: "/api/leaves/bulk-insert-leaves",
       },
     ],
   },

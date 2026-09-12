@@ -48,7 +48,7 @@ const ItAmcRecords = () => {
     queryKey: ["assetsCategories"],
     queryFn: async () => {
       try {
-        const response = await axios.get("/api/assets/get-category");
+        const response = await axios.get("/api/category/get-category");
         return response.data;
       } catch (error) {
         throw new Error(error.response.data.message);
@@ -66,7 +66,6 @@ const ItAmcRecords = () => {
       }
     },
   });
-
 
   const { mutate: addAsset, isPending: isAddingAsset } = useMutation({
     mutationKey: ["addAsset"],
@@ -115,16 +114,18 @@ const ItAmcRecords = () => {
     {
       field: "actions",
       headerName: "Actions",
+      pinned: "right",
       cellRenderer: (params) => (
         <div className="p-2 mb-2  flex gap-2">
           <span
             className="text-subtitle cursor-pointer"
             onClick={() => {
               const original = assetsList.find(
-                (a) => a.name === params.data.assetName
+                (a) => a.name === params.data.assetName,
               );
               handleDetailsClick(original);
-            }}>
+            }}
+          >
             <MdOutlineRemoveRedEye />
           </span>
         </div>
@@ -286,13 +287,15 @@ const ItAmcRecords = () => {
           data={[]}
           columns={assetColumns}
           handleClick={handleAddAsset}
+          exportData
         />
       </PageFrame>
 
       <MuiModal
         open={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={modalMode === "add" ? "Add Record" : "AMC Details"}>
+        title={modalMode === "add" ? "Add Record" : "AMC Details"}
+      >
         {modalMode === "add" && (
           <div>
             <form onSubmit={handleSubmit(handleFormSubmit)}>
@@ -329,7 +332,8 @@ const ItAmcRecords = () => {
                       select
                       fullWidth
                       error={!!errors.department}
-                      helperText={errors.department?.message}>
+                      helperText={errors.department?.message}
+                    >
                       {auth.user.company.selectedDepartments?.map((dept) => (
                         <MenuItem key={dept._id} value={dept._id}>
                           {dept.name}
@@ -352,7 +356,8 @@ const ItAmcRecords = () => {
                       select
                       fullWidth
                       error={!!errors.categoryId}
-                      helperText={errors.categoryId?.message}>
+                      helperText={errors.categoryId?.message}
+                    >
                       {assetsCategories.map((category) => (
                         <MenuItem key={category._id} value={category._id}>
                           {category.categoryName}
@@ -375,7 +380,8 @@ const ItAmcRecords = () => {
                       select
                       fullWidth
                       error={!!errors.subCategoryId}
-                      helperText={errors.subCategoryId?.message}>
+                      helperText={errors.subCategoryId?.message}
+                    >
                       {assetsCategories
                         .flatMap((cat) => cat.subCategories || [])
                         .map((sub) => (
@@ -494,7 +500,8 @@ const ItAmcRecords = () => {
                       select
                       fullWidth
                       error={!!errors.vendor}
-                      helperText={errors.vendor?.message}>
+                      helperText={errors.vendor?.message}
+                    >
                       {vendorDetials.map((vendor) => (
                         <MenuItem key={vendor._id} value={vendor._id}>
                           {vendor.name}
@@ -535,7 +542,7 @@ const ItAmcRecords = () => {
               <DetalisFormatted
                 title="Price"
                 detail={`INR ${Number(selectedAsset.price).toLocaleString(
-                  "en-IN"
+                  "en-IN",
                 )}`}
               />
               <DetalisFormatted
@@ -545,7 +552,7 @@ const ItAmcRecords = () => {
               <DetalisFormatted
                 title="Purchase Date"
                 detail={dayjs(new Date(selectedAsset.purchaseDate)).format(
-                  "DD-MM-YYYY"
+                  "DD-MM-YYYY",
                 )}
               />
               <DetalisFormatted

@@ -4,15 +4,74 @@ import { inrFormat } from "../../../utils/currencyFormat";
 import useAxiosPrivate from "../../../hooks/useAxiosPrivate";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { CircularProgress } from "@mui/material";
+import dayjs from "dayjs";
 import MonthWiseAgTable from "../../../components/Tables/MonthWiseAgTable";
 import WidgetTable from "../../../components/Tables/WidgetTable";
 import YearlyGraph from "../../../components/graphs/YearlyGraph";
 import FyBarGraphPercentage from "../../../components/graphs/FyBarGraphPercentage";
 
+const VERTICAL_ROUTE_MAP = {
+  Meeting: "meetings",
+  Alternate: "alt-revenue",
+  "Virtual Office": "virtual-office",
+  Workation: "workation",
+  "Co-Working": "co-working",
+};
+
+const getNormalizedPaymentStatus = (value) => {
+  if (typeof value === "string") return value.trim().toLowerCase();
+  return value ? "paid" : "unpaid";
+};
+
+const getNumericAmount = (value) => {
+  if (typeof value === "number") return value;
+  if (typeof value === "string") {
+    const parsedValue = parseFloat(value.replace(/,/g, ""));
+    return Number.isNaN(parsedValue) ? 0 : parsedValue;
+  }
+  return 0;
+};
+
+const getRevenueSummaryForDateRange = (data, dateRange) => {
+  const selectedRange = Array.isArray(dateRange) ? dateRange[0] : null;
+
+  const filteredData =
+    selectedRange?.startDate && selectedRange?.endDate
+      ? data.filter((item) => {
+          const itemDate = dayjs(item.date);
+          if (!itemDate.isValid()) return false;
+
+          return (
+            itemDate.isAfter(dayjs(selectedRange.startDate).startOf("day").subtract(1, "millisecond")) &&
+            itemDate.isBefore(dayjs(selectedRange.endDate).endOf("day").add(1, "millisecond"))
+          );
+        })
+      : data;
+
+  return filteredData.reduce(
+    (summary, item) => {
+      const amount = getNumericAmount(item.revenue);
+      summary.total += amount;
+
+      if (item.normalizedStatus === "paid") {
+        summary.paid += amount;
+      } else {
+        summary.unpaid += amount;
+      }
+
+      return summary;
+    },
+    { total: 0, paid: 0, unpaid: 0 },
+  );
+};
+
 const TotalRevenue = () => {
   const axios = useAxiosPrivate();
-  const [selectedYear, setSelectedYear] = useState("2024-25");
+   const location = useLocation();
+  const navigate = useNavigate();
+  const [selectedYear, setSelectedYear] = useState("2025-26");
 
   const { data: totalRevenue = [], isLoading: isTotalLoading } = useQuery({
     queryKey: ["totalRevenue"],
@@ -25,12 +84,75 @@ const TotalRevenue = () => {
       }
     },
   });
+
+//  const [revenueBasePath] = location.pathname.split("/total-revenue");
+//   const safeRevenueBasePath = revenueBasePath || location.pathname;
+
+//   const handleVerticalNavigation = (vertical) => {
+//     const targetPath = VERTICAL_ROUTE_MAP[vertical];
+//     if (!targetPath) return;
+
+//     navigate(`${safeRevenueBasePath}/${targetPath}`, {
+//       state: { selectedVertical: vertical },
+//     });
+//   };
+
+//   const clickableCellClass =
+//     "w-full h-full text-left text-primary font-pmedium underline-offset-2 hover:underline focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 cursor-pointer";
+
+//   const verticalLinkRenderer = (params) => {
+//     const vertical = params.data?.vertical;
+//     if (!VERTICAL_ROUTE_MAP[vertical]) return params.value;
+
+//     return (
+//       <button
+//         type="button"
+//         className={clickableCellClass}
+//         onClick={() => handleVerticalNavigation(vertical)}
+//         aria-label={`Open ${vertical} revenue details`}
+//       >
+//         {params.value}
+//       </button>
+//     );
+//   };
+
+const [revenueBasePath] = location.pathname.split("/total-revenue");
+  const safeRevenueBasePath = revenueBasePath || location.pathname;
+
+  const handleVerticalNavigation = (vertical) => {
+    const targetPath = VERTICAL_ROUTE_MAP[vertical];
+    if (!targetPath) return;
+
+    navigate(`${safeRevenueBasePath}/${targetPath}`, {
+      state: { selectedVertical: vertical },
+    });
+  };
+
+  const clickableCellClass =
+    "m-0 h-full w-auto cursor-pointer border-none bg-transparent p-0 text-left font-preregular text-primary underline underline-offset-2 hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2";
+
+  const verticalLinkRenderer = (params) => {
+    const vertical = params.data?.vertical;
+    if (!VERTICAL_ROUTE_MAP[vertical]) return params.value;
+
+    return (
+      <button
+        type="button"
+        className={clickableCellClass}
+        onClick={() => handleVerticalNavigation(vertical)}
+        aria-label={`Open ${vertical} revenue details`}
+      >
+        {params.value}
+      </button>
+    );
+  };
+
   const { data: simpleRevenue = [], isLoading: isSimpleRevenue } = useQuery({
     queryKey: ["completeRevenue"],
     queryFn: async () => {
       try {
         const response = await axios.get(
-          "/api/sales/simple-consolidated-revenue"
+          "/api/sales/simple-consolidated-revenue",
         );
         return response.data;
       } catch (error) {
@@ -67,7 +189,7 @@ const TotalRevenue = () => {
     const revenue = isTotalLoading
       ? []
       : totalRevenue.map((category) => {
-          const value = category.data?.["2024-25"]?.[i] ?? 0;
+        const value = category.data?.["2024-25"]?.[i] ?? 0;
           return {
             vertical: category.name,
             revenue: inrFormat(value),
@@ -81,22 +203,22 @@ const TotalRevenue = () => {
     };
   });
 
-  const filteredByYear = totalRevenue.map((item) => ({
-    name: item.name,
-    data: item.data[selectedYear] || [],
-  }));
+  // const filteredByYear = totalRevenue.map((item) => ({
+  //   name: item.name,
+  //   data: item.data[selectedYear] || [],
+  // }));
 
-  const normalizedData = filteredByYear.map((domain) => ({
-    name: domain.name,
-    group: "FY 2024-25",
-    data: domain.data.map((val, idx) => {
-      const totalThisMonth = filteredByYear.reduce(
-        (sum, item) => sum + item.data[idx],
-        0
-      );
-      return totalThisMonth ? Math.round((val / totalThisMonth) * 100) : 0;
-    }),
-  }));
+  // const normalizedData = filteredByYear.map((domain) => ({
+  //   name: domain.name,
+  //   group: "FY 2024-25",
+  //   data: domain.data.map((val, idx) => {
+  //     const totalThisMonth = filteredByYear.reduce(
+  //       (sum, item) => sum + item.data[idx],
+  //       0
+  //     );
+  //     return totalThisMonth ? Math.round((val / totalThisMonth) * 100) : 0;
+  //   }),
+  // }));
   const options = {
     chart: {
       toolbar: false,
@@ -104,76 +226,71 @@ const TotalRevenue = () => {
       fontFamily: "Poppins-Regular",
     },
 
-    tooltip: {
-      shared: true,
-      intersect: false,
-      custom: function ({ dataPointIndex, w }) {
-        const monthLabel = w.globals.labels[dataPointIndex];
+    // tooltip: {
+    //   shared: true,
+    //   intersect: false,
+    //   custom: function ({ dataPointIndex, w }) {
+    //     const monthLabel = w.globals.labels[dataPointIndex];
 
-        // meetings altRevenue
-        const meetings = filteredByYear[0]?.data?.[dataPointIndex] ?? 0;
-        const altRevenue = filteredByYear[1]?.data?.[dataPointIndex] ?? 0;
-        const virtualOffice = filteredByYear[2]?.data?.[dataPointIndex] ?? 0;
-        const workation = filteredByYear[3]?.data?.[dataPointIndex] ?? 0;
-        const coworking = filteredByYear[4]?.data?.[dataPointIndex] ?? 0;
+    //     // meetings altRevenue
+    //     const meetings = filteredByYear[0]?.data?.[dataPointIndex] ?? 0;
+    //     const altRevenue = filteredByYear[1]?.data?.[dataPointIndex] ?? 0;
+    //     const virtualOffice = filteredByYear[2]?.data?.[dataPointIndex] ?? 0;
+    //     const workation = filteredByYear[3]?.data?.[dataPointIndex] ?? 0;
+    //     const coworking = filteredByYear[4]?.data?.[dataPointIndex] ?? 0;
 
-        return `
-      <div style="padding: 10px; width: 300px">
-        <div class="apexcharts-tooltip-title" style="margin-bottom: 8px; font-weight: bold;">${monthLabel}</div>
+    //     return `
+    //   <div style="padding: 10px; width: 300px">
+    //     <div class="apexcharts-tooltip-title" style="margin-bottom: 8px; font-weight: bold;">${monthLabel}</div>
 
-        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
-          <span style="height: 10px; width: 10px; border-radius: 50%; background-color: ${
-            w.globals.colors[0]
-          }; display: inline-block;"></span>
-          <div style="display: flex; justify-content: space-between; width: 100%;">
-            <span>Co-Working</span>
-            <span>INR ${coworking.toLocaleString("en-IN")}</span>
-          </div>
-        </div>
+    //     <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+    //       <span style="height: 10px; width: 10px; border-radius: 50%; background-color: ${w.globals.colors[0]
+    //       }; display: inline-block;"></span>
+    //       <div style="display: flex; justify-content: space-between; width: 100%;">
+    //         <span>Co-Working</span>
+    //         <span>INR ${coworking.toLocaleString("en-IN")}</span>
+    //       </div>
+    //     </div>
 
-        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
-          <span style="height: 10px; width: 10px; border-radius: 50%; background-color: ${
-            w.globals.colors[1]
-          }; display: inline-block;"></span>
-          <div style="display: flex; justify-content: space-between; width: 100%;">
-            <span>Meetings</span>
-            <span>INR ${meetings.toLocaleString("en-IN")}</span>
-          </div>
-        </div>
+    //     <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+    //       <span style="height: 10px; width: 10px; border-radius: 50%; background-color: ${w.globals.colors[1]
+    //       }; display: inline-block;"></span>
+    //       <div style="display: flex; justify-content: space-between; width: 100%;">
+    //         <span>Meetings</span>
+    //         <span>INR ${meetings.toLocaleString("en-IN")}</span>
+    //       </div>
+    //     </div>
 
-        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
-          <span style="height: 10px; width: 10px; border-radius: 50%; background-color: ${
-            w.globals.colors[2]
-          }; display: inline-block;"></span>
-          <div style="display: flex; justify-content: space-between; width: 100%;">
-            <span>Virtual Office</span>
-            <span>INR ${virtualOffice.toLocaleString("en-IN")}</span>
-          </div>
-        </div>
+    //     <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+    //       <span style="height: 10px; width: 10px; border-radius: 50%; background-color: ${w.globals.colors[2]
+    //       }; display: inline-block;"></span>
+    //       <div style="display: flex; justify-content: space-between; width: 100%;">
+    //         <span>Virtual Office</span>
+    //         <span>INR ${virtualOffice.toLocaleString("en-IN")}</span>
+    //       </div>
+    //     </div>
 
-        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
-          <span style="height: 10px; width: 10px; border-radius: 50%; background-color: ${
-            w.globals.colors[3]
-          }; display: inline-block;"></span>
-          <div style="display: flex; justify-content: space-between; width: 100%;">
-            <span>Workation</span>
-            <span>INR ${workation.toLocaleString("en-IN")}</span>
-          </div>
-        </div>
+    //     <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+    //       <span style="height: 10px; width: 10px; border-radius: 50%; background-color: ${w.globals.colors[3]
+    //       }; display: inline-block;"></span>
+    //       <div style="display: flex; justify-content: space-between; width: 100%;">
+    //         <span>Workation</span>
+    //         <span>INR ${workation.toLocaleString("en-IN")}</span>
+    //       </div>
+    //     </div>
 
-        <div style="display: flex; align-items: center; gap: 8px;">
-          <span style="height: 10px; width: 10px; border-radius: 50%; background-color: ${
-            w.globals.colors[4]
-          }; display: inline-block;"></span>
-          <div style="display: flex; justify-content: space-between; width: 100%;">
-            <span>Alt Revenues</span>
-            <span>INR ${altRevenue.toLocaleString("en-IN")}</span>
-          </div>
-        </div>
-      </div>
-    `;
-      },
-    },
+    //     <div style="display: flex; align-items: center; gap: 8px;">
+    //       <span style="height: 10px; width: 10px; border-radius: 50%; background-color: ${w.globals.colors[4]
+    //       }; display: inline-block;"></span>
+    //       <div style="display: flex; justify-content: space-between; width: 100%;">
+    //         <span>Alt Revenues</span>
+    //         <span>INR ${altRevenue.toLocaleString("en-IN")}</span>
+    //       </div>
+    //     </div>
+    //   </div>
+    // `;
+    //   },
+    // },
 
     plotOptions: {
       bar: {
@@ -194,6 +311,49 @@ const TotalRevenue = () => {
       "#1976D2", // Medium Blue (Alt Revenues)
     ],
   };
+  const tooltipBuilder = ({ monthLabel, rawDataMap, w, dataPointIndex }) => {
+    const tooltipRows = [
+      { label: "Co-Working", seriesName: "Co-Working" },
+      { label: "Meetings", seriesName: "Meeting" },
+      { label: "Virtual Office", seriesName: "Virtual Office" },
+      { label: "Workation", seriesName: "Workation" },
+      { label: "Alt Revenues", seriesName: "Alternate" },
+    ];
+
+    let total = 0;
+
+    const rowsHtml = tooltipRows
+      .map(({ label, seriesName }) => {
+        const seriesIndex = w.globals.seriesNames.indexOf(seriesName);
+        const color =
+           seriesIndex >= 0 ? w.globals.colors[seriesIndex] : "#6B7280";
+        const value = rawDataMap?.[seriesName]?.[dataPointIndex] ?? 0;
+        total += value;
+
+        return `
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+            <span style="height: 10px; width: 10px; border-radius: 50%; background-color: ${color}; display: inline-block;"></span>
+            <div style="display: flex; justify-content: space-between; width: 100%;">
+              <span>${label}</span>
+              <span>INR ${value.toLocaleString("en-IN")}</span>
+            </div>
+          </div>
+        `;
+      })
+      .join("");
+
+    return `
+      <div style="padding: 10px; width: 300px">
+        <div class="apexcharts-tooltip-title" style="margin-bottom: 8px; font-weight: bold;">${monthLabel}</div>
+        ${rowsHtml}
+        <hr style="margin-top: 6px;"/>
+        <div style="text-align: right; font-weight: 600;">Total: INR ${total.toLocaleString(
+      "en-IN",
+        )}</div>
+      </div>
+    `;
+  };
+
   const unifiedRevenueData = useMemo(() => {
     if (!simpleRevenue) return [];
 
@@ -202,70 +362,60 @@ const TotalRevenue = () => {
     simpleRevenue.meetingRevenue?.forEach((item) => {
       flatten.push({
         vertical: "Meeting",
-        revenue: item.taxable,
+        revenue: getNumericAmount(item.taxable),
         date: item.date,
+        normalizedStatus: getNormalizedPaymentStatus(item.status),
       });
     });
 
     simpleRevenue.alternateRevenues?.forEach((item) => {
       flatten.push({
         vertical: "Alternate",
-        revenue: item.taxableAmount,
+        revenue: getNumericAmount(item.taxableAmount),
         date: item.invoiceCreationDate,
+        normalizedStatus: getNormalizedPaymentStatus(item.status),
       });
     });
 
     simpleRevenue.virtualOfficeRevenues?.forEach((item) => {
       flatten.push({
         vertical: "Virtual Office",
-        revenue: item.taxableAmount,
+        revenue: getNumericAmount(item.revenue ?? item.taxableAmount),
         date: item.rentDate,
+        normalizedStatus: getNormalizedPaymentStatus(
+          item.status ?? item.rentStatus,
+        ),
       });
     });
 
     simpleRevenue.workationRevenues?.forEach((item) => {
       flatten.push({
         vertical: "Workation",
-        revenue: item.taxableAmount,
+        revenue: getNumericAmount(item.taxableAmount),
         date: item.date,
+        normalizedStatus: getNormalizedPaymentStatus(item.status),
       });
     });
 
     simpleRevenue.coworkingRevenues?.forEach((item) => {
       flatten.push({
         vertical: "Co-Working",
-        revenue: item.revenue,
+        revenue: getNumericAmount(item.revenue),
         date: item.rentDate,
+        normalizedStatus: getNormalizedPaymentStatus(item.rentStatus),
       });
     });
 
     return flatten;
   }, [simpleRevenue]);
 
-  const revenueByVertical = useMemo(() => {
-    const grouped = {};
-
-    unifiedRevenueData.forEach((entry) => {
-      const amount = parseFloat(entry.revenue) || 0;
-      if (!grouped[entry.vertical]) {
-        grouped[entry.vertical] = 0;
-      }
-      grouped[entry.vertical] += amount;
-    });
-
-    return Object.entries(grouped).map(([vertical, revenue], idx) => ({
-      srNo: idx + 1,
-      vertical,
-      revenue: inrFormat(revenue),
-    }));
-  }, [unifiedRevenueData]);
-
-  const totalAnnualRevenue = useMemo(() => {
-    return revenueByVertical.reduce(
-      (sum, item) => sum + parseFloat(item.revenue.replace(/,/g, "")),
-      0
-    );
-  }, [revenueByVertical]);
+  const paidRevenueData = useMemo(
+    () =>
+      unifiedRevenueData.filter(
+        (item) => item.normalizedStatus === "paid",
+      ),
+    [unifiedRevenueData],
+  );
 
   return (
     <div className="flex flex-col gap-4 ">
@@ -275,11 +425,12 @@ const TotalRevenue = () => {
         </div>
       ) : (
         <FyBarGraphPercentage
-          data={isTotalLoading ? [] : unifiedRevenueData}
+          data={isTotalLoading ? [] : paidRevenueData}
           dateKey="date"
           valueKey="revenue"
           graphTitle="ANNUAL MONTHLY MIX INCOME"
           chartOptions={options}
+          tooltipBuilder={tooltipBuilder}
         />
       )}
 
@@ -290,11 +441,47 @@ const TotalRevenue = () => {
         groupByKey="vertical" // 👈 we’ll use this to show 1 row per vertical
         columns={[
           { headerName: "Sr No", field: "srNo", flex: 1 },
-          { headerName: "Vertical", field: "vertical", flex: 1 },
-          { headerName: "Revenue (INR)", field: "revenue", flex: 1 },
+         {
+            headerName: "Vertical",
+            field: "vertical",
+            flex: 1,
+            cellRenderer: verticalLinkRenderer,
+          },
+          {
+            headerName: "Revenue (INR)",
+            field: "revenue",
+            flex: 1,
+            //cellRenderer: verticalLinkRenderer,
+          },
         ]}
-        amount={`INR ${inrFormat(totalAnnualRevenue)}`}
-        data={unifiedRevenueData}
+        titleAmountOverride=""
+        titleAmountTotal={({ dateRange }) => {
+          const summary = getRevenueSummaryForDateRange(
+            unifiedRevenueData,
+            dateRange,
+          );
+          return `INR ${inrFormat(summary.total)}`;
+        }}
+        titleAmountGreen={({ dateRange }) => {
+          const summary = getRevenueSummaryForDateRange(
+            unifiedRevenueData,
+            dateRange,
+          );
+          return `INR ${inrFormat(summary.paid)}`;
+        }}
+        titleAmountRed={({ dateRange }) => {
+          const summary = getRevenueSummaryForDateRange(
+            unifiedRevenueData,
+            dateRange,
+          );
+          return `INR ${inrFormat(summary.unpaid)}`;
+        }}
+        greenTitle="Paid"
+        redTitle="Unpaid"
+        totalTitle="Total"
+        summaryChipVariant="ticket"
+        data={paidRevenueData}
+        exportData
       />
     </div>
   );

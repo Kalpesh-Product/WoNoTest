@@ -10,16 +10,19 @@ import { useState } from "react";
 import MuiModal from "../../../../components/MuiModal";
 import DetalisFormatted from "../../../../components/DetalisFormatted";
 import humanDate from "../../../../utils/humanDateForamt";
+import StatusChip from "../../../../components/StatusChip";
+
 
 const ClientRevenue = () => {
   const selectedClient = useSelector((state) => state?.client?.selectedClient);
   const [openModal, setOpenModal] = useState(false);
   const [clientDetails, setClientDetails] = useState(null);
   const axios = useAxiosPrivate();
+  const getValueOrNA = (value) => value ?? "N/A";
 
   const { data: revenueDetails = [], isPending: isRevenuePending } = useQuery({
     queryKey: ["clientRevenue", selectedClient?._id],
-    enabled: !!selectedClient?._id, // Only run query if client is selected
+    enabled: !!selectedClient?._id,
     queryFn: async () => {
       try {
         const response = await axios.get(
@@ -50,15 +53,11 @@ const ClientRevenue = () => {
           }}
           className="text-primary underline cursor-pointer"
         >
-          {params?.value || "N/A"}
+          {params?.value ?? selectedClient?.clientName ?? "N/A"}
         </span>
       ),
     },
-    {
-      field: "revenue",
-      headerName: "Revenue",
-      cellRenderer: (params) => inrFormat(params?.value) || "₹0",
-    },
+    {field:"channel", headerName:"Channel", flex:1,hide:true, valueGetter:(params) => params?.data?.channel || "N/A"},
     {
       field: "noOfDesks",
       headerName: "No. Of Desks",
@@ -66,43 +65,58 @@ const ClientRevenue = () => {
       valueGetter: (params) => params?.data?.noOfDesks || "N/A",
     },
     {
+      field: "revenue",
+      headerName: "Revenue",
+      cellRenderer: (params) => inrFormat(params?.value) || "₹0",
+    },
+    {field:"deskRate", headerName:"Desk Rate", flex:1,hide:true, cellRenderer:(params) => inrFormat(params?.value) || "₹0"},
+    {field:"annualIncrement", headerName:"Annual Increment", flex:1,hide:true, cellRenderer:(params) => `${params?.value || 0}%`},
+    {field:"rentDate", headerName:"Rent Date", flex:1,hide:true, cellRenderer:(params) => humanDate(params?.value) || "N/A"},
+    {
       field: "totalTerm",
       headerName: "Total Term (Months)",
       flex: 1,
-      valueGetter: (params) => params?.data?.totalTerm || "N/A",
+      valueGetter: (params) => getValueOrNA(params?.data?.totalTerm),
     },
     {
       field: "rentStatus",
       headerName: "Status",
-      cellRenderer: (params) => {
-        const statusColorMap = {
-          Paid: { backgroundColor: "#90EE90", color: "#006400" },
-          Unpaid: { backgroundColor: "#D3D3D3", color: "#696969" },
-        };
+      cellRenderer: (params) => <StatusChip status={params.value || params.data.rentStatus} />,
+      // cellRenderer: (params) => {
+      //   const statusColorMap = {
+      //     Paid: { backgroundColor: "#90EE90", color: "#006400" },
+      //     Unpaid: { backgroundColor: "#D3D3D3", color: "#696969" },
+      //   };
 
-        const { backgroundColor, color } = statusColorMap[params?.value] || {
-          backgroundColor: "gray",
-          color: "white",
-        };
+      //   const { backgroundColor, color } = statusColorMap[params?.value] || {
+      //     backgroundColor: "gray",
+      //     color: "white",
+      //   };
 
-        return (
-          <Chip
-            label={params?.value || "N/A"}
-            style={{ backgroundColor, color }}
-          />
-        );
-      },
+      //   return (
+      //     <Chip
+      //       label={params?.value || "N/A"}
+      //       style={{ backgroundColor, color }}
+      //     />
+      //   );
+      // },
     },
+    {field:"nextIncrementDate", headerName:"Next Increment Date", flex:1,hide:true, cellRenderer:(params) => humanDate(params?.value) || "N/A"},
+    {field:"pastDueDate", headerName:"Past Due Date", flex:1,hide:true, cellRenderer:(params) => humanDate(params?.value) || "N/A"},
   ];
 
   const tableData = isRevenuePending
     ? []
     : Array.isArray(revenueDetails)
-    ? revenueDetails.map((item, index) => ({
+      ? revenueDetails.map((item, index) => ({
         ...item,
+        clientName:
+          item?.clientName ?? item?.clients?.clientName ?? selectedClient?.clientName,
         srNo: index + 1,
       }))
-    : [];
+      : [];
+
+
 
   return (
     <div className="w-full">
@@ -114,6 +128,7 @@ const ClientRevenue = () => {
           searchColumn="clientName"
           data={tableData}
           columns={viewEmployeeColumns}
+          exportData
         />
       </PageFrame>
 
@@ -179,7 +194,7 @@ const ClientRevenue = () => {
               />
               <DetalisFormatted
                 title="Total Term (Months)"
-                detail={clientDetails?.totalTerm || "N/A"}
+                detail={getValueOrNA(clientDetails?.totalTerm)}
               />
               <DetalisFormatted
                 title="Next Increment Date"

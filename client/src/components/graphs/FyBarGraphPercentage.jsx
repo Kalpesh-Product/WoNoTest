@@ -6,11 +6,22 @@ import SecondaryButton from "../SecondaryButton";
 import { MdNavigateBefore, MdNavigateNext } from "react-icons/md";
 import WidgetSection from "../WidgetSection";
 
+const getCurrentFinancialYearStart = () => {
+  const today = dayjs();
+  return today.month() < 3 ? today.year() - 1 : today.year();
+};
+
 const getFinancialYear = (dateStr) => {
   const date = dayjs(dateStr);
   if (!date.isValid()) return null;
   const year = date.month() < 3 ? date.year() - 1 : date.year();
   return `FY ${year}-${String((year + 1) % 100).padStart(2, "0")}`;
+};
+
+const getFinancialYearStart = (dateStr) => {
+  const date = dayjs(dateStr);
+  if (!date.isValid()) return null;
+  return date.month() < 3 ? date.year() - 1 : date.year();
 };
 
 const getMonthsWithYearLabels = (fyLabel) => {
@@ -43,24 +54,38 @@ const FyBarGraphPercentage = ({
   totalValue,
   chartOptions = {},
   graphTitle = "",
+  tooltipBuilder,
 }) => {
+  const currentFYStartYear = getCurrentFinancialYearStart();
   const fyOptions = useMemo(() => {
     const yearsSet = new Set();
     data.forEach((item) => {
-      const fy = getFinancialYear(item?.[dateKey]);
-      if (fy) yearsSet.add(fy);
+      const fyStart = getFinancialYearStart(item?.[dateKey]);
+      if (fyStart !== null) yearsSet.add(fyStart);
     });
-    return Array.from(yearsSet).sort();
+    return Array.from(yearsSet)
+      .sort((a, b) => a - b)
+      .map((fyStart) => `FY ${fyStart}-${String((fyStart + 1) % 100).padStart(2, "0")}`);
   }, [data, dateKey]);
 
-  const [selectedFY, setSelectedFY] = useState("");
-  useEffect(() => {
-    if (fyOptions.length > 0 && !selectedFY) {
-      setSelectedFY(fyOptions[0]);
-    }
-  }, [fyOptions, selectedFY]);
+  const [selectedFYStartYear, setSelectedFYStartYear] = useState(
+    currentFYStartYear
+  );
 
-  const currentIndex = fyOptions.indexOf(selectedFY);
+  useEffect(() => {
+    if (fyOptions.length > 0) {
+      const lastAvailableFY = fyOptions[fyOptions.length - 1];
+      const [startYearStr] = lastAvailableFY.replace("FY", "").trim().split("-");
+      const parsedStartYear = parseInt(startYearStr, 10);
+      setSelectedFYStartYear(
+        Number.isNaN(parsedStartYear) ? currentFYStartYear : parsedStartYear
+      );
+    } else {
+      setSelectedFYStartYear(currentFYStartYear);
+    }
+  }, [fyOptions, currentFYStartYear]);
+
+  const selectedFY = `FY ${selectedFYStartYear}-${String((selectedFYStartYear + 1) % 100).padStart(2, "0")}`;
 
   const monthsWithLabels = useMemo(() => {
     return getMonthsWithYearLabels(selectedFY);
@@ -108,8 +133,8 @@ const FyBarGraphPercentage = ({
           typeof totalValue === "function"
             ? totalValue(label)
             : typeof totalValue === "number"
-            ? totalValue
-            : monthlyTotals[label] || 1;
+              ? totalValue
+              : monthlyTotals[label] || 1;
         return parseFloat(((val / total) * 100).toFixed(2));
       });
 
@@ -161,28 +186,44 @@ const FyBarGraphPercentage = ({
       tooltip: {
         shared: false,
         custom: ({ series, dataPointIndex, w }) => {
-          const monthLabel = w.globals.categoryLabels[dataPointIndex];
+          const monthLabel =
+            w?.globals?.categoryLabels?.[dataPointIndex] ||
+            w?.globals?.labels?.[dataPointIndex] ||
+            w?.config?.xaxis?.categories?.[dataPointIndex] ||
+            "N/A";
+
+          if (typeof tooltipBuilder === "function") {
+            return tooltipBuilder({
+              series,
+              dataPointIndex,
+              w,
+              monthLabel,
+              rawDataMap,
+              inrFormat,
+            });
+          }
+
+
           let tooltipHtml = `<div class="apex-tooltip-title">${monthLabel}</div>`;
           let total = 0;
 
           w.globals.seriesNames.forEach((seriesName, i) => {
-            const percentVal = series[i][dataPointIndex];
+            // const percentVal = series[i][dataPointIndex];
             const rawVal = rawDataMap?.[seriesName]?.[dataPointIndex] ?? 0;
             total += rawVal;
 
             tooltipHtml += `
               <div style="display: flex; justify-content: space-between; gap: 40px;">
-                <span style="color: ${
-                  w.globals.colors[i]
-                }; font-weight: 500;">${seriesName}</span>
+                <span style="color: ${w.globals.colors[i]
+              }; font-weight: 500;">${seriesName}</span>
                 <span>${inrFormat(rawVal)}</span>
               </div>`;
           });
 
           tooltipHtml += `<hr style="margin-top: 6px;"/>
             <div style="text-align: right; font-weight: 600;">Total: INR ${inrFormat(
-              total
-            )}</div>`;
+            total
+          )}</div>`;
 
           return `<div class="apex-tooltip-custom" style="padding : 10px">${tooltipHtml}</div>`;
         },
@@ -191,7 +232,7 @@ const FyBarGraphPercentage = ({
       colors: ["#1E3D73", "#4CAF50", "#FF9800", "#9C27B0", "#F44336"],
       ...chartOptions,
     };
-  }, [monthsWithLabels, chartOptions, rawDataMap]);
+  }, [monthsWithLabels, chartOptions, rawDataMap, tooltipBuilder]);
 
   if (fyOptions.length === 0) {
     return (
@@ -220,8 +261,9 @@ const FyBarGraphPercentage = ({
         <div className="flex justify-center items-center gap-4 mt-4">
           <SecondaryButton
             title={<MdNavigateBefore />}
-            disabled={currentIndex === 0}
-            handleSubmit={() => setSelectedFY(fyOptions[currentIndex - 1])}
+            handleSubmit={() =>
+              setSelectedFYStartYear((prevYear) => prevYear - 1)
+            }
           />
 
           <span className="text-primary text-content font-semibold">
@@ -229,8 +271,9 @@ const FyBarGraphPercentage = ({
           </span>
 
           <SecondaryButton
-            disabled={currentIndex === fyOptions.length - 1}
-            handleSubmit={() => setSelectedFY(fyOptions[currentIndex + 1])}
+            handleSubmit={() =>
+              setSelectedFYStartYear((prevYear) => prevYear + 1)
+            }
             title={<MdNavigateNext />}
           />
         </div>

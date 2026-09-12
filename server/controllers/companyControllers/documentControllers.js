@@ -1,15 +1,52 @@
+const mongoose = require("mongoose");
 const Company = require("../../models/hr/Company");
 const User = require("../../models/hr/UserData");
 const {
   handleDocumentUpload,
   handleDocumentDelete,
-} = require("../../config/cloudinaryConfig");
+} = require("../../config/s3Config");
 const { PDFDocument } = require("pdf-lib");
 const path = require("path");
 const Department = require("../../models/Departments");
 
+const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024; // 5MB
+const CSV_MIME_TYPES = new Set([
+  "text/csv",
+  "application/csv",
+  "application/vnd.ms-excel",
+  "text/plain",
+  "application/octet-stream",
+]);
+
+const isCsvTemplateFile = (file) => {
+  if (
+    !file?.buffer ||
+    path.extname(file.originalname).toLowerCase() !== ".csv"
+  ) {
+    return false;
+  }
+
+  const mimetype = String(file.mimetype || "").toLowerCase();
+  if (!CSV_MIME_TYPES.has(mimetype)) {
+    return false;
+  }
+
+  // XLSX/other binary files renamed to .csv contain null bytes or invalid UTF-8
+  // replacement characters. A usable template must also have a CSV header row.
+  const content = file.buffer.toString("utf8").replace(/^\uFEFF/, "");
+  const firstNonEmptyLine = content
+    .split(/\r?\n/)
+    .find((line) => line.trim().length > 0);
+
+  return (
+    !file.buffer.includes(0) &&
+    !content.includes("\uFFFD") &&
+    Boolean(firstNonEmptyLine?.includes(","))
+  );
+};
+
 const uploadCompanyDocument = async (req, res, next) => {
-  const { documentName, type } = req.body;
+  const { documentName, type, policyType = "None" } = req.body;
   const file = req.file;
   const user = req.user;
 
@@ -25,13 +62,20 @@ const uploadCompanyDocument = async (req, res, next) => {
       });
     }
 
+    if (
+      type === "policy" &&
+      !["Leave", "Holiday", "None"].includes(policyType)
+    ) {
+      return res.status(400).json({ message: "Invalid policy type" });
+    }
+
     const allowedExtensions = [".pdf", ".doc", ".docx", ".xls", ".xlsx"];
     const extension = path.extname(file.originalname).toLowerCase();
 
     if (!allowedExtensions.includes(extension)) {
       return res.status(400).json({
         message: `Unsupported file type. Allowed extensions: ${allowedExtensions.join(
-          ", "
+          ", ",
         )}`,
       });
     }
@@ -51,7 +95,7 @@ const uploadCompanyDocument = async (req, res, next) => {
     if (extension === ".pdf") {
       const pdfDoc = await PDFDocument.load(file.buffer);
       pdfDoc.setTitle(
-        file.originalname ? file.originalname.split(".")[0] : "Untitled"
+        file.originalname ? file.originalname.split(".")[0] : "Untitled",
       );
       finalBuffer = await pdfDoc.save();
     }
@@ -62,7 +106,7 @@ const uploadCompanyDocument = async (req, res, next) => {
     const response = await handleDocumentUpload(
       finalBuffer,
       folderName,
-      sanitizedFileName
+      sanitizedFileName,
     );
 
     if (!response?.public_id) {
@@ -73,10 +117,10 @@ const uploadCompanyDocument = async (req, res, next) => {
       type === "template"
         ? "templates"
         : type === "sop"
-        ? "sop"
-        : type === "policy"
-        ? "policies"
-        : "agreements";
+          ? "sop"
+          : type === "policy"
+            ? "policies"
+            : "agreements";
 
     await Company.findByIdAndUpdate(foundUser.company._id, {
       $push: {
@@ -84,6 +128,7 @@ const uploadCompanyDocument = async (req, res, next) => {
           name: documentName,
           documentLink: response.secure_url,
           documentId: response.public_id,
+          ...(type === "policy" && { policyType }),
         },
       },
     });
@@ -98,6 +143,17 @@ const uploadCompanyDocument = async (req, res, next) => {
 const updateCompanyDocument = async (req, res, next) => {
   const { newName, documentId } = req.body; // updated: use _id
   const user = req.user;
+  const file = req.file;
+
+  if (!documentId) {
+    return res.status(400).json({ message: "Document ID is required" });
+  }
+
+  if (!newName?.trim() && !file) {
+    return res.status(400).json({
+      message: "Provide at least a new document name or a new file",
+    });
+  }
 
   try {
     const foundUser = await User.findById(user)
@@ -109,39 +165,147 @@ const updateCompanyDocument = async (req, res, next) => {
       return res.status(404).json({ message: "Company not found" });
     }
 
-    const companyId = foundUser.company._id;
-
-    const tryUpdate = async (path) => {
-      const result = await Company.updateOne(
-        {
-          _id: companyId,
-          [`${path}._id`]: documentId, // match using the ObjectId of the embedded doc
-        },
-        {
-          $set: {
-            [`${path}.$.name`]: newName,
-            [`${path}.$.updatedAt`]: new Date(),
-          },
-        }
-      );
-      return result;
-    };
+    const company = await Company.findById(foundUser.company._id);
+    if (!company) {
+      return res.status(404).json({ message: "Company not found" });
+    }
 
     const sections = ["templates", "sop", "policies", "agreements"];
+    const uploadFolders = {
+      templates: "templates",
+      sop: "sops",
+      policies: "policies",
+      agreements: "agreements",
+    };
+
+    let targetDoc = null;
+    let targetSection = null;
+
     for (const section of sections) {
-      const result = await tryUpdate(section);
-      if (result.modifiedCount > 0) {
-        return res.status(200).json({
-          message: `Document name updated successfully in ${section}`,
-        });
+      const doc = company[section]?.id(documentId);
+      if (doc) {
+        targetDoc = doc;
+        targetSection = section;
+        break;
       }
     }
 
-    return res.status(404).json({ message: "Document not found" });
+    if (!targetDoc) {
+      return res.status(404).json({ message: "Document not found" });
+    }
+
+    if (newName?.trim()) {
+      targetDoc.name = newName.trim();
+    }
+
+    if (file) {
+      const allowedExtensions = [".pdf"];
+      const extension = path.extname(file.originalname).toLowerCase();
+
+      if (!allowedExtensions.includes(extension)) {
+        // return res.status(400).json({
+        //   message: `Unsupported file type. Allowed extensions: ${allowedExtensions.join(
+        //     ", ",
+        //   )}`,
+        // });
+
+        return res.status(400).json({
+          message: `Unsupported file type. Please provide a pdf`,
+        });
+      }
+
+      let finalBuffer = file.buffer;
+
+      if (extension === ".pdf") {
+        const pdfDoc = await PDFDocument.load(file.buffer);
+        pdfDoc.setTitle(
+          file.originalname ? file.originalname.split(".")[0] : "Untitled",
+        );
+        finalBuffer = await pdfDoc.save();
+      }
+
+      if (targetDoc.documentId) {
+        await handleDocumentDelete(targetDoc.documentId);
+      }
+
+      const folderName = `${foundUser.company.companyName}/${
+        uploadFolders[targetSection]
+      }`;
+      const sanitizedFileName = file.originalname.replace(/\s+/g, "_");
+
+      const response = await handleDocumentUpload(
+        finalBuffer,
+        folderName,
+        sanitizedFileName,
+      );
+
+      if (!response?.public_id) {
+        return res.status(500).json({ message: "Failed to upload document" });
+      }
+
+      targetDoc.documentLink = response.secure_url;
+      targetDoc.documentId = response.public_id;
+    }
+
+    targetDoc.updatedAt = new Date();
+
+    await company.save({ validateBeforeSave: false });
+
+    return res.status(200).json({
+      message: `Document updated successfully in ${targetSection}`,
+    });
   } catch (error) {
     return next(error);
   }
 };
+
+// const updateCompanyDocument = async (req, res, next) => {
+//   const { newName, documentId } = req.body; // updated: use _id
+//   const user = req.user;
+
+//   try {
+//     const foundUser = await User.findById(user)
+//       .select("company")
+//       .populate("company", "companyName")
+//       .lean();
+
+//     if (!foundUser?.company) {
+//       return res.status(404).json({ message: "Company not found" });
+//     }
+
+//     const companyId = foundUser.company._id;
+
+//     const tryUpdate = async (path) => {
+//       const result = await Company.updateOne(
+//         {
+//           _id: companyId,
+//           [`${path}._id`]: documentId, // match using the ObjectId of the embedded doc
+//         },
+//         {
+//           $set: {
+//             [`${path}.$.name`]: newName,
+//             [`${path}.$.updatedAt`]: new Date(),
+//           },
+//         },
+//       );
+//       return result;
+//     };
+
+//     const sections = ["templates", "sop", "policies", "agreements"];
+//     for (const section of sections) {
+//       const result = await tryUpdate(section);
+//       if (result.modifiedCount > 0) {
+//         return res.status(200).json({
+//           message: `Document name updated successfully in ${section}`,
+//         });
+//       }
+//     }
+
+//     return res.status(404).json({ message: "Document not found" });
+//   } catch (error) {
+//     return next(error);
+//   }
+// };
 
 const toggleCompanyDocumentStatus = async (req, res, next) => {
   const user = req.user;
@@ -280,7 +444,7 @@ const uploadDepartmentDocument = async (req, res, next) => {
     }
 
     const department = foundCompany.selectedDepartments.find(
-      (dept) => dept.department._id.toString() === departmentId
+      (dept) => dept.department._id.toString() === departmentId,
     );
 
     if (!department) {
@@ -295,7 +459,7 @@ const uploadDepartmentDocument = async (req, res, next) => {
     if (file.mimetype === "application/pdf") {
       const pdfDoc = await PDFDocument.load(file.buffer);
       pdfDoc.setTitle(
-        originalFilename ? originalFilename.split(".")[0] : "Untitled"
+        originalFilename ? originalFilename.split(".")[0] : "Untitled",
       );
       processedBuffer = await pdfDoc.save();
     }
@@ -303,7 +467,7 @@ const uploadDepartmentDocument = async (req, res, next) => {
     const response = await handleDocumentUpload(
       processedBuffer,
       `${foundUser.company.companyName}/departments/${department.department.name}/documents/${type}`,
-      originalFilename
+      originalFilename,
     );
 
     if (!response.public_id) {
@@ -330,7 +494,7 @@ const uploadDepartmentDocument = async (req, res, next) => {
           },
         },
       },
-      { new: true }
+      { new: true },
     ).exec();
 
     if (!updatedCompany) {
@@ -381,7 +545,7 @@ const updateDepartmentDocument = async (req, res, next) => {
 
       // Try to find a matching Policy
       const policyDoc = dept.policies?.find(
-        (doc) => doc._id.toString() === documentId
+        (doc) => doc._id.toString() === documentId,
       );
       if (policyDoc) {
         policyDoc.name = newName;
@@ -440,7 +604,7 @@ const deleteDepartmentDocument = async (req, res, next) => {
 
       // Try to find and mark Policy doc as inactive
       const policyDoc = dept.policies?.find(
-        (doc) => doc._id.toString() === documentId
+        (doc) => doc._id.toString() === documentId,
       );
       if (policyDoc) {
         policyDoc.isActive = false;
@@ -480,7 +644,7 @@ const getDepartmentDocuments = async (req, res, next) => {
 
     const companyData = await Company.findOne({ _id: companyId }).lean().exec();
     const department = companyData?.selectedDepartments?.find(
-      (dept) => dept.department.toString() === departmentId
+      (dept) => dept.department.toString() === departmentId,
     );
 
     if (!department) {
@@ -565,7 +729,7 @@ const addCompanyKyc = async (req, res, next) => {
     if (type === "companyKyc") {
       let kycDocs = company.kycDetails.companyKyc || [];
       const existingIndex = kycDocs.findIndex(
-        (doc) => doc.name === documentName
+        (doc) => doc.name === documentName,
       );
       let createdDate = now;
 
@@ -579,7 +743,7 @@ const addCompanyKyc = async (req, res, next) => {
       uploadResult = await handleDocumentUpload(
         buffer,
         `${company.companyName}/kyc/${type}/${documentName?.trim()}`,
-        originalname
+        originalname,
       );
 
       const doc = {
@@ -604,7 +768,7 @@ const addCompanyKyc = async (req, res, next) => {
 
       let directorKyc = company.kycDetails.directorKyc || [];
       let directorEntry = directorKyc.find(
-        (d) => d.nameOfDirector === nameOfDirector
+        (d) => d.nameOfDirector === nameOfDirector,
       );
 
       if (!directorEntry) {
@@ -617,7 +781,7 @@ const addCompanyKyc = async (req, res, next) => {
       }
 
       const existingDocIndex = directorEntry.documents.findIndex(
-        (doc) => doc.name === documentName
+        (doc) => doc.name === documentName,
       );
 
       let createdDate = now;
@@ -634,7 +798,7 @@ const addCompanyKyc = async (req, res, next) => {
         `${
           company.companyName
         }/kyc/${type}/${nameOfDirector}/${documentName?.trim()}`,
-        originalname
+        originalname,
       );
 
       const newDoc = {
@@ -650,7 +814,7 @@ const addCompanyKyc = async (req, res, next) => {
 
       // Update the full directorKyc array
       const updatedDirectorKyc = directorKyc.map((d) =>
-        d.nameOfDirector === nameOfDirector ? directorEntry : d
+        d.nameOfDirector === nameOfDirector ? directorEntry : d,
       );
 
       updatedFields["kycDetails.directorKyc"] = updatedDirectorKyc;
@@ -663,12 +827,281 @@ const addCompanyKyc = async (req, res, next) => {
     await Company.findOneAndUpdate(
       { _id: companyId },
       { $set: updatedFields },
-      { new: true }
+      { new: true },
     );
 
     res.status(200).json({
       message: "KYC details uploaded successfully",
       data: uploads,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const updateCompanyKycDocument = async (req, res, next) => {
+  try {
+    const { type, currentDocumentName, documentName, nameOfDirector } =
+      req.body;
+    const companyId = req.company;
+
+    if (
+      !companyId ||
+      !type ||
+      !currentDocumentName?.trim() ||
+      !documentName?.trim()
+    ) {
+      return res.status(400).json({
+        message:
+          "companyId, type, currentDocumentName and documentName are required",
+      });
+    }
+
+    const company = await Company.findById(companyId).exec();
+
+    if (!company) {
+      return res.status(404).json({ message: "Company not found" });
+    }
+
+    const now = new Date();
+
+    if (type === "companyKyc") {
+      const kycDocs = company.kycDetails.companyKyc || [];
+      const existingDoc = kycDocs.find(
+        (doc) => doc.name === currentDocumentName,
+      );
+
+      if (!existingDoc) {
+        return res.status(404).json({ message: "Document not found" });
+      }
+
+      existingDoc.name = documentName.trim();
+
+      if (req.file) {
+        if (existingDoc.documentId) {
+          await handleDocumentDelete(existingDoc.documentId);
+        }
+
+        const uploadResult = await handleDocumentUpload(
+          req.file.buffer,
+          `${company.companyName}/kyc/${type}/${documentName?.trim()}`,
+          req.file.originalname,
+        );
+
+        existingDoc.documentLink = uploadResult.secure_url;
+        existingDoc.documentId = uploadResult.public_id;
+      }
+
+      existingDoc.updatedDate = now;
+    } else if (type === "directorKyc") {
+      if (!nameOfDirector) {
+        return res
+          .status(400)
+          .json({ message: "nameOfDirector is required for directorKyc" });
+      }
+
+      const directorEntry = (company.kycDetails.directorKyc || []).find(
+        (director) => director.nameOfDirector === nameOfDirector,
+      );
+
+      if (!directorEntry) {
+        return res.status(404).json({ message: "Director entry not found" });
+      }
+
+      const existingDoc = (directorEntry.documents || []).find(
+        (doc) => doc.name === currentDocumentName,
+      );
+
+      if (!existingDoc) {
+        return res.status(404).json({ message: "Document not found" });
+      }
+
+      existingDoc.name = documentName.trim();
+
+      if (req.file) {
+        if (existingDoc.documentId) {
+          await handleDocumentDelete(existingDoc.documentId);
+        }
+
+        const uploadResult = await handleDocumentUpload(
+          req.file.buffer,
+          `${company.companyName}/kyc/${type}/${nameOfDirector}/${documentName?.trim()}`,
+          req.file.originalname,
+        );
+
+        existingDoc.documentLink = uploadResult.secure_url;
+        existingDoc.documentId = uploadResult.public_id;
+      }
+
+      existingDoc.updatedDate = now;
+    } else {
+      return res.status(400).json({
+        message: "Invalid type: must be either 'companyKyc' or 'directorKyc'",
+      });
+    }
+
+    await company.save();
+
+    return res.status(200).json({
+      message: "KYC document updated successfully",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const createCompanyKycEntry = async (req, res, next) => {
+  try {
+    const { type, nameOfDirector } = req.body;
+    const companyId = req.company;
+
+    if (!companyId || !type) {
+      return res
+        .status(400)
+        .json({ message: "companyId and type are required" });
+    }
+
+    const company = await Company.findOne({ _id: companyId });
+
+    if (!company) {
+      return res.status(404).json({ message: "Company not found" });
+    }
+
+    if (type === "directorKyc") {
+      if (!nameOfDirector || !nameOfDirector.trim()) {
+        return res.status(400).json({ message: "Director name is required" });
+      }
+
+      const trimmedName = nameOfDirector.trim();
+      const directorKyc = company.kycDetails.directorKyc || [];
+      const exists = directorKyc.some(
+        (director) =>
+          director.nameOfDirector?.toLowerCase() === trimmedName.toLowerCase(),
+      );
+
+      if (exists) {
+        return res.status(409).json({ message: "Director already exists" });
+      }
+
+      directorKyc.push({
+        nameOfDirector: trimmedName,
+        documents: [],
+        isActive: true,
+      });
+
+      company.kycDetails.directorKyc = directorKyc;
+      await company.save();
+
+      return res.status(201).json({
+        message: "Director KYC entry created successfully",
+        data: {
+          name: trimmedName,
+          type,
+          documents: [],
+        },
+      });
+    }
+
+    if (type === "companyKyc") {
+      return res.status(201).json({
+        message: "Company KYC entry is available",
+        data: {
+          name: "Company",
+          type,
+          documents: company.kycDetails.companyKyc || [],
+        },
+      });
+    }
+
+    return res.status(400).json({
+      message: "Invalid type: must be either 'companyKyc' or 'directorKyc'",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const updateCompanyKycEntryName = async (req, res, next) => {
+  try {
+    const { type, currentName, name } = req.body;
+    const companyId = req.company;
+
+    if (!companyId || !type || !currentName?.trim() || !name?.trim()) {
+      return res.status(400).json({
+        message: "companyId, type, currentName and name are required",
+      });
+    }
+
+    const company = await Company.findById(companyId).exec();
+
+    if (!company) {
+      return res.status(404).json({ message: "Company not found" });
+    }
+
+    const trimmedName = name.trim();
+    const trimmedCurrentName = currentName.trim();
+
+    if (type === "companyKyc") {
+      const currentCompanyLabel = company.companyName?.trim() || "Company";
+
+      if (
+        trimmedCurrentName.toLowerCase() !==
+          currentCompanyLabel.toLowerCase() &&
+        trimmedCurrentName.toLowerCase() !== "company"
+      ) {
+        return res.status(404).json({ message: "Company entry not found" });
+      }
+
+      company.companyName = trimmedName;
+      await company.save();
+
+      return res.status(200).json({
+        message: "Company name updated successfully",
+        data: {
+          type,
+          name: trimmedName,
+        },
+      });
+    }
+
+    if (type === "directorKyc") {
+      const directorEntries = company.kycDetails.directorKyc || [];
+      const directorEntry = directorEntries.find(
+        (director) =>
+          director.nameOfDirector?.trim().toLowerCase() ===
+          trimmedCurrentName.toLowerCase(),
+      );
+
+      if (!directorEntry) {
+        return res.status(404).json({ message: "Director entry not found" });
+      }
+
+      const duplicateEntry = directorEntries.find(
+        (director) =>
+          director.nameOfDirector?.trim().toLowerCase() ===
+            trimmedName.toLowerCase() &&
+          director.nameOfDirector?.trim().toLowerCase() !==
+            trimmedCurrentName.toLowerCase(),
+      );
+
+      if (duplicateEntry) {
+        return res.status(409).json({ message: "Director already exists" });
+      }
+
+      directorEntry.nameOfDirector = trimmedName;
+      await company.save();
+
+      return res.status(200).json({
+        message: "Director name updated successfully",
+        data: {
+          type,
+          name: trimmedName,
+        },
+      });
+    }
+
+    return res.status(400).json({
+      message: "Invalid type: must be either 'companyKyc' or 'directorKyc'",
     });
   } catch (error) {
     next(error);
@@ -684,7 +1117,7 @@ const getCompanyKyc = async (req, res, next) => {
     }
 
     const company = await Company.findOne({ _id: companyId }).select(
-      "kycDetails companyName"
+      "kycDetails companyName",
     );
     if (!company) {
       return res.status(404).json({ message: "Company not found" });
@@ -710,7 +1143,7 @@ const getCompanyKyc = async (req, res, next) => {
           createdDate: doc.createdDate,
           updatedDate: doc.updatedDate,
         })),
-      })
+      }),
     );
 
     res.status(200).json({
@@ -734,7 +1167,7 @@ const getComplianceDocuments = async (req, res, next) => {
     }
 
     const company = await Company.findById(companyId).select(
-      "complianceDocuments"
+      "complianceDocuments",
     );
     if (!company) {
       return res.status(404).json({ message: "Company not found" });
@@ -788,7 +1221,7 @@ const uploadComplianceDocument = async (req, res, next) => {
     const uploadResult = await handleDocumentUpload(
       buffer,
       `${company.companyName?.trim()}/compliance/${documentName?.trim()}`,
-      originalname
+      originalname,
     );
 
     const newDoc = {
@@ -805,7 +1238,7 @@ const uploadComplianceDocument = async (req, res, next) => {
     await Company.findByIdAndUpdate(
       companyId,
       { $set: { complianceDocuments: docs } },
-      { new: true }
+      { new: true },
     );
 
     res.status(200).json({
@@ -817,59 +1250,159 @@ const uploadComplianceDocument = async (req, res, next) => {
   }
 };
 
+// const handleDepartmentTemplateUpload = async (req, res, next) => {
+//   try {
+//     const { departmentId } = req.params;
+//     const file = req.file;
+//     const { company } = req;
+//     const { documentName } = req.body;
+
+//     if (!documentName) {
+//       return res.status(400).json({ message: "Document name is required" });
+//     }
+
+//     // Check if file is present
+//     if (!file) {
+//       return res.status(400).json({ message: "No file uploaded" });
+//     }
+
+//     // Validate company
+//     const foundCompany = await Company.findOne({ _id: company }).lean().exec();
+//     if (!foundCompany) {
+//       return res.status(404).json({ message: "Company not found" });
+//     }
+
+//     const foundDepartment = await Department.findOne({ _id: departmentId })
+//       .lean()
+//       .exec();
+
+//     // Upload to Cloudinary
+//     const uploadPath = `${foundCompany.companyName}/departments/${foundDepartment.name}/templates`;
+//     const uploadedFile = await handleDocumentUpload(
+//       file.buffer,
+//       uploadPath,
+//       file.originalname,
+//     );
+
+//     // Construct template object
+//     const newTemplate = {
+//       name: documentName,
+//       documentLink: uploadedFile.secure_url,
+//       documentId: uploadedFile.public_id,
+//       isActive: true,
+//       createdAt: new Date(),
+//       updatedAt: null,
+//     };
+
+//     // Update the department
+//     const updatedDepartment = await Department.findOneAndUpdate(
+//       { _id: departmentId },
+//       { $push: { templates: newTemplate } },
+//       { new: true },
+//     );
+
+//     if (!updatedDepartment) {
+//       return res.status(404).json({ message: "Department not found" });
+//     }
+
+//     return res.status(200).json({
+//       message: "Template uploaded successfully",
+//     });
+//   } catch (error) {
+//     next(error);
+//   }
+// };
+
 const handleDepartmentTemplateUpload = async (req, res, next) => {
   try {
     const { departmentId } = req.params;
-    const file = req.file;
-    const { company } = req;
     const { documentName } = req.body;
+    const { company } = req;
+    const file = req.file;
 
-    // Check if file is present
+    // ---------- Basic validations ----------
+    if (!documentName?.trim()) {
+      return res.status(400).json({ message: "Document name is required" });
+    }
+
     if (!file) {
       return res.status(400).json({ message: "No file uploaded" });
     }
 
-    // Validate company
-    const foundCompany = await Company.findOne({ _id: company }).lean().exec();
+    // ---------- File size validation ----------
+    if (file.size > MAX_FILE_SIZE_BYTES) {
+      return res.status(400).json({
+        message: "File size exceeds 5MB limit",
+      });
+    }
+
+    // ---------- CSV validation ----------
+    const fileExt = path.extname(file.originalname).toLowerCase();
+
+    console.info("Department template upload file metadata", {
+      originalname: file.originalname,
+      extension: fileExt,
+      mimetype: file.mimetype,
+      size: file.size,
+      departmentId,
+    });
+
+    if (!isCsvTemplateFile(file)) {
+      return res.status(400).json({
+        message: "Only valid CSV files are allowed",
+      });
+    }
+
+    // ---------- Validate company ----------
+    const foundCompany = await Company.findById(company).lean();
     if (!foundCompany) {
       return res.status(404).json({ message: "Company not found" });
     }
 
-    const foundDepartment = await Department.findOne({ _id: departmentId })
-      .lean()
-      .exec();
+    // ---------- Validate department ----------
+    const foundDepartment = await Department.findById(departmentId);
+    if (!foundDepartment) {
+      return res.status(404).json({ message: "Department not found" });
+    }
 
-    // Upload to Cloudinary
+    // ---------- Enforce unique template name per department ----------
+    const normalizedName = documentName.trim().toLowerCase();
+
+    const nameExists = foundDepartment.templates?.some(
+      (t) => t.name?.trim().toLowerCase() === normalizedName,
+    );
+
+    if (nameExists) {
+      return res.status(409).json({
+        message: "A template with this name already exists in the department",
+      });
+    }
+
+    // ---------- Upload to Cloudinary ----------
     const uploadPath = `${foundCompany.companyName}/departments/${foundDepartment.name}/templates`;
+
     const uploadedFile = await handleDocumentUpload(
       file.buffer,
       uploadPath,
-      file.originalname
+      file.originalname,
     );
 
-    // Construct template object
+    // ---------- Construct template ----------
     const newTemplate = {
-      name: documentName,
+      name: documentName.trim(),
       documentLink: uploadedFile.secure_url,
       documentId: uploadedFile.public_id,
       isActive: true,
       createdAt: new Date(),
-      updatedAt: null,
     };
 
-    // Update the department
-    const updatedDepartment = await Department.findOneAndUpdate(
-      { _id: departmentId },
-      { $push: { templates: newTemplate } },
-      { new: true }
-    );
-
-    if (!updatedDepartment) {
-      return res.status(404).json({ message: "Department not found" });
-    }
+    // ---------- Persist ----------
+    foundDepartment.templates.push(newTemplate);
+    await foundDepartment.save();
 
     return res.status(200).json({
       message: "Template uploaded successfully",
+      template: newTemplate,
     });
   } catch (error) {
     next(error);
@@ -880,6 +1413,7 @@ const getDepartmentTemplates = async (req, res, next) => {
   try {
     const { departmentId } = req.params;
     const foundDepartment = await Department.findOne({ _id: departmentId })
+      .select("templates")
       .lean()
       .exec();
     if (!foundDepartment) {
@@ -887,6 +1421,53 @@ const getDepartmentTemplates = async (req, res, next) => {
     }
     const templates = foundDepartment.templates;
     return res.status(200).json({ templates });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const updateDepartmentTemplateLastModifiedAt = async (req, res, next) => {
+  try {
+    const { departmentId, templateId, type = "" } = req.params;
+
+    if (!type || !["download", "upload"].includes(type)) {
+      return res
+        .status(400)
+        .json({ message: "Invalid type. Must be 'download' or 'upload'" });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(departmentId)) {
+      return res.status(400).json({ message: "Invalid department ID" });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(templateId)) {
+      return res.status(400).json({ message: "Invalid template ID" });
+    }
+
+    const department = await Department.findById(departmentId);
+    if (!department) {
+      return res.status(404).json({ message: "Department not found" });
+    }
+
+    const template = department.templates.id(templateId);
+    if (!template) {
+      return res.status(404).json({ message: "Template not found" });
+    }
+
+    if (type === "download") {
+      template.downloadedAt = new Date();
+    } else if (type === "upload") {
+      template.uploadedAt = new Date();
+    }
+
+    await department.save({ validateBeforeSave: false });
+
+    return res.status(200).json({
+      message: "Template last modified date updated successfully",
+      downloadedAt: template.downloadedAt,
+      uploadedAt: template.uploadedAt,
+      templateId: template._id,
+    });
   } catch (error) {
     next(error);
   }
@@ -904,7 +1485,7 @@ const deleteDepartmentTemplate = async (req, res, next) => {
 
     // Find the specific template
     const template = department.templates.find(
-      (t) => t.documentId === documentId
+      (t) => t.documentId === documentId,
     );
 
     if (!template) {
@@ -938,6 +1519,18 @@ const updateDepartmentTemplate = async (req, res, next) => {
       return res.status(400).json({ message: "No file uploaded" });
     }
 
+    if (file.size > MAX_FILE_SIZE_BYTES) {
+      return res.status(400).json({
+        message: "File size exceeds 5MB limit",
+      });
+    }
+
+    if (!isCsvTemplateFile(file)) {
+      return res.status(400).json({
+        message: "Only valid CSV files are allowed",
+      });
+    }
+
     // Fetch company
     const foundCompany = await Company.findById(company).lean().exec();
     if (!foundCompany) {
@@ -964,7 +1557,7 @@ const updateDepartmentTemplate = async (req, res, next) => {
     const uploadedFile = await handleDocumentUpload(
       file.buffer,
       uploadPath,
-      file.originalname
+      file.originalname,
     );
 
     // Update template fields
@@ -972,6 +1565,7 @@ const updateDepartmentTemplate = async (req, res, next) => {
     template.documentLink = uploadedFile.secure_url;
     template.documentId = uploadedFile.public_id;
     template.updatedAt = new Date();
+    template.lastmodifiedAt = new Date();
 
     // Save updated department
     await department.save();
@@ -991,6 +1585,8 @@ module.exports = {
   uploadDepartmentDocument,
   getDepartmentDocuments,
   addCompanyKyc,
+  createCompanyKycEntry,
+  updateCompanyKycDocument,
   getCompanyKyc,
   getComplianceDocuments,
   uploadComplianceDocument,
@@ -1001,5 +1597,7 @@ module.exports = {
   handleDepartmentTemplateUpload,
   getDepartmentTemplates,
   deleteDepartmentTemplate,
+  updateCompanyKycEntryName,
   updateDepartmentTemplate,
+  updateDepartmentTemplateLastModifiedAt,
 };

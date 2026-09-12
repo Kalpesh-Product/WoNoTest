@@ -35,18 +35,33 @@ const Desks = () => {
 
   const handleFileChange = (event) => {
     const file = event.target.files[0];
-    setValue("unitImage", file);
-    if (file) {
-      const imageUrl = URL.createObjectURL(file);
-      setImagePreview(imageUrl);
-      setSelectedFile(file);
+    // setValue("unitImage", file);
+    // if (file) {
+    //   const imageUrl = URL.createObjectURL(file);
+    //   setImagePreview(imageUrl);
+    //   setSelectedFile(file);
+    //}
+    if (!file) return;
+
+    if (!file.type?.startsWith("image/")) {
+      toast.error("Only image files are allowed.");
+      setValue("unitImage", null);
+      setSelectedFile(null);
+      return;
     }
+
+    setValue("unitImage", file);
+    const imageUrl = URL.createObjectURL(file);
+    setImagePreview(imageUrl);
+    setSelectedFile(file);
   };
 
   // 🧠 Derive seat data from selectedClient
   const rows = useMemo(() => {
     if (!selectedClient) return [];
-    const occupiedSeats = selectedClient.members?.length
+    const occupiedSeats =
+      selectedClient.members?.filter((member) => member?.isActive === true)
+        .length ?? 0;
     const totalSeats =
       (selectedClient.openDesks ?? 0) + (selectedClient.cabinDesks ?? 0);
 
@@ -54,19 +69,22 @@ const Desks = () => {
       {
         totalSeats,
         bookedSeats: occupiedSeats,
-        remaining : totalSeats - occupiedSeats,
-        occupancy: ((occupiedSeats / totalSeats)*100).toFixed(0) || 0,
+        remaining: totalSeats - occupiedSeats,
+        occupancy: ((occupiedSeats / totalSeats) * 100).toFixed(0) || 0,
         availableSeats: 0,
       },
     ];
   }, [selectedClient]);
 
+  const occupiedRoomImage = selectedClient?.occupiedImage || clientOccupied;
+
+  console.log("Selected Client:", selectedClient);
   const currentRoomData = [
     {
       id: 1,
       title: "Occupied",
-      image: clientClear, // ✅ show clear image instead of occupied
-      type: "clearImage", // ✅ update image type accordingly
+      image: occupiedRoomImage, // ✅ show occupied image instead of clear
+      type: "occupiedImage", // ✅ update image type accordingly
     },
   ];
 
@@ -77,13 +95,13 @@ const Desks = () => {
     formData.append("clientId", selectedClient._id);
 
     const response = await axios.post(
-      "/api/sales/upload-unit-image",
+      "/api/sales/upload-client-unit-image",
       formData,
       {
         headers: {
           "Content-Type": "multipart/form-data",
         },
-      }
+      },
     );
 
     return response.data;
@@ -93,7 +111,11 @@ const Desks = () => {
     mutationKey: ["uploadImage"],
     mutationFn: uploadRoomImage,
     onSuccess: (data) => toast.success(data.message),
-    onError: (error) => toast.error(error.message),
+    //onError: (error) => toast.error(error.message),
+    onError: (error) =>
+      toast.error(
+        error?.response?.data?.message || error.message || "Upload failed",
+      ),
   });
 
   const onSubmit = () => {
@@ -148,9 +170,17 @@ const Desks = () => {
                   searchColumn="Email"
                   data={rows}
                   columns={[
-                    { field: "totalSeats", headerName: "Total Seats", flex : 1 },
-                    { field: "bookedSeats", headerName: "Occupied Seats", flex : 1 },
-                    { field: "remaining", headerName: "Remaininfg Seats", flex : 1 },
+                    { field: "totalSeats", headerName: "Total Seats", flex: 1 },
+                    {
+                      field: "bookedSeats",
+                      headerName: "Occupied Seats",
+                      flex: 1,
+                    },
+                    {
+                      field: "remaining",
+                      headerName: "Remaining Seats",
+                      flex: 1,
+                    },
                     { field: "occupancy", headerName: "Occupancy %" },
                   ]}
                   tableHeight={150}
@@ -176,6 +206,7 @@ const Desks = () => {
                 {...register("unitImage")}
                 type="file"
                 className="hidden"
+                accept="image/*"
                 onChange={handleFileChange}
               />
             </label>

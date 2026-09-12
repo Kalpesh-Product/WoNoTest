@@ -9,6 +9,17 @@ const assetsSchema = new mongoose.Schema(
     assetId: {
       type: String,
       required: true,
+      unique: true,
+    },
+    secondaryId: {
+      type: String,
+      unique: true,
+      sparse: true,
+      trim: true,
+    },
+    departmentAssetId: {
+      type: String,
+      unique: true,
     },
     rentedMonths: {
       type: Number,
@@ -32,17 +43,34 @@ const assetsSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    serialNumber: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    description: {
+      type: String,
+      trim: true,
+      default: "",
+    },
     purchaseDate: {
       type: Date,
       required: true,
     },
     price: {
+      //per unit
       type: Number,
       required: true,
     },
     warranty: {
       type: Number,
       required: true,
+    },
+    warrantyExpiryDate: {
+      type: Date,
+    },
+    rentedExpirationDate: {
+      type: Date,
     },
     warrantyDocument: {
       link: String,
@@ -69,11 +97,19 @@ const assetsSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Unit",
     },
+    Category: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Category",
+    },
     subCategory: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "SubCategory",
     },
     isUnderMaintenance: {
+      type: Boolean,
+      default: false,
+    },
+    isExtra: {
       type: Boolean,
       default: false,
     },
@@ -90,7 +126,7 @@ const assetsSchema = new mongoose.Schema(
       url: String,
     },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 const Asset = mongoose.model("Asset", assetsSchema);

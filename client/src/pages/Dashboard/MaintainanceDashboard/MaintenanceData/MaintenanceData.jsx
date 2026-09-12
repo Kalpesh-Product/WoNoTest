@@ -21,6 +21,11 @@ const MaintenanceData = () => {
     permission: PERMISSIONS.MAINTENANCE_ASSET_LIST.value,
   },
   {
+    label: "Monthly Budget Reports",
+    path: "monthly-budget-report",
+    permission: PERMISSIONS.MAINTENANCE_MONTHLY_BUDGET_REPORT.value,
+  },
+  {
     label: "Monthly Invoice Reports",
     path: "monthly-invoice-reports",
     permission: PERMISSIONS.MAINTENANCE_MONTHLY_INVOICE_REPORTS.value,
@@ -55,6 +60,7 @@ const MaintenanceData = () => {
       defaultTabPath="amc-records"
       tabs={tabs}
       hideTabsCondition={(pathname) => pathname.includes("amc-records/")}
+      hideTabsOnPaths={["vendor/"]}
     />
   );
 };

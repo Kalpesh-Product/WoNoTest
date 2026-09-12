@@ -32,6 +32,7 @@ import PrimaryButton from "./PrimaryButton";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import { isAlphanumeric, noOnlyWhitespace } from "../utils/validators";
 import dayjs from "dayjs";
+import ConfirmationModal from "./ConfirmationModal";
 
 const ClockInOutAttendance = () => {
   const axios = useAxiosPrivate();
@@ -52,6 +53,8 @@ const ClockInOutAttendance = () => {
   });
 
   const [openModal, setOpenModal] = useState(false);
+  const [openClockOutConfirmation, setOpenClockOutConfirmation] =
+    useState(false);
 
   const {
     control,
@@ -216,6 +219,7 @@ const ClockInOutAttendance = () => {
       return { data: res.data, outTime };
     },
     onSuccess: ({ data, outTime }) => {
+      setOpenClockOutConfirmation(false);
       toast.success("Clocked out successfully!");
       setStartTime(null);
       if (clockInTime) {
@@ -235,8 +239,8 @@ const ClockInOutAttendance = () => {
 
           dispatch(
             setWorkHours(
-              calculateTotalHours(breaks, startTime, outTime, "workhours")
-            )
+              calculateTotalHours(breaks, startTime, outTime, "workhours"),
+            ),
           );
         }
 
@@ -249,7 +253,8 @@ const ClockInOutAttendance = () => {
       dispatch(setHasClockedIn(false));
       queryClient.invalidateQueries({ queryKey: ["user-attendance"] });
     },
-    t: (error) => toast.error(error.response.data.message),
+    onError: (error) =>
+      toast.error(error.response?.data?.message || "Clock-out failed"),
   });
 
   const { mutate: startBreak, isPending: isStartbreak } = useMutation({
@@ -290,8 +295,8 @@ const ClockInOutAttendance = () => {
       dispatch(setHasTakenBreak(true));
       dispatch(
         setWorkHours(
-          calculateTotalHours(breaks, startTime, breakTime, "workhours")
-        )
+          calculateTotalHours(breaks, startTime, breakTime, "workhours"),
+        ),
       );
       queryClient.invalidateQueries({ queryKey: ["user-attendance"] });
     },
@@ -344,7 +349,7 @@ const ClockInOutAttendance = () => {
       };
       const response = await axios.post(
         "/api/attendance/correct-attendance",
-        payload
+        payload,
       );
       return response.data;
     },
@@ -357,7 +362,7 @@ const ClockInOutAttendance = () => {
     },
     onError: (error) => {
       toast.error(
-        error?.response?.data?.message || "Error submitting correction"
+        error?.response?.data?.message || "Error submitting correction",
       );
     },
   });
@@ -373,6 +378,10 @@ const ClockInOutAttendance = () => {
   };
 
   const handleStop = () => {
+    setOpenClockOutConfirmation(true);
+  };
+
+  const handleConfirmClockOut = () => {
     const now = new Date().toISOString();
     clockOut(now);
   };
@@ -518,6 +527,13 @@ const ClockInOutAttendance = () => {
       : yesterday;
   };
 
+  const getCorrectionTargetDay = () => {
+    if (clockInTime) {
+      return dayjs(clockInTime);
+    }
+    return getPrevDay();
+  };
+
   const timeStats = [
     {
       label: "Clock-in Time",
@@ -540,6 +556,13 @@ const ClockInOutAttendance = () => {
     },
   ];
 
+  // const isPrimaryDisabled =  isClockingIn || isClockingOut;
+  // const isBreakDisabled = isStartbreak || isEndBreak;
+
+  //Temporarily disabled
+  const isPrimaryDisabled = false;
+  const isBreakDisabled = false;
+
   return (
     <div className="flex flex-col  gap-4 p-0 h-80">
       <div className="grid grid-cols-1 gap-4">
@@ -552,7 +575,10 @@ const ClockInOutAttendance = () => {
             <button
               onClick={() => {
                 if (hasClockedIn && !isToday) {
-                  setValue("targetedDay", getPrevDay().format("YYYY-MM-DD"));
+                  setValue(
+                    "targetedDay",
+                    getCorrectionTargetDay().format("YYYY-MM-DD"),
+                  );
                   setOpenModal(true);
                 } else {
                   hasClockedIn
@@ -565,14 +591,18 @@ const ClockInOutAttendance = () => {
                 hasClockedIn && !correctionPending
                   ? "bg-[#EB5C45]"
                   : "bg-wonoGreen  transition-all"
-              }  text-white flex justify-center items-center hover:scale-105`}
-              disabled={isClockingIn || isClockingOut}
+              } text-white flex justify-center items-center ${
+                isPrimaryDisabled
+                  ? "cursor-not-allowed opacity-60"
+                  : "hover:scale-105"
+              }`}
+              // disabled={isPrimaryDisabled}
             >
               {hasClockedIn && !correctionPending
                 ? "Clock Out"
                 : isClockingIn
-                ? "Starting..."
-                : "Clock In"}
+                  ? "Starting..."
+                  : "Clock In"}
             </button>
 
             {hasClockedIn && (
@@ -582,14 +612,18 @@ const ClockInOutAttendance = () => {
                   hasTakenBreak
                     ? "bg-[#FB923C]"
                     : "bg-[#FACC15]  transition-all"
-                }  text-white flex justify-center items-center hover:scale-105`}
-                disabled={isStartbreak || isEndBreak}
+                }   text-white flex justify-center items-center ${
+                  isBreakDisabled
+                    ? "cursor-not-allowed opacity-60"
+                    : "hover:scale-105"
+                }`}
+                // disabled={isBreakDisabled}
               >
                 {hasTakenBreak
                   ? "End Break"
                   : isStartbreak
-                  ? "Starting..."
-                  : "Start Break"}
+                    ? "Starting..."
+                    : "Start Break"}
               </button>
             )}
           </div>
@@ -597,8 +631,8 @@ const ClockInOutAttendance = () => {
             {hasClockedIn && isToday
               ? `${formatElapsedTime(elapsedTime)}`
               : clockOutTime && isToday
-              ? "Clocked Out"
-              : "Not Clocked In"}
+                ? "Clocked Out"
+                : "Not Clocked In"}
           </div>
 
           <div className="flex gap-4">
@@ -660,7 +694,7 @@ const ClockInOutAttendance = () => {
           <Controller
             name="targetedDay"
             control={control}
-            defaultValue={getPrevDay().format("YYYY-MM-DD")}
+            defaultValue={getCorrectionTargetDay().format("YYYY-MM-DD")}
             render={({ field }) => (
               <TextField
                 {...field}
@@ -726,7 +760,7 @@ const ClockInOutAttendance = () => {
               title={"Submit"}
               type={"submit"}
               isLoading={correctionPending}
-              disabled={correctionPending}
+              // disabled={correctionPending}
             />
           </div>
           {/* {Object.keys(errors).length > 0 && (
@@ -736,6 +770,16 @@ const ClockInOutAttendance = () => {
                 )} */}
         </form>
       </MuiModal>
+      <ConfirmationModal
+        open={openClockOutConfirmation}
+        onClose={() => setOpenClockOutConfirmation(false)}
+        onConfirm={handleConfirmClockOut}
+        title="Confirm Clock-Out"
+        message="Are you sure you want to clock out? You will not be able to clock in again for this shift."
+        confirmText="Clock Out"
+        cancelText="Cancel"
+        isLoading={isClockingOut}
+      />
     </div>
   );
 };

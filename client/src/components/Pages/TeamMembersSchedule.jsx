@@ -32,6 +32,11 @@ const TeamMembersSchedule = () => {
   });
 
   const [multipleRanges, setMultipleRanges] = useState([]);
+  const todayStart = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return today;
+  }, []);
 
   const department = usePageDepartment();
   const {
@@ -249,11 +254,11 @@ const TeamMembersSchedule = () => {
           });
         }
 
-        // Add active substitutes
+        // Add substitutes (including inactive ones)
         substitutions
           .filter(
             (sub) =>
-              sub?.isActive &&
+              // sub?.isActive &&
               sub?.substitute?.firstName &&
               sub?.substitute?.lastName &&
               !isNaN(new Date(sub.fromDate)) &&
@@ -266,7 +271,8 @@ const TeamMembersSchedule = () => {
               endDate: new Date(sub.toDate),
               employeeName: `${sub.substitute.firstName} ${sub.substitute.lastName} (Substitute)`,
               manager: manager || "Unknown",
-              isActive: "Active",
+              isActive: sub.isActive ? "Active" : "Inactive",
+              // isActive: "Active",
             });
           });
       });
@@ -409,7 +415,20 @@ const TeamMembersSchedule = () => {
       const response = await axios.get(
         `/api/weekly-unit/get-unit-schedule?unitId=${user._id}&department=${department?._id}`
       );
-      const matchingSchedule = response.data?.[0]; // adjust as needed
+       const schedules = Array.isArray(response.data) ? response.data : [];
+      const matchingSchedule =
+        schedules.find((item) => item.location?._id === user._id) ||
+        schedules[0];
+
+      const scheduleEmployee = matchingSchedule?.employee;
+      const employeeProfile = scheduleEmployee?.id || scheduleEmployee;
+      const assigneeName =
+        [employeeProfile?.firstName, employeeProfile?.lastName]
+          .filter(Boolean)
+          .join(" ")
+          .trim() ||
+        user?.lead ||
+        "N/A";// adjust as needed
 
       if (matchingSchedule) {
         setSelectedUser({
@@ -417,7 +436,9 @@ const TeamMembersSchedule = () => {
           startDate: matchingSchedule.startDate,
           endDate: matchingSchedule.endDate,
           substitutions: matchingSchedule.substitutions || [],
-          isEmployeeActive: matchingSchedule.employee?.isActive ?? true,
+          // isEmployeeActive: matchingSchedule.employee?.isActive ?? true,
+          assigneeName,
+          isEmployeeActive: scheduleEmployee?.isActive ?? true,
         });
       } else {
         toast.warning("No schedule found for this unit.");
@@ -431,6 +452,44 @@ const TeamMembersSchedule = () => {
       toast.error("Failed to load schedule details.");
     }
   };
+
+  const viewRanges = useMemo(() => {
+    if (!selectedUser) return [];
+
+    const ranges = [];
+
+    if (selectedUser.startDate && selectedUser.endDate) {
+      const start = new Date(selectedUser.startDate);
+      const end = new Date(selectedUser.endDate);
+
+      if (!isNaN(start) && !isNaN(end)) {
+        ranges.push({
+          startDate: start,
+          endDate: end,
+          key: "primary",
+          color: "#1E3D73",
+        });
+      }
+    }
+
+    selectedUser.substitutions?.forEach((sub, index) => {
+      if (sub.fromDate && sub.toDate) {
+        const start = new Date(sub.fromDate);
+        const end = new Date(sub.toDate);
+
+        if (!isNaN(start) && !isNaN(end)) {
+          ranges.push({
+            startDate: start,
+            endDate: end,
+            key: `sub-${index}`,
+            color: "#F59E0B",
+          });
+        }
+      }
+    });
+
+    return ranges;
+  }, [selectedUser]);
 
   const handleAddUser = () => {
     setModalMode("add");
@@ -451,6 +510,15 @@ const TeamMembersSchedule = () => {
     // Update form state
     setValue("startDate", startDate);
     setValue("endDate", endDate);
+  };
+  const isDateDisabled = (date) => {
+    const normalizedDate = new Date(date);
+    normalizedDate.setHours(0, 0, 0, 0);
+
+    return (
+      normalizedDate < todayStart ||
+      disabledDatesSet.has(normalizedDate.toDateString())
+    );
   };
   //---------------------------------------Event Handlers------------------------------//
 
@@ -625,9 +693,11 @@ const TeamMembersSchedule = () => {
                         ranges={[selectionRange]}
                         onChange={handleDateSelect}
                         moveRangeOnFirstSelection={false}
-                        disabledDay={(date) =>
-                          disabledDatesSet.has(date.toDateString())
-                        }
+                        // disabledDay={(date) =>
+                        //   disabledDatesSet.has(date.toDateString())
+                        // }
+                        minDate={todayStart}
+                        disabledDay={isDateDisabled}
                       />
                     </>
                   ) : (
@@ -653,7 +723,11 @@ const TeamMembersSchedule = () => {
 
         {modalMode === "view" && selectedUser && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <DetalisFormatted title="Name" detail={selectedUser.lead} />
+            {/* <DetalisFormatted title="Name" detail={selectedUser.lead} /> */}
+            <DetalisFormatted
+              title="Name"
+              detail={selectedUser.assigneeName || selectedUser.lead || "N/A"}
+            />
             <DetalisFormatted
               title="Member Status"
               gap={"w-full"}
@@ -673,17 +747,28 @@ const TeamMembersSchedule = () => {
               </h3>
               <div className="border border-borderGray rounded-2xl overflow-hidden shadow-sm">
                 <DateRange
-                  ranges={[
-                    {
-                      startDate: selectedUser.startDate
-                        ? new Date(selectedUser.startDate)
-                        : new Date(),
-                      endDate: selectedUser.endDate
-                        ? new Date(selectedUser.endDate)
-                        : new Date(),
-                      key: "selection",
-                    },
-                  ]}
+                  // ranges={[
+                  //   {
+                  //     startDate: selectedUser.startDate
+                  //       ? new Date(selectedUser.startDate)
+                  //       : new Date(),
+                  //     endDate: selectedUser.endDate
+                  //       ? new Date(selectedUser.endDate)
+                  //       : new Date(),
+                  //     key: "selection",
+                  //   },
+                  // ]}
+                  ranges={
+                    viewRanges.length
+                      ? viewRanges
+                      : [
+                          {
+                            startDate: new Date(),
+                            endDate: new Date(),
+                            key: "selection",
+                          },
+                        ]
+                  }
                   onChange={() => {
                     "";
                   }}

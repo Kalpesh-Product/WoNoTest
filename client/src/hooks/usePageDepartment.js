@@ -37,6 +37,23 @@ const usePageDepartment = () => {
 
   // Fallback for undefined section
   if (!section) {
+    const isAssetsModule = pathSegments.includes("assets");
+
+    if (isAssetsModule) {
+      const userDepartments = auth?.user?.departments || [];
+      const preferredDepartment =
+        userDepartments.find(
+          (dept) => dept?.name?.toLowerCase() !== "top management",
+        ) || userDepartments[0];
+
+      if (preferredDepartment) {
+        return preferredDepartment;
+      }
+
+      if (Array.isArray(fetchedDepartments) && fetchedDepartments[0]?.department) {
+        return fetchedDepartments[0].department;
+      }
+    }
     console.warn("usePageDepartment: Unable to determine section from path.");
     return null;
   }
@@ -46,7 +63,28 @@ const usePageDepartment = () => {
     section = "tech";
   }
 
+  if (section === "admin") {
+    section = "administration";
+  }
+
   const userDepartments = auth?.user?.departments || [];
+  const allDepartments = Array.isArray(fetchedDepartments)
+    ? fetchedDepartments.map((item) => item?.department).filter(Boolean)
+    : [];
+
+    if (section === "cafe" || section === "legal") {
+      const dashboardDepartment =
+      allDepartments.find((dept) =>
+        dept?.name?.toLowerCase()?.includes(section),
+      ) ||
+      userDepartments.find((dept) =>
+        dept?.name?.toLowerCase()?.includes(section),
+      );
+
+    if (dashboardDepartment) {
+      return dashboardDepartment;
+    }
+  }
 
   const managementAccessDepartments = [
     { _id: "67b2cf85b9b6ed5cedeb9a2e", name: "top management" },

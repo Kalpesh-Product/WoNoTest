@@ -1,11 +1,12 @@
 const express = require("express");
 const cors = require("cors");
 const path = require("path");
-const mongoose = require("mongoose");
 require("dotenv").config();
 const cookieParser = require("cookie-parser");
 const { corsConfig } = require("./config/corsConfig");
 const connectDb = require("./config/db");
+const { hashPassword } = require("./config/passwordGen");
+
 const errorHandler = require("./middlewares/errorHandler");
 const authRoutes = require("./routes/auth/authRoutes");
 const verifyJwt = require("./middlewares/verifyJwt");
@@ -15,6 +16,7 @@ const leaveRoutes = require("./routes/leaveRoutes");
 const employeeAgreementRoutes = require("./routes/employeeAgreementRoutes");
 const meetingsRoutes = require("./routes/meetingRoutes");
 const assetsRoutes = require("./routes/assetsRoutes");
+const categoryRoutes = require("./routes/categoryRoutes");
 const departmentsRoutes = require("./routes/departmentRoutes");
 const companyRoutes = require("./routes/companyRoutes");
 const userRoutes = require("./routes/userRoutes");
@@ -36,25 +38,64 @@ const visitorRoutes = require("./routes/visitorRoutes");
 const websiteRoutes = require("./routes/websiteTemplatesRoutes");
 const websiteTemplateRoutes = require("./routes/websiteTemplateRoutes");
 const inventoryRoutes = require("./routes/inventoryRoutes");
+const itemRoutes = require("./routes/itemRoutes");
 const administrationRoutes = require("./routes/administrationRoutes");
 const financeRoutes = require("./routes/financeRoutes");
 const weeklyUnitRoutes = require("./routes/weeklyUnitRoutes");
 const notificationRoutes = require("./routes/notificationRoutes");
 const agreementRoutes = require("./routes/agreementRoutes");
 const logRoutes = require("./routes/logRoutes");
+const reportRoutes = require("./routes/reportRoutes");
+const printoutRoutes = require("./routes/printoutRoutes");
+const maintenanceEnergyReadingRoutes = require("./routes/maintenanceEnergyReadingRoutes");
 const auditLogger = require("./middlewares/auditLogger");
+const CoworkingRevenue = require("./models/sales/CoworkingRevenue");
+const CoworkingClient = require("./models/sales/CoworkingClient");
+const isQueueEnabled = process.env.USE_QUEUE === "true";
+
+let bullBoardAdapter = null;
+if (isQueueEnabled) {
+  bullBoardAdapter = require("./queues/bullBoard");
+}
+
+if (isQueueEnabled) {
+  require("./queues/queueEvents");
+}
+
 require("./listeners/logEventListener");
 const app = express();
-const PORT = process.env.PORT || 5008;
+const PORT = process.env.PORT || 5009;
 app.set("trust proxy", true);
-
-connectDb(process.env.DB_URL);
 
 app.use(credentials);
 app.use(cors(corsConfig));
 app.use(cookieParser());
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
+app.use("/api", (req, res, next) => {
+  delete req.headers["if-none-match"];
+  delete req.headers["if-modified-since"];
+  res.setHeader(
+    "Cache-Control",
+    "private, no-store, no-cache, must-revalidate, max-age=0",
+  );
+  res.setHeader("CDN-Cache-Control", "private, no-store, max-age=0");
+  res.setHeader("Vercel-CDN-Cache-Control", "private, no-store, max-age=0");
+  res.setHeader("Pragma", "no-cache");
+  res.setHeader("Expires", "0");
+  next();
+});
+app.use("/api", async (req, res, next) => {
+  try {
+    await connectDb(process.env.DB_URL);
+    next();
+  } catch (error) {
+    console.error("MongoDB connection failed:", error.message);
+    return res.status(503).json({
+      message: "Database temporarily unavailable. Please retry.",
+    });
+  }
+});
 app.use(express.static(path.join(__dirname, "public")));
 
 app.get("/", (req, res) => {
@@ -67,6 +108,8 @@ app.get("/", (req, res) => {
   }
 });
 
+require("./models/registerModels");
+
 app.use("/api/auth", auditLogger, authRoutes);
 
 app.use("/api/access", verifyJwt, auditLogger, accessRoutes);
@@ -75,6 +118,8 @@ app.use("/api/budget", verifyJwt, auditLogger, budgetRoutes);
 app.use("/api/departments", verifyJwt, auditLogger, departmentsRoutes);
 app.use("/api/designations", verifyJwt, auditLogger, designationRoutes);
 app.use("/api/tech", verifyJwt, auditLogger, techRoutes);
+app.use("/api/category", verifyJwt, auditLogger, categoryRoutes);
+app.use("/api/items", verifyJwt, auditLogger, itemRoutes);
 app.use("/api/assets", verifyJwt, auditLogger, assetsRoutes);
 app.use("/api/meetings", verifyJwt, auditLogger, meetingsRoutes);
 app.use("/api/tickets", verifyJwt, auditLogger, ticketsRoutes);
@@ -84,7 +129,7 @@ app.use(
   "/api/employee-agreements",
   verifyJwt,
   auditLogger,
-  employeeAgreementRoutes
+  employeeAgreementRoutes,
 );
 app.use("/api/notifications", verifyJwt, notificationRoutes);
 // app.use("/api/editor", websiteRoutes);
@@ -105,7 +150,24 @@ app.use("/api/inventory", verifyJwt, auditLogger, inventoryRoutes);
 app.use("/api/administration", verifyJwt, auditLogger, administrationRoutes);
 app.use("/api/finance", verifyJwt, auditLogger, financeRoutes);
 app.use("/api/weekly-unit", verifyJwt, auditLogger, weeklyUnitRoutes);
+app.use("/api/reports", verifyJwt, auditLogger, reportRoutes);
+app.use("/api/printout", verifyJwt, auditLogger, printoutRoutes);
+app.use(
+  "/api/maintenance",
+  verifyJwt,
+  auditLogger,
+  maintenanceEnergyReadingRoutes,
+);
+app.use(
+  "/api/maintenance/st-energy-daily",
+  verifyJwt,
+  auditLogger,
+  maintenanceEnergyReadingRoutes,
+);
 app.use("/api/logs", verifyJwt, logRoutes);
+if (bullBoardAdapter) {
+  app.use("/admin/queues", bullBoardAdapter.getRouter());
+}
 
 app.all("*", (req, res) => {
   if (req.accepts("html")) {
@@ -118,9 +180,72 @@ app.all("*", (req, res) => {
 });
 
 app.use(errorHandler);
+const startServer = async () => {
+  try {
+    await connectDb(process.env.DB_URL);
+    app.listen(PORT, () => {
+      console.log("Connected to MongoDB");
+      console.log(`Server running on port ${PORT}`);
+    });
+  } catch (error) {
+    console.error("Failed to start server:", error.message);
+    process.exitCode = 1;
+  }
+};
 
-mongoose.connection.once("open", () => {
-  console.log("Connected to MongoDB");
-  app.listen(PORT);
-  console.log(`Server running on port ${PORT}`);
-});
+if (require.main === module) {
+  startServer();
+}
+
+module.exports = app;
+
+// For Generating hashed password for testing
+// (async () => {
+//   const hashed = await hashPassword("firstName@1234");
+//   console.log(hashed);
+// })();
+
+// For Generating multiple hashed passwords
+// (async () => {
+//   const passwords = [];
+
+// const emailArray = [];
+
+//   const results = await Promise.all(
+//     passwords.map(async (rawPassword, i) => {
+//       const hashed = await hashPassword(rawPassword);
+//        return {
+//         rawPassword,
+//         email: emailArray[i],
+//         hashedPassword: hashed,
+//       };
+//     }),
+//   );
+
+//   console.table(results);
+// })();
+
+// async function backfillClientNames() {
+//   const revenues = await CoworkingRevenue.find({
+//     clientName: { $exists: false },
+//   }).lean();
+
+//   console.log("revenues", revenues.length);
+
+//   for (const r of revenues) {
+//     const client = await CoworkingClient.findById(r.clients).select(
+//       "clientName",
+//     );
+
+//     if (client) {
+//       await CoworkingRevenue.updateOne(
+//         { _id: r._id },
+//         { $set: { clientName: client.clientName } },
+//       );
+//     }
+//   }
+
+//   console.log("Backfill complete");
+// }
+
+// backfillClientNames();

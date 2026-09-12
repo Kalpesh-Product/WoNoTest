@@ -1,5 +1,23 @@
 const mongoose = require("mongoose");
 
+const meetingCreditBalanceHistorySchema = new mongoose.Schema(
+  {
+    monthStartDate: {
+      type: Date,
+      required: true,
+    },
+    remainingCredit: {
+      type: Number,
+      default: 0,
+    },
+    consumedCredit: {
+      type: Number,
+      default: 0,
+    },
+  },
+  { _id: false },
+);
+
 const clientSchema = new mongoose.Schema(
   {
     company: {
@@ -14,20 +32,25 @@ const clientSchema = new mongoose.Schema(
     },
     email: {
       type: String,
-      required: true,
-      unique: true,
+      // required: true,
+      // unique: true,
       trim: true,
       lowercase: true,
       match: [/^\S+@\S+\.\S+$/, "Invalid email format"],
     },
     bookingType: {
       type: String,
+      trim: true,
     },
     phone: {
       type: String,
       minlength: 7,
       maxlength: 20,
       match: [/^\+?[0-9]+$/, "Invalid phone number format"],
+    },
+    brandName: {
+      type: String,
+      trim: true,
     },
     service: {
       type: mongoose.Schema.Types.ObjectId,
@@ -41,6 +64,10 @@ const clientSchema = new mongoose.Schema(
     },
     hoState: {
       type: String,
+    },
+    building: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Building",
     },
     unit: {
       type: mongoose.Schema.Types.ObjectId,
@@ -57,8 +84,10 @@ const clientSchema = new mongoose.Schema(
     totalDesks: {
       type: Number,
     },
-
     ratePerOpenDesk: {
+      type: Number,
+    },
+    ratePerCabinDesk: {
       type: Number,
     },
     annualIncrement: {
@@ -76,6 +105,14 @@ const clientSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    meetingCreditBalanceHistory: {
+      type: [meetingCreditBalanceHistorySchema],
+      default: [],
+    },
+    lastManualCreditResetAt: {
+      type: Date,
+      default: null,
+    },
 
     startDate: {
       type: Date,
@@ -90,7 +127,34 @@ const clientSchema = new mongoose.Schema(
       imageId: String,
       imageUrl: String,
     },
-    rentDate: { type: Date },
+    documents: [
+      new mongoose.Schema(
+        {
+          name: {
+            type: String,
+            trim: true,
+          },
+          url: {
+            type: String,
+            trim: true,
+          },
+          documentId: {
+            type: String,
+            trim: true,
+          },
+          fileType: {
+            type: String,
+            trim: true,
+          },
+        },
+        { _id: false, timestamps: true },
+      ),
+    ],
+    // rentDate: { type: Date },
+    // rentDate: { type: String },
+    rentDate: {
+      type: mongoose.Schema.Types.Mixed,
+    },
     nextIncrement: {
       type: Date,
     },
@@ -149,8 +213,17 @@ const clientSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    lastCreditReset: {
+      type: Date,
+      default: Date.now,
+    },
   },
-  { timestamps: true }
+  { timestamps: true },
+);
+
+clientSchema.index(
+  { email: 1 },
+  { unique: true, partialFilterExpression: { email: { $type: "string" } } },
 );
 
 const CoworkingClient = mongoose.model("CoworkingClient", clientSchema);

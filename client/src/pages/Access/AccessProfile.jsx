@@ -40,7 +40,7 @@ const AccessProfile = () => {
   const fetchUserPermissions = async () => {
     if (!user?._id) return null;
     const response = await axios.get(
-      `/api/access/user-permissions/${user._id}`
+      `/api/access/user-permissions/${user._id}`,
     );
     return response.data;
   };
@@ -62,7 +62,7 @@ const AccessProfile = () => {
         `/api/access/modify-permissions/${user._id}`,
         {
           permissions: data.permissions,
-        }
+        },
       );
       return response.data;
     },
@@ -88,22 +88,25 @@ const AccessProfile = () => {
 
   const groupPermissionsByModule = (permissionsObj) => {
     const grouped = {};
-    Object.entries(permissionsObj).forEach(([key, { value, type, access }]) => {
-      const [module] = key.split("_");
+    Object.entries(permissionsObj).forEach(
+      ([key, { value, type, access, title }]) => {
+        const [module] = key.split("_");
 
-      if (!grouped[module]) grouped[module] = [];
+        if (!grouped[module]) grouped[module] = [];
 
-      grouped[module].push({
-        key,
-        action: value,
-        type,
-        access: access,
-        label: value
-          .split("_")
-          .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-          .join("_"),
-      });
-    });
+        grouped[module].push({
+          key,
+          action: value,
+          type,
+          access: access,
+          title: title,
+          label: value
+            .split("_")
+            .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+            .join("_"),
+        });
+      },
+    );
     return grouped;
   };
 

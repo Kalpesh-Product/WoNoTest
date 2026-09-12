@@ -5,19 +5,52 @@ import { useNavigate } from "react-router-dom";
 import { IoIosSearch } from "react-icons/io";
 import { TextField } from "@mui/material";
 import Card from "../../../components/Card";
+import { PERMISSIONS } from "../../../constants/permissions";
+import useAuth from "../../../hooks/useAuth";
 
 const HrMixBag = () => {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
+  const { auth } = useAuth();
+  const userPermissions = auth?.user?.permissions?.permissions || [];
   const routes = [
     {
       title: "Attendance Requests",
       route:
         "/app/dashboard/HR-dashboard/mix-bag/attendance",
+      permission: PERMISSIONS.HR_ATTENDANCE_REQUESTS_MIX_BAG.value,
+    },
+    {
+      title: "Monthly Attendance Summary",
+      route: "/app/dashboard/HR-dashboard/mix-bag/monthly-attendance",
+      permission: PERMISSIONS.HR_ATTENDANCE_REQUESTS_MIX_BAG.value,
+    },
+    {
+      title: "Run Payroll",
+      route: "/app/dashboard/HR-dashboard/mix-bag/payroll",
+      permission: PERMISSIONS.HR_PAYROLL.value,
+    },
+    {
+      title: "Summary Payroll",
+      route: "/app/dashboard/HR-dashboard/mix-bag/payroll-summary",
+      permission: PERMISSIONS.HR_PAYROLL.value,
     },
     {
       title: "Leave Requests",
       route: "/app/dashboard/HR-dashboard/mix-bag/leaves/pending-approvals",
+      permission: PERMISSIONS.HR_LEAVE_REQUESTS_MIX_BAG.value,
+    },
+
+     {
+      title: "Department KPA/KRA",
+      route: "/app/dashboard/HR-dashboard/mix-bag/department-kpa-kra/department-KPA",
+      permission: PERMISSIONS.HR_DEPARTMENT_KPA_KRA_MIX_BAG.value,
+    },
+    {
+      title: "Department Tasks",
+      route: "/app/dashboard/HR-dashboard/mix-bag/department-tasks/department-task",
+
+      permission: PERMISSIONS.HR_DEPARTMENT_TASK_MIX_BAG.value,
     },
 
   ];
@@ -26,13 +59,22 @@ const HrMixBag = () => {
     setSearch(event.target.value);
   };
 
-  const filteredRoutes = routes.filter((route) =>
-    route.title.toLowerCase().includes(search.toLowerCase())
-  );
+  // const filteredRoutes = routes.filter((route) =>
+  //   route.title.toLowerCase().includes(search.toLowerCase())
+  // );
+
+   const filteredRoutes = routes.filter((route) => {
+    const hasPermission =
+      !route.permission || userPermissions.includes(route.permission);
+    const matchesSearch = route.title
+      .toLowerCase()
+      .includes(search.toLowerCase());
+    return hasPermission && matchesSearch;
+  });
 
   return (
     <div className="p-4 flex flex-col gap-4">
-      <div>
+      {/* <div>
         <TextField
           label="Search"
           name="search"
@@ -47,7 +89,7 @@ const HrMixBag = () => {
             ),
           }}
         />
-      </div>
+      </div> */}
       <div className="h-[50vh] uppercase">
         <WidgetSection key={filteredRoutes.length} layout={2} padding>
           {filteredRoutes.map((route, index) => {

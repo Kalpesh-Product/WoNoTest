@@ -10,18 +10,18 @@ const { default: mongoose } = require("mongoose");
 const getAssetRequests = async (req, res, next) => {
   try {
     const { user, company } = req;
-    const { departmentId, status, assignee } = req.query;
+    const { department, status, assignee } = req.query;
 
     let query = { company };
 
-    if (departmentId) {
-      if (!mongoose.Types.ObjectId.isValid(departmentId)) {
+    if (department) {
+      if (!mongoose.Types.ObjectId.isValid(department)) {
         return res
           .status(400)
           .json({ message: "Invalid department id provided" });
       }
 
-      query = { ...query, toDepartment: departmentId };
+      query = { ...query, fromDepartment: department };
     }
 
     if (status) {
@@ -52,7 +52,15 @@ const getAssetRequests = async (req, res, next) => {
       .populate([
         {
           path: "asset",
-          populate: { path: "subCategory", populate: "category" },
+          // populate: { path: "subCategory", populate: "category" },
+           populate: [
+            { path: "subCategory", populate: "category" },
+            {
+              path: "location",
+              select: "unitName unitNo",
+              populate: { path: "building", select: "buildingName" },
+            },
+          ],
         },
         { path: "fromDepartment", select: "name" },
         { path: "toDepartment", select: "name" },
@@ -62,6 +70,8 @@ const getAssetRequests = async (req, res, next) => {
           populate: { path: "building" },
         },
         { path: "assignee", select: "firstName lastName empId" },
+        { path: "assignedBy", select: "firstName lastName empId" },
+        { path: "approvedBy", select: "firstName lastName empId" },
       ])
       .sort({ dateOfAssigning: -1 }); // Sort by latest assignments
 
@@ -84,7 +94,7 @@ const requestAsset = async (req, res, next) => {
         "All fields are required.",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
 
@@ -94,7 +104,7 @@ const requestAsset = async (req, res, next) => {
         "Asset not found.",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
 
@@ -104,6 +114,7 @@ const requestAsset = async (req, res, next) => {
       fromDepartment: fromDepartmentId,
       toDepartment: toDepartmentId,
       assignee: user,
+      assignedBy: user,
       company: company,
       location,
       status: "Pending",
@@ -121,7 +132,7 @@ const requestAsset = async (req, res, next) => {
       next(error);
     } else {
       next(
-        new CustomError(error.message, logPath, logAction, logSourceKey, 500)
+        new CustomError(error.message, logPath, logAction, logSourceKey, 500),
       );
     }
   }
@@ -147,7 +158,7 @@ const assignAsset = async (req, res, next) => {
         "All fields are required.",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
 
@@ -179,7 +190,7 @@ const assignAsset = async (req, res, next) => {
         "Asset not found.",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
 
@@ -189,7 +200,7 @@ const assignAsset = async (req, res, next) => {
         "Department not found.",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
 
@@ -199,17 +210,17 @@ const assignAsset = async (req, res, next) => {
         "Department not found.",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
 
-    const user = await User.findById(assignee);
-    if (!user) {
+    const assigneeUser = await User.findById(assignee);
+    if (!assigneeUser) {
       throw new CustomError(
         "User not found.",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
 
@@ -219,7 +230,7 @@ const assignAsset = async (req, res, next) => {
         "Location not found.",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
 
@@ -232,11 +243,25 @@ const assignAsset = async (req, res, next) => {
     ];
 
     const isAdmin = allowedRoles.some((allowedRole) =>
-      roles.includes(allowedRole)
+      roles.includes(allowedRole),
     );
 
     if (asset.isAssigned) {
       return res.status(400).json({ message: "Asset is already assigned" });
+    }
+
+    const pendingRequest = await AssignAsset.findOne({
+      asset: assetId,
+      status: "Pending",
+    })
+      .select("_id")
+      .lean()
+      .exec();
+
+    if (pendingRequest) {
+      return res.status(400).json({
+        message: "Asset assignment is already pending approval",
+      });
     }
 
     if (asset.status === "Inactive") {
@@ -244,7 +269,7 @@ const assignAsset = async (req, res, next) => {
         "Asset is currently inactive",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
     if (asset.isUnderMaintenance) {
@@ -252,7 +277,7 @@ const assignAsset = async (req, res, next) => {
         "Asset is currently under maintenance",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
     if (asset.isDamaged) {
@@ -260,7 +285,7 @@ const assignAsset = async (req, res, next) => {
         "Asset is currently damaged",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
 
@@ -269,7 +294,8 @@ const assignAsset = async (req, res, next) => {
       asset: assetId,
       fromDepartment: fromDepartmentId,
       toDepartment: toDepartmentId,
-      assignee: user,
+      assignee,
+      assignedBy: user,
       company: company,
       location,
       approvedBy: isAdmin ? user : null,
@@ -294,7 +320,7 @@ const assignAsset = async (req, res, next) => {
       next(error);
     } else {
       next(
-        new CustomError(error.message, logPath, logAction, logSourceKey, 500)
+        new CustomError(error.message, logPath, logAction, logSourceKey, 500),
       );
     }
   }
@@ -314,7 +340,7 @@ const processAssetRequest = async (req, res, next) => {
         "Request ID and action are required.",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
 
@@ -323,7 +349,7 @@ const processAssetRequest = async (req, res, next) => {
         "Invalid action. Use 'Approved' or 'Rejected'.",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
 
@@ -333,7 +359,7 @@ const processAssetRequest = async (req, res, next) => {
         "Assignment request not found.",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
 
@@ -343,7 +369,7 @@ const processAssetRequest = async (req, res, next) => {
         "Asset not found.",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
 
@@ -357,7 +383,7 @@ const processAssetRequest = async (req, res, next) => {
           "Asset is currently inactive",
           logPath,
           logAction,
-          logSourceKey
+          logSourceKey,
         );
       }
       if (asset.isUnderMaintenance) {
@@ -365,7 +391,7 @@ const processAssetRequest = async (req, res, next) => {
           "Asset is currently under maintenance",
           logPath,
           logAction,
-          logSourceKey
+          logSourceKey,
         );
       }
       if (asset.isDamaged) {
@@ -373,7 +399,7 @@ const processAssetRequest = async (req, res, next) => {
           "Asset is currently damaged",
           logPath,
           logAction,
-          logSourceKey
+          logSourceKey,
         );
       }
       request.status = "Approved";
@@ -397,7 +423,7 @@ const processAssetRequest = async (req, res, next) => {
       next(error);
     } else {
       next(
-        new CustomError(error.message, logPath, logAction, logSourceKey, 500)
+        new CustomError(error.message, logPath, logAction, logSourceKey, 500),
       );
     }
   }
@@ -418,7 +444,7 @@ const revokeAsset = async (req, res, next) => {
         "Assigned asset ID is required.",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
 
@@ -428,7 +454,7 @@ const revokeAsset = async (req, res, next) => {
         "Assigned asset not found.",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
 
@@ -437,7 +463,7 @@ const revokeAsset = async (req, res, next) => {
         "Asset is not assigned to any person.",
         logPath,
         logAction,
-        logSourceKey
+        logSourceKey,
       );
     }
 
@@ -448,7 +474,7 @@ const revokeAsset = async (req, res, next) => {
           "User not found.",
           logPath,
           logAction,
-          logSourceKey
+          logSourceKey,
         );
       }
       // Remove the asset from the user's assignedAsset array
@@ -488,7 +514,7 @@ const revokeAsset = async (req, res, next) => {
       next(error);
     } else {
       next(
-        new CustomError(error.message, logPath, logAction, logSourceKey, 500)
+        new CustomError(error.message, logPath, logAction, logSourceKey, 500),
       );
     }
   }
