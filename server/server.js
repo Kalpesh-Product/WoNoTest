@@ -52,7 +52,7 @@ const auditLogger = require("./middlewares/auditLogger");
 const CoworkingRevenue = require("./models/sales/CoworkingRevenue");
 const CoworkingClient = require("./models/sales/CoworkingClient");
 const isQueueEnabled = process.env.USE_QUEUE === "true";
-
+ 
 let bullBoardAdapter = null;
 if (isQueueEnabled) {
   bullBoardAdapter = require("./queues/bullBoard");
