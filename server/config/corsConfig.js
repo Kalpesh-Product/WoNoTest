@@ -5,7 +5,7 @@ const allowedOrigins = [
   "http://localhost:3008",
   "http://localhost:3001",
   "http://localhost:4173",
-  "https://wonofe.vercel.app",
+  "https://wonotestfe.vercel.app",
   "https://wonomasterfe.vercel.app",
 ];
 
