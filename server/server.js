@@ -41,6 +41,7 @@ const inventoryRoutes = require("./routes/inventoryRoutes");
 const itemRoutes = require("./routes/itemRoutes");
 const administrationRoutes = require("./routes/administrationRoutes");
 const financeRoutes = require("./routes/financeRoutes");
+const exchangeRateRoutes = require("./routes/exchangeRateRoutes");
 const weeklyUnitRoutes = require("./routes/weeklyUnitRoutes");
 const notificationRoutes = require("./routes/notificationRoutes");
 const agreementRoutes = require("./routes/agreementRoutes");
@@ -52,7 +53,7 @@ const auditLogger = require("./middlewares/auditLogger");
 const CoworkingRevenue = require("./models/sales/CoworkingRevenue");
 const CoworkingClient = require("./models/sales/CoworkingClient");
 const isQueueEnabled = process.env.USE_QUEUE === "true";
- 
+
 let bullBoardAdapter = null;
 if (isQueueEnabled) {
   bullBoardAdapter = require("./queues/bullBoard");
@@ -85,6 +86,7 @@ app.use("/api", (req, res, next) => {
   res.setHeader("Expires", "0");
   next();
 });
+app.use("/api/exchange-rates", exchangeRateRoutes);
 app.use("/api", async (req, res, next) => {
   try {
     await connectDb(process.env.DB_URL);

@@ -1,22 +1,35 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { useLocation } from "react-router-dom";
+import { api } from "../utils/axios";
 
 const STORAGE_KEY = "investor-dashboard-currency";
 const RATES_STORAGE_KEY = "investor-dashboard-exchange-rates";
+const SUPPORTED_CURRENCIES = ["INR", "USD", "AED"];
 const CurrencyContext = createContext(null);
 
 export const CurrencyProvider = ({ children }) => {
-   const { pathname } = useLocation();
+  const { pathname } = useLocation();
   const isInvestorDashboard = pathname.includes("/investor-dashboard");
   const [currency, setCurrency] = useState(
-    () => localStorage.getItem(STORAGE_KEY) || "INR",
+    () => {
+      const savedCurrency = localStorage.getItem(STORAGE_KEY);
+      return SUPPORTED_CURRENCIES.includes(savedCurrency) ? savedCurrency : "INR";
+    },
   );
   const [rates, setRates] = useState(() => {
     try {
-      const cachedRates = JSON.parse(localStorage.getItem(RATES_STORAGE_KEY));
+      const cachedData = JSON.parse(localStorage.getItem(RATES_STORAGE_KEY));
+      const cachedRates = cachedData?.rates || cachedData;
       return cachedRates?.INR ? cachedRates : { INR: 1 };
     } catch {
       return { INR: 1 };
+    }
+  });
+  const [ratesDate, setRatesDate] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem(RATES_STORAGE_KEY))?.date || "";
+    } catch {
+      return "";
     }
   });
   const [isRatesLoading, setIsRatesLoading] = useState(true);
@@ -27,32 +40,44 @@ export const CurrencyProvider = ({ children }) => {
   }, [currency]);
 
   useEffect(() => {
-      if (!isInvestorDashboard) {
+    if (!isInvestorDashboard) {
       setIsRatesLoading(false);
       return undefined;
     }
 
     setIsRatesLoading(true);
     const controller = new AbortController();
-    fetch("https://open.er-api.com/v6/latest/INR", {
-      signal: controller.signal,
-    })
-      .then((response) => {
-        if (!response.ok) throw new Error("Exchange rates are unavailable");
-        return response.json();
+    api
+      .get("/api/exchange-rates", {
+        params: { base: "INR" },
+        signal: controller.signal,
       })
+      .then((response) => response.data)
       .then((data) => {
-        if (data.result !== "success" || !data.rates) {
+        const hasSupportedRates = SUPPORTED_CURRENCIES.every(
+          (code) => Number(data.rates?.[code]) > 0,
+        );
+        if (data.base !== "INR" || !hasSupportedRates) {
           throw new Error("Invalid exchange-rate response");
         }
         setRates(data.rates);
-        localStorage.setItem(RATES_STORAGE_KEY, JSON.stringify(data.rates));
+        setRatesDate(data.date || "");
+        localStorage.setItem(
+          RATES_STORAGE_KEY,
+          JSON.stringify({
+            date: data.date || "",
+            rates: data.rates,
+          }),
+        );
         setRatesError("");
       })
       .catch((error) => {
-        if (error.name !== "AbortError") {
+        if (error.name !== "CanceledError") {
           console.warn("Using fallback exchange rates", error);
-          setRatesError("Live exchange rates could not be refreshed");
+          setRatesError(
+            error.response?.data?.message ||
+              "Live exchange rates could not be refreshed",
+          );
         }
       })
       .finally(() => setIsRatesLoading(false));
@@ -61,44 +86,81 @@ export const CurrencyProvider = ({ children }) => {
   }, [isInvestorDashboard]);
 
   const value = useMemo(() => {
-    const rate = rates[currency] || 1;
-    const convert = (amount) => (Number(amount) || 0) * rate;
-    const format = (amount, options = {}) =>
-      new Intl.NumberFormat(undefined, {
-        style: "currency",
-        currency,
+    const getRate = (fromCurrency = "INR", toCurrency = currency) => {
+      const from = String(fromCurrency || "INR").toUpperCase();
+      const to = String(toCurrency || currency).toUpperCase();
+      if (from === to) return 1;
+
+      const fromRate = Number(rates[from]);
+      const toRate = Number(rates[to]);
+      if (!(fromRate > 0) || !(toRate > 0)) return null;
+      return toRate / fromRate;
+    };
+    const rate = getRate("INR", currency) || 1;
+    const convert = (amount, originalCurrency = "INR") => {
+      const conversionRate = getRate(originalCurrency, currency);
+      return (Number(amount) || 0) * (conversionRate || 1);
+    };
+    const formatCurrencyValue = (amount, options = {}) => {
+      const formatterOptions = {
         minimumFractionDigits: 0,
         maximumFractionDigits: 0,
         ...options,
-      }).format(convert(amount));
+      };
+
+      if (isInvestorDashboard && currency !== "INR") {
+        const investorFormatterOptions = {
+          ...formatterOptions,
+          minimumFractionDigits: 0,
+          maximumFractionDigits: 0,
+        };
+
+        return `${new Intl.NumberFormat("en-IN", investorFormatterOptions).format(Math.trunc(amount))} ${currency}`;
+      }
+
+      if (currency === "INR") {
+        return new Intl.NumberFormat("en-IN", {
+          style: "currency",
+          currency,
+          ...formatterOptions,
+        }).format(amount);
+      }
+
+      return new Intl.NumberFormat(undefined, {
+        style: "currency",
+        currency,
+        ...formatterOptions,
+      }).format(amount);
+    };
+    const format = (amount, options = {}, originalCurrency = "INR") =>
+      formatCurrencyValue(convert(amount, originalCurrency), options);
 
     const formatConverted = (amount, options = {}) =>
-      new Intl.NumberFormat(undefined, {
-        style: "currency",
-        currency,
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 0,
-        ...options,
-      }).format(Number(amount) || 0);
+      formatCurrencyValue(Number(amount) || 0, options);
 
-    const currencies = Object.keys(rates).sort((first, second) => {
-      if (first === "INR") return -1;
-      if (second === "INR") return 1;
-      return first.localeCompare(second);
-    });
+    const currencies = SUPPORTED_CURRENCIES;
 
     return {
       currency,
       currencies,
       isRatesLoading,
       ratesError,
+      ratesDate,
       setCurrency,
       rate,
+      getRate,
       convert,
       format,
       formatConverted,
     };
-  }, [currency, isRatesLoading, rates, ratesError]);
+  }, [
+    currency,
+    isInvestorDashboard,
+    isRatesLoading,
+    rates,
+    ratesDate,
+    ratesError,
+  ]);
 
   return (
     <CurrencyContext.Provider value={value}>{children}</CurrencyContext.Provider>

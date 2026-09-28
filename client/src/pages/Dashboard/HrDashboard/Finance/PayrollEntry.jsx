@@ -1,9 +1,16 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import dayjs from "dayjs";
-import { useEffect, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { MenuItem, TextField } from "@mui/material";
-import { MdDeleteOutline, MdEdit, MdUndo } from "react-icons/md";
+import {
+  MdDeleteOutline,
+  MdCheckCircle,
+  MdEdit,
+  MdRadioButtonUnchecked,
+  MdUndo,
+  MdWarning,
+} from "react-icons/md";
 import PageFrame from "../../../../components/Pages/PageFrame";
 import AgTable from "../../../../components/AgTable";
 import ConfirmationModal from "../../../../components/ConfirmationModal";
@@ -31,6 +38,35 @@ const SummarySection = ({ title, rows }) => (
     </div>
   </section>
 );
+
+const ChecklistItem = ({ icon, title, children, onClick, disabled = false }) => {
+  const content = (
+    <>
+      {icon && <span className="mt-0.5 shrink-0">{icon}</span>}
+      <span className="min-w-0">
+        <span className="block text-left font-medium text-sky-600">{title}</span>
+        {children && (
+          <span className="mt-1 block text-left text-sm text-gray-500">
+            {children}
+          </span>
+        )}
+      </span>
+    </>
+  );
+
+  return onClick ? (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      className="flex w-full items-start gap-3 rounded px-2 py-2 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent"
+    >
+      {content}
+    </button>
+  ) : (
+    <div className="flex items-start gap-3 px-2 py-2">{content}</div>
+  );
+};
 
 const numberValue = (value) => Number(value) || 0;
 const baseAllowanceOptions = [
@@ -182,6 +218,7 @@ const buildEmployeeRows = (draft) => {
 
 const PayrollEntry = () => {
   const axios = useAxiosPrivate();
+  const navigate = useNavigate();
   const { draftId } = useParams();
   const [employeeRows, setEmployeeRows] = useState([]);
   const [editingEmployee, setEditingEmployee] = useState(null);
@@ -190,9 +227,10 @@ const PayrollEntry = () => {
   const [showUndoConfirmation, setShowUndoConfirmation] = useState(false);
   const [employeeToUndo, setEmployeeToUndo] = useState(null);
   const [showSubmitConfirmation, setShowSubmitConfirmation] = useState(false);
+  const [showVoidConfirmation, setShowVoidConfirmation] = useState(false);
+  const [showReleasePayslips, setShowReleasePayslips] = useState(false);
+  const [sendPayslipEmails, setSendPayslipEmails] = useState("yes");
   const [isPayrollSubmitted, setIsPayrollSubmitted] = useState(false);
-  const [allowanceImportFile, setAllowanceImportFile] = useState("");
-  const allowanceImportRef = useRef(null);
   const { data: draft, isLoading, refetch: refetchDraft } = useQuery({
     queryKey: ["payrollDraft", draftId],
     queryFn: async () => {
@@ -227,6 +265,45 @@ const PayrollEntry = () => {
         return response.data;
       },
     });
+  const { mutateAsync: voidDraft, isPending: isVoidingPayroll } = useMutation({
+    mutationFn: async () => {
+      const response = await axios.delete(`/api/payroll/drafts/${draftId}`);
+      return response.data;
+    },
+  });
+  const { mutateAsync: releasePayslips, isPending: isReleasingPayslips } =
+    useMutation({
+      mutationFn: async (sendEmails) => {
+        const response = await axios.post(
+          `/api/payroll/drafts/${draftId}/release-payslips`,
+          { sendEmails }
+        );
+        return response.data;
+      },
+    });
+  const { mutateAsync: retryPayslipEmails, isPending: isRetryingPayslipEmails } =
+    useMutation({
+      mutationFn: async () => {
+        const response = await axios.post(
+          `/api/payroll/drafts/${draftId}/retry-payslip-emails`
+        );
+        return response.data;
+      },
+    });
+  const {
+    data: payslipEmailStatus,
+    refetch: refetchPayslipEmailStatus,
+    isFetching: isFetchingPayslipEmailStatus,
+  } = useQuery({
+    queryKey: ["payrollPayslipEmailStatus", draftId],
+    enabled: Boolean(showReleasePayslips && draft?.payslipsReleasedAt),
+    queryFn: async () => {
+      const response = await axios.get(
+        `/api/payroll/drafts/${draftId}/payslip-email-status`
+      );
+      return response.data;
+    },
+  });
   const { mutateAsync: undoDraftChange, isPending: isUndoingDraft } =
     useMutation({
       mutationFn: async () => {
@@ -336,6 +413,72 @@ const PayrollEntry = () => {
     .filter(Boolean)
     .join(" ") || "N/A";
   const isProcessed = draft.status === "Processed";
+  const processedDate = dayjs(draft.submittedAt || draft.runDate || draft.updatedAt);
+  const complianceDueMonth = dayjs(draft.payPeriod).add(1, "month");
+  const totalTds =
+    numberValue(draft.incomeTax) +
+    numberValue(draft.surcharge) +
+    numberValue(draft.cess);
+  const totalPf =
+    numberValue(draft.employeePf) +
+    numberValue(draft.employerPf) +
+    numberValue(draft.voluntaryProvidentFund);
+  const totalEsi = numberValue(draft.employeeEsi) + numberValue(draft.employerEsi);
+  const releaseSummary = draft.payslipReleaseSummary || {};
+  const generatedPayslipCount = numberValue(releaseSummary.generated);
+  const sentPayslipCount = numberValue(releaseSummary.sent);
+  const failedPayslipEmailCount =
+    numberValue(releaseSummary.failed) + numberValue(releaseSummary.skipped);
+  const payslipsGenerated =
+    generatedPayslipCount > 0 || Boolean(draft.payslipsReleasedAt);
+  const allPayslipEmailsSent =
+    generatedPayslipCount > 0 && sentPayslipCount >= generatedPayslipCount;
+  const isReleasingOrRetrying =
+    isReleasingPayslips || isRetryingPayslipEmails;
+
+  const handleReleasePayslips = async () => {
+    try {
+      const shouldSendEmails = sendPayslipEmails === "yes";
+      const response =
+        payslipsGenerated && shouldSendEmails
+          ? await retryPayslipEmails()
+          : await releasePayslips(shouldSendEmails);
+      await refetchDraft();
+      await queryClient.invalidateQueries({ queryKey: ["employeePayslips"] });
+      await queryClient.invalidateQueries({ queryKey: ["payslips"] });
+      await queryClient.invalidateQueries({
+        queryKey: ["payrollPayslipEmailStatus", draftId],
+      });
+      const failedToSend =
+        numberValue(response.summary?.failed) +
+        numberValue(response.summary?.skipped);
+      if (shouldSendEmails && failedToSend > 0) {
+        setShowReleasePayslips(true);
+        await refetchPayslipEmailStatus();
+        toast.warning(
+          `${numberValue(response.summary?.sent)} email(s) sent; ${failedToSend} could not be sent. Review the reasons and retry.`
+        );
+      } else {
+        setShowReleasePayslips(false);
+        toast.success(response.message || "Payslips generated successfully");
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to generate payslips");
+    }
+  };
+  const confirmVoidPayroll = async () => {
+    try {
+      const response = await voidDraft();
+      await queryClient.invalidateQueries({ queryKey: ["payrollDrafts"] });
+      setShowVoidConfirmation(false);
+      toast.success(response.message || "Payroll draft voided successfully");
+      navigate("/app/dashboard/HR-dashboard/mix-bag/payroll-summary", {
+        replace: true,
+      });
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to void payroll draft");
+    }
+  };
   const saveEmployeeEdit = async () => {
     const allowanceItems = (editingEmployee.allowanceItems || []).map((row) => ({
       ...row,
@@ -546,12 +689,6 @@ const PayrollEntry = () => {
         : [...currentEmployees, employee]
     );
   };
-  const selectImportFile = (event) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    setAllowanceImportFile(file.name);
-    event.target.value = "";
-  };
   const handleUndo = () => {
     if (selectedEmployees.length > 0) {
       setSelectedEmployees([]);
@@ -566,7 +703,6 @@ const PayrollEntry = () => {
       setEmployeeRows(buildEmployeeRows(response.data));
       setSelectedEmployees([]);
       setShowUndoConfirmation(false);
-      setAllowanceImportFile("");
       await refetchDraft();
       await queryClient.invalidateQueries({ queryKey: ["payrollDrafts"] });
       toast.success(response.message || "Last payroll draft change undone");
@@ -735,13 +871,28 @@ const PayrollEntry = () => {
           </div>
         </div>
 
-        <div className="flex items-center gap-3 border-b pb-4 text-content">
+        <div className="flex flex-wrap items-center gap-3 border-b pb-4 text-content">
           <span>
-            Processed On: {dayjs(draft.submittedAt || draft.runDate || draft.createdAt).format("DD MMM, YYYY")}
+            Pay Period: {dayjs(draft.payPeriod).startOf("month").format("DD MMM, YYYY")} - {dayjs(draft.payPeriod).endOf("month").format("DD MMM, YYYY")}
           </span>
           <span className="rounded bg-gray-200 px-2 py-1 text-xs font-semibold text-gray-600">
             {draft.status}
           </span>
+          <div className="ml-auto flex items-center gap-3">
+            {!isProcessed && (
+              <SecondaryButton
+                title="Void Payroll"
+                handleSubmit={() => setShowVoidConfirmation(true)}
+                disabled={isVoidingPayroll}
+              />
+            )}
+            <PrimaryButton
+              title={isPayrollSubmitted ? "Processed" : "Submit Payroll"}
+              handleSubmit={() => setShowSubmitConfirmation(true)}
+              disabled={isPayrollSubmitted || isSubmittingPayroll}
+              isLoading={isSubmittingPayroll}
+            />
+          </div>
         </div>
 
         <div className="grid grid-cols-1 gap-x-8 gap-y-16 lg:grid-cols-3">
@@ -784,6 +935,83 @@ const PayrollEntry = () => {
               ["ESI Employees (count)", numberValue(draft.esiEmployeeCount)],
             ]}
           />
+          {isProcessed && (
+            <section className="lg:col-span-2">
+              <h2 className="border-b pb-3 font-pmedium text-subtitle font-semibold text-primary">
+                Post Payroll Checklist
+              </h2>
+              <div className="mt-3 space-y-1">
+                <ChecklistItem
+                  icon={
+                    allPayslipEmailsSent ? (
+                      <MdCheckCircle size={18} className="text-green-600" />
+                    ) : payslipsGenerated && failedPayslipEmailCount > 0 ? (
+                      <MdWarning size={18} className="text-amber-500" />
+                    ) : payslipsGenerated ? (
+                      <MdCheckCircle size={18} className="text-sky-500" />
+                    ) : (
+                      <MdRadioButtonUnchecked
+                        size={18}
+                        className="text-gray-400"
+                      />
+                    )
+                  }
+                  title="Release Payslips"
+                  onClick={() => {
+                    if (!allPayslipEmailsSent) {
+                      if (payslipsGenerated) setSendPayslipEmails("yes");
+                      setShowReleasePayslips(true);
+                    }
+                  }}
+                  disabled={allPayslipEmailsSent}
+                />
+                <ChecklistItem
+                  icon={
+                    <MdRadioButtonUnchecked
+                      size={18}
+                      className="text-gray-400"
+                    />
+                  }
+                  title="Pay Date & Payment Method"
+                >
+                  <span className="block">
+                    Pay Date: {processedDate.isValid() ? processedDate.format("DD MMM, YYYY") : "N/A"}
+                  </span>
+                  <span className="block">
+                    Bank Deposit: {numberValue(draft.employeeCount)}, Cash: 0,
+                    Cheque: 0
+                  </span>
+                </ChecklistItem>
+                <ChecklistItem
+                  icon={<MdWarning size={18} className="text-amber-500" />}
+                  title="TDS Payment Tracking"
+                >
+                  <span className="flex flex-wrap justify-between gap-x-8">
+                    <span>Amount: {inrFormat(totalTds)}</span>
+                    <span>Due Date: {complianceDueMonth.date(7).format("DD MMM, YYYY")}</span>
+                  </span>
+                </ChecklistItem>
+                <ChecklistItem
+                  icon={<MdWarning size={18} className="text-amber-500" />}
+                  title="EPF Transfer & Filing Check"
+                >
+                  <span className="flex flex-wrap justify-between gap-x-8">
+                    <span>Amount: {inrFormat(totalPf)}</span>
+                    <span>Due Date: {complianceDueMonth.date(15).format("DD MMM, YYYY")}</span>
+                  </span>
+                </ChecklistItem>
+                <ChecklistItem
+                  icon={<MdWarning size={18} className="text-amber-500" />}
+                  title="ESI Transfer & Filing Check"
+                >
+                  <span className="flex flex-wrap justify-between gap-x-8">
+                    <span>Amount: {inrFormat(totalEsi)}</span>
+                    <span>Due Date: {complianceDueMonth.date(15).format("DD MMM, YYYY")}</span>
+                  </span>
+                </ChecklistItem>
+              </div>
+            </section>
+          )}
           <SummarySection
             title="Activity"
             rows={[
@@ -833,22 +1061,6 @@ const PayrollEntry = () => {
                   disabled={isExportingPayroll}
                   isLoading={isExportingPayroll}
                 />
-                <PrimaryButton
-                  title="Import Allowances/Deductions"
-                  handleSubmit={() => allowanceImportRef.current?.click()}
-                />
-                <input
-                  ref={allowanceImportRef}
-                  type="file"
-                  accept=".csv,.xls,.xlsx"
-                  className="hidden"
-                  onChange={selectImportFile}
-                />
-                {allowanceImportFile && (
-                  <span className="text-xs text-gray-500">
-                    Selected: {allowanceImportFile}
-                  </span>
-                )}
                 {selectedEmployees.length > 0 && (
                   <PrimaryButton
                     title={`Delete (${selectedEmployees.length})`}
@@ -856,13 +1068,6 @@ const PayrollEntry = () => {
                     externalStyles="!bg-red-600"
                   />
                 )}
-                <div className="ml-auto">
-                  <PrimaryButton
-                    title={isPayrollSubmitted ? "Processed" : "Submit Payroll"}
-                    handleSubmit={() => setShowSubmitConfirmation(true)}
-                    disabled={isPayrollSubmitted || isSubmittingPayroll}
-                  />
-                </div>
               </div>
             }
             getRowStyle={({ data: employee }) =>
@@ -875,6 +1080,124 @@ const PayrollEntry = () => {
           />
         </div>
       </div>
+
+      <MuiModal
+        open={showReleasePayslips}
+        onClose={() => setShowReleasePayslips(false)}
+        title="Release Payslips"
+        widthClass="w-[90%] max-w-4xl"
+      >
+        <div className="flex min-h-72 flex-col">
+          <p className="text-content text-gray-700">
+            Please confirm whether employees should be notified about their
+            payslips for this pay period. Only employees with an email address
+            in their contact information will receive the payslip email.
+          </p>
+
+          <fieldset className="mt-7 flex flex-wrap items-center gap-4 text-content">
+            <legend className="float-left mr-2">
+              Do you want to send emails to your employees?
+            </legend>
+            {["yes", "no"].map((option) => (
+              <label
+                key={option}
+                className={`flex items-center gap-2 ${
+                  option === "no" && payslipsGenerated
+                    ? "cursor-not-allowed opacity-50"
+                    : "cursor-pointer"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="sendPayslipEmails"
+                  value={option}
+                  checked={sendPayslipEmails === option}
+                  disabled={option === "no" && payslipsGenerated}
+                  onChange={(event) => setSendPayslipEmails(event.target.value)}
+                />
+                <span className="capitalize">{option}</span>
+              </label>
+            ))}
+          </fieldset>
+
+          {payslipsGenerated && (
+            <div className="mt-6">
+              <div className="flex flex-wrap gap-4 text-sm text-gray-600">
+                <span>
+                  Generated: {numberValue(payslipEmailStatus?.summary?.generated)}
+                </span>
+                <span className="text-green-700">
+                  Sent: {numberValue(payslipEmailStatus?.summary?.sent)}
+                </span>
+                <span className="text-red-600">
+                  Failed to send:{" "}
+                  {numberValue(payslipEmailStatus?.summary?.failedToSend)}
+                </span>
+              </div>
+
+              {payslipEmailStatus?.systemError && (
+                <div className="mt-3 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                  {payslipEmailStatus.systemError}
+                </div>
+              )}
+
+              <div className="mt-3 max-h-56 overflow-auto rounded border">
+                <table className="w-full border-collapse text-left text-sm">
+                  <thead className="sticky top-0 bg-gray-50 text-gray-700">
+                    <tr>
+                      <th className="px-3 py-2 font-medium">Employee</th>
+                      <th className="px-3 py-2 font-medium">Email</th>
+                      <th className="px-3 py-2 font-medium">Status</th>
+                      <th className="px-3 py-2 font-medium">Reason</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(payslipEmailStatus?.employees || []).map((employee) => (
+                      <tr key={employee.employeeId} className="border-t">
+                        <td className="px-3 py-2">{employee.employeeName}</td>
+                        <td className="px-3 py-2">{employee.email || "N/A"}</td>
+                        <td
+                          className={`px-3 py-2 font-medium ${
+                            employee.status === "Sent"
+                              ? "text-green-700"
+                              : employee.status === "Failed to send"
+                                ? "text-red-600"
+                                : "text-gray-600"
+                          }`}
+                        >
+                          {employee.status}
+                        </td>
+                        <td className="px-3 py-2 text-gray-600">
+                          {employee.reason}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {isFetchingPayslipEmailStatus && (
+                  <p className="p-3 text-sm text-gray-500">
+                    Loading email status...
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          <div className="mt-auto flex justify-end gap-3 pt-10">
+            <SecondaryButton
+              title="Cancel"
+              handleSubmit={() => setShowReleasePayslips(false)}
+            />
+            <PrimaryButton
+              title={payslipsGenerated ? "Retry Emails" : "Release"}
+              handleSubmit={handleReleasePayslips}
+              externalStyles="!bg-green-600"
+              disabled={isReleasingOrRetrying || allPayslipEmailsSent}
+              isLoading={isReleasingOrRetrying}
+            />
+          </div>
+        </div>
+      </MuiModal>
 
       <MuiModal
         open={Boolean(editingEmployee)}
@@ -1109,6 +1432,17 @@ const PayrollEntry = () => {
         confirmText={`Delete (${selectedEmployees.length})`}
         cancelText="Cancel"
         isLoading={isDeletingEmployees}
+      />
+
+      <ConfirmationModal
+        open={showVoidConfirmation}
+        onClose={() => setShowVoidConfirmation(false)}
+        onConfirm={confirmVoidPayroll}
+        title="Void Payroll"
+        message="Are you sure you want to void this payroll draft? This will permanently delete the draft and its saved changes."
+        confirmText="Void Payroll"
+        cancelText="Cancel"
+        isLoading={isVoidingPayroll}
       />
 
       <ConfirmationModal

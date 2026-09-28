@@ -78,8 +78,12 @@ const recalculateAndUpdatePayment = ({
   meeting.paymentBaseAmount = resolvedBaseAmount;
   meeting.paymentGstAmount = resolvedGstAmount;
   meeting.paymentAmount = resolvedPaymentAmount;
-  meeting.paymentMode = paymentMode;
-  meeting.paymentStatus = paymentStatus === "Paid";
+  if (paymentMode !== undefined) {
+    meeting.paymentMode = paymentMode;
+  }
+  if (paymentStatus !== undefined) {
+    meeting.paymentStatus = paymentStatus === "Paid";
+  }
   meeting.discountAmount = Number(discountAmount ?? 0);
 
   return {
@@ -1249,7 +1253,7 @@ const getMyMeetings = async (req, res, next) => {
             .join(" ")
         : "";
 
-      const isReceptionist = meeting.receptionist.departments.some(
+      const isReceptionist = (meeting.receptionist?.departments || []).some(
         (dept) => dept.name === "Administration",
       );
 
@@ -1318,7 +1322,10 @@ const getMyMeetings = async (req, res, next) => {
         paymentStatus: meeting.paymentStatus ? meeting.paymentStatus : null,
         paymentProof: meeting.paymentProof ? meeting.paymentProof.link : null,
         meetingType: meeting.meetingType,
-        housekeepingStatus: meeting.houeskeepingStatus,
+        housekeepingStatus:
+          meeting.bookedRoom?.housekeepingStatus ||
+          meeting.housekeepingStatus ||
+          "N/A",
         date: meeting.startDate,
         endDate: meeting.endDate,
         startTime: meeting.startTime,
@@ -1350,6 +1357,94 @@ const getMyMeetings = async (req, res, next) => {
     });
 
     return res.status(200).json(transformedMeetings);
+  } catch (error) {
+    next(error);
+  }
+};
+
+const deleteMyMeeting = async (req, res, next) => {
+  try {
+    const { meetingId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(meetingId)) {
+      return res.status(400).json({ message: "Invalid meeting ID provided" });
+    }
+
+    const meeting = await Meeting.findOne({
+      _id: meetingId,
+      company: req.company,
+      status: "Upcoming",
+    })
+      .populate("clientBookedBy", "email")
+      .populate("clientParticipants", "email")
+      .exec();
+
+    if (!meeting) {
+      return res.status(404).json({
+        message: "Only your upcoming meetings can be deleted",
+      });
+    }
+
+    const currentUser = await User.findById(req.user)
+      .select("email firstName lastName phone")
+      .lean();
+    const currentUserFullName = [
+      currentUser?.firstName,
+      currentUser?.lastName,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .trim()
+      .toLowerCase();
+    const memberLookupConditions = [
+      ...(currentUser?.email ? [{ email: currentUser.email }] : []),
+      ...(currentUserFullName
+        ? [{ employeeName: currentUserFullName }]
+        : []),
+      ...(currentUser?.phone ? [{ mobileNo: currentUser.phone }] : []),
+    ];
+    const companyMembers = memberLookupConditions.length
+      ? await CoworkingMember.find({
+          company: req.company,
+          $or: memberLookupConditions,
+        })
+          .select("_id")
+          .collation({ locale: "en", strength: 2 })
+          .lean()
+      : [];
+    const fallbackMembers =
+      companyMembers.length || !memberLookupConditions.length
+        ? []
+        : await CoworkingMember.find({ $or: memberLookupConditions })
+            .select("_id")
+            .collation({ locale: "en", strength: 2 })
+            .lean();
+    const currentClientMemberIds = (
+      companyMembers.length ? companyMembers : fallbackMembers
+    ).map((member) => member._id.toString());
+    const isBookedByUser = meeting.bookedBy?.toString() === req.user.toString();
+    const isInternalParticipant = meeting.internalParticipants.some(
+      (participantId) => participantId.toString() === req.user.toString(),
+    );
+    const isClientUser =
+      currentClientMemberIds.includes(
+        meeting.clientBookedBy?._id?.toString(),
+      ) ||
+      meeting.clientParticipants.some((participant) =>
+        currentClientMemberIds.includes(participant?._id?.toString()),
+      );
+
+    if (!isBookedByUser && !isInternalParticipant && !isClientUser) {
+      return res.status(403).json({
+        message: "You do not have permission to delete this meeting",
+      });
+    }
+
+    await meeting.deleteOne();
+
+    return res.status(200).json({
+      message: "Meeting permanently deleted successfully",
+    });
   } catch (error) {
     next(error);
   }
@@ -2306,7 +2401,7 @@ const updateMeeting = async (req, res, next) => {
     const resolvedClientName =
       client || updatedMeeting.externalClient?.registeredClientCompany || "";
 
-    const meetingRevenue = new MeetingRevenue({
+    const revenuePayload = {
       date: updatedMeeting.startDate,
       company,
       client: resolvedClientName,
@@ -2322,9 +2417,13 @@ const updateMeeting = async (req, res, next) => {
       remarks: paymentMode,
       meeting: updatedMeeting._id,
       hoursBooked: durationInHours,
-    });
+    };
 
-    const savedRevenue = await meetingRevenue.save();
+    const savedRevenue = await MeetingRevenue.findOneAndUpdate(
+      { meeting: updatedMeeting._id, company },
+      { $set: revenuePayload },
+      { new: true, upsert: true, runValidators: true, setDefaultsOnInsert: true },
+    );
 
     if (!savedRevenue) {
       throw new CustomError(
@@ -2407,22 +2506,47 @@ const updateMeeting = async (req, res, next) => {
 };
 
 const updateMeetingPaymentStatus = async (req, res, next) => {
-  const { status, meetingId } = req.body;
-  const { user } = req;
+  try {
+    const { status, meetingId } = req.body;
+    const company = req.company;
+    const validStatuses = ["Pending", "Under Review", "Verified", "Completed"];
 
-  const updatedMeeting = await Meeting.findByIdAndUpdate(
-    meetingId,
-    { paymentVerification: status },
-    { new: true },
-  ).populate("bookedBy", "firstName lastName");
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({ message: "Invalid payment status" });
+    }
 
-  if (!updatedMeeting) {
-    return res.status(404).json({ message: "Meeting not found" });
+    if (!mongoose.Types.ObjectId.isValid(meetingId)) {
+      return res.status(400).json({ message: "Invalid meeting ID" });
+    }
+
+    const updatedMeeting = await Meeting.findOneAndUpdate(
+      { _id: meetingId, company },
+      { paymentVerification: status },
+      { new: true, runValidators: true },
+    ).populate("bookedBy", "firstName lastName");
+
+    if (!updatedMeeting) {
+      return res.status(404).json({ message: "Meeting not found" });
+    }
+
+    if (status === "Completed") {
+      await MeetingRevenue.findOneAndUpdate(
+        { meeting: updatedMeeting._id, company },
+        { $set: { financeStatus: "Upload Invoice" } },
+      );
+    }
+
+    const message =
+      status === "Completed"
+        ? "Payment verification completed. Invoice upload enabled"
+        : status === "Verified"
+          ? "Payment verified"
+          : "Payment under review";
+
+    return res.status(200).json({ message });
+  } catch (error) {
+    return next(error);
   }
-  const message =
-    status === "Verified" ? "Payment verified" : "Payment under review";
-
-  return res.status(200).json({ message });
 };
 
 const updateMeetingStatus = async (req, res, next) => {
@@ -3043,6 +3167,7 @@ module.exports = {
   addMeetings,
   getMeetings,
   getMyMeetings,
+  deleteMyMeeting,
   extendMeeting,
   addHousekeepingTask,
   deleteHousekeepingTask,

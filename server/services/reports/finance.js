@@ -1,4 +1,5 @@
 // services/budget.service.js
+const mongoose = require("mongoose");
 const User = require("../../models/hr/UserData");
 const Budget = require("../../models/budget/Budget");
 const MeetingRevenue = require("../../models/sales/MeetingRevenue");
@@ -44,38 +45,116 @@ const fetchBudgetVoucherService = async ({
   }
 
   if (dashboardView || profitLossView) {
-    const now = new Date();
+    const now = dayjs().tz("Asia/Kolkata");
     const currentFinancialYearStart =
-      now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
+      now.month() >= 3 ? now.year() : now.year() - 1;
 
     query.dueDate = {
-      $gte: new Date(Date.UTC(currentFinancialYearStart - 2, 3, 1)),
-      $lt: new Date(Date.UTC(currentFinancialYearStart + 1, 3, 1)),
+      $gte: dayjs
+        .tz(`${currentFinancialYearStart - 2}-04-01`, "Asia/Kolkata")
+        .startOf("day")
+        .toDate(),
+      $lt: dayjs
+        .tz(`${currentFinancialYearStart + 1}-04-01`, "Asia/Kolkata")
+        .startOf("day")
+        .toDate(),
     };
   }
 
   const isFilteredBudget = ["payout", "landlord-payments"].includes(type);
 
   if (profitLossView) {
-    const budgets = await Budget.find(query)
-      .select("dueDate actualAmount projectedAmount particulars")
-      .lean()
-      .exec();
-
-    return {
-      allBudgets: budgets.map((budget) => ({
-        _id: budget._id,
-        dueDate: budget.dueDate,
-        actualAmount: Number(budget.actualAmount || 0),
-        projectedAmount: budget?.particulars?.length
-          ? budget.particulars.reduce(
-              (total, particular) =>
-                total + Number(particular?.particularAmount || 0),
-              0,
-            )
-          : Number(budget.projectedAmount || 0),
-      })),
+    const aggregateQuery = {
+      ...query,
+      company: new mongoose.Types.ObjectId(String(query.company)),
+      ...(query.department && {
+        department: new mongoose.Types.ObjectId(String(query.department)),
+      }),
     };
+
+    // The profit/loss graph only needs monthly totals. Aggregate in MongoDB so
+    // large budget documents (including every particular) are not transferred
+    // to Node and reduced one by one. This keeps the existing response fields
+    // while limiting the result to at most one row per month.
+    const budgets = await Budget.aggregate([
+      { $match: aggregateQuery },
+      {
+        $project: {
+          dueDate: 1,
+          actualAmount: {
+            $convert: {
+              input: "$actualAmount",
+              to: "double",
+              onError: 0,
+              onNull: 0,
+            },
+          },
+          projectedAmount: {
+            $cond: [
+              { $gt: [{ $size: { $ifNull: ["$particulars", []] } }, 0] },
+              {
+                $reduce: {
+                  input: "$particulars",
+                  initialValue: 0,
+                  in: {
+                    $add: [
+                      "$$value",
+                      {
+                        $convert: {
+                          input: "$$this.particularAmount",
+                          to: "double",
+                          onError: 0,
+                          onNull: 0,
+                        },
+                      },
+                    ],
+                  },
+                },
+              },
+              {
+                $convert: {
+                  input: "$projectedAmount",
+                  to: "double",
+                  onError: 0,
+                  onNull: 0,
+                },
+              },
+            ],
+          },
+        },
+      },
+      {
+        $group: {
+          _id: {
+            year: {
+              $year: { date: "$dueDate", timezone: "Asia/Kolkata" },
+            },
+            month: {
+              $month: { date: "$dueDate", timezone: "Asia/Kolkata" },
+            },
+          },
+          actualAmount: { $sum: "$actualAmount" },
+          projectedAmount: { $sum: "$projectedAmount" },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          dueDate: {
+            $dateFromParts: {
+              year: "$_id.year",
+              month: "$_id.month",
+              day: 1,
+            },
+          },
+          actualAmount: 1,
+          projectedAmount: 1,
+        },
+      },
+      { $sort: { dueDate: 1 } },
+    ]).exec();
+
+    return { allBudgets: budgets };
   }
 
   let budgetQuery = Budget.find(query);

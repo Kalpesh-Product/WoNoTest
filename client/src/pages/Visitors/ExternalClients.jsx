@@ -28,6 +28,8 @@ import {
   PAGE_SIZE_OPTIONS,
 } from "../../constants/pagination";
 
+import { useNavigate, useSearchParams } from "react-router-dom";
+
 const getStateName = (stateValue) => {
   if (!stateValue) return "N/A";
 
@@ -47,6 +49,9 @@ const ExternalClients = ({
   financeView = false,
 }) => {
   const axios = useAxiosPrivate();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const redirectedVisitDate = searchParams.get("lastVisitedAt");
   const { auth } = useAuth();
   const allowedVisitScheduleEditorIds = [
     "67b83885daad0f7bab2f18a9",
@@ -124,12 +129,17 @@ const ExternalClients = ({
   };
 
   const initialClientDateRange = useMemo(
-    () => ({
-      startDate: dayjs().startOf("month").toDate(),
-      endDate: dayjs().endOf("month").toDate(),
-      key: "selection",
-    }),
-    [],
+    () => {
+      const requestedDate = dayjs(redirectedVisitDate);
+      const rangeDate = requestedDate.isValid() ? requestedDate : dayjs();
+
+      return {
+        startDate: rangeDate.startOf("month").toDate(),
+        endDate: rangeDate.endOf("month").toDate(),
+        key: "selection",
+      };
+    },
+    [redirectedVisitDate],
   );
   const [clientDateRange, setClientDateRange] = useState(
     initialClientDateRange,
@@ -181,6 +191,7 @@ const ExternalClients = ({
           params: {
             filters: clientFilters,
             multipleVisits: true,
+            includeVisitCounts: true,
             ...(financeView && {
               type: "day-pass",
               visitorFlag: "Client",
@@ -382,9 +393,28 @@ const ExternalClients = ({
       );
       return response.data;
     },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["clients"] });
-      toast.success(data?.message || "Payment status updated");
+    // onSuccess: (data) => {
+    //   queryClient.invalidateQueries({ queryKey: ["clients"] });
+    //   toast.success(data?.message || "Payment status updated");
+     onSuccess: async (data, variables) => {
+      await queryClient.invalidateQueries({
+        queryKey: [financeView ? "finance-day-pass" : "clients"],
+      });
+      const verificationCompleted = variables.status === "Completed";
+      toast.success(
+        verificationCompleted
+          ? "Verification Completed. Please Upload the Invoice in Billing"
+          : data?.message || "Payment status updated",
+      );
+
+      if (verificationCompleted) {
+        await queryClient.invalidateQueries({
+          queryKey: ["meetings-revenue"],
+        });
+        navigate(
+          "/app/dashboard/finance-dashboard/billing/client-invoicing/meeting-revenue-invoicing",
+        );
+      }
     },
     onError: (error) => {
       toast.error(
@@ -517,15 +547,23 @@ const ExternalClients = ({
     ).toLowerCase();
 
     if (!isPaid) return "Wait for Payment";
-    if (verificationStatus === "under review") return "Verify Payment";
-    if (verificationStatus === "verified") return "Completed";
-    return "Review Payment";
+    if (verificationStatus === "pending") return "Pending";
+    if (verificationStatus === "under review") return "Review Payment";
+    if (verificationStatus === "verified") return "Verify Payment";
+    if (verificationStatus === "completed") return "Completed";
+    return "Pending";
+    // if (verificationStatus === "under review") return "Verify Payment";
+    // if (verificationStatus === "verified") return "Completed";
+    // return "Review Payment";
   };
   const getFinanceStatusChipStyle = (status) => {
     const normalizedStatus = String(status || "").toLowerCase();
 
     if (normalizedStatus === "completed") {
       return { backgroundColor: "#D1FAE5", color: "#047857" };
+    }
+    if (normalizedStatus === "pending") {
+      return { backgroundColor: "#FFF7ED", color: "#F97316" };
     }
     if (normalizedStatus === "verify payment") {
       return { backgroundColor: "#DBEAFE", color: "#1D4ED8" };
@@ -578,7 +616,13 @@ const ExternalClients = ({
   ];
 
   const visitorsColumns = [
-    { field: "srNo", headerName: "Sr No", sort: "desc" },
+    {
+      field: "srNo",
+      headerName: "Sr No",
+      sort: "desc",
+      width: 80,
+      minWidth: 80,
+    },
     // { field: "firstName", headerName: "First Name" },
     // { field: "lastName", headerName: "Last Name" },
     { field: "name", headerName: "Name" },
@@ -589,6 +633,9 @@ const ExternalClients = ({
       headerName: "Purpose",
     },
     { field: "dateOfVisit", headerName: "Date of Visit" },
+    ...(!financeView
+      ? [{ field: "visitCount", headerName: "Visit Count" }]
+      : []),
     {
       field: "checkIn",
       headerName: "Check In",
@@ -668,6 +715,18 @@ const ExternalClients = ({
           params.data.paymentVerification || "Pending",
         ).toLowerCase();
 
+        const historyMenuItem = {
+          label: "View History",
+          onClick: () =>
+            navigate(
+              `/app/visitors/manage-visitors/visitor-history/${params.data.mongoId}?type=client`,
+              {
+                state: {
+                  breadcrumbLabel: params.data.name || "Visitor History",
+                },
+              },
+            ),
+        };
         const menuItems = financeStatusMenu
           ? [
               !isPaid && {
@@ -687,17 +746,30 @@ const ExternalClients = ({
               isPaid &&
                 verificationStatus === "verified" && {
                   label: "Completed",
+                     onClick: () =>
+                    handleVerifyPayment(params.data, "Completed"),
                 },
               isPaid &&
-                !["pending", "under review", "verified"].includes(
-                  verificationStatus,
-                ) && {
+                verificationStatus === "completed" && {
+                  label: "Completed",
+                },
+              isPaid &&
+                // !["pending", "under review", "verified"].includes(
+                //   verificationStatus,
+                // ) && {
+                 ![
+                  "pending",
+                  "under review",
+                  "verified",
+                  "completed",
+                ].includes(verificationStatus) && {
                   label: "Review Payment",
                   onClick: () =>
                     handleVerifyPayment(params.data, "Under Review"),
                 },
             ].filter(Boolean)
           : [
+              historyMenuItem,
               {
                 label: "Edit",
                 onClick: () => {
@@ -901,7 +973,9 @@ const ExternalClients = ({
       visitor.visitorType || visitor.purposeOfVisit,
     );
     if (!defaultAmount || defaultAmount === 0) {
-      if (normalizedVisitorType === "Full-Day Pass") defaultAmount = 850;
+      if (normalizedVisitorType === "Full-Day Pass") {
+        defaultAmount = visitor.buildingName === "Dempo Trade Centre" ? 750 : 850;
+      }
       else if (normalizedVisitorType === "Half-Day Pass") defaultAmount = 500;
     }
     // if (!defaultAmount || defaultAmount === 0) {
@@ -960,23 +1034,48 @@ const ExternalClients = ({
           initialDateRange={initialClientDateRange}
           onDateFilterChange={handleClientDateFilterChange}
           data={[
-            ...visitorsData
-
-              .filter((visitor) => hasRole(visitor, "Client"))
+            ...Array.from(
+              new Map(
+                visitorsData
+                  .filter((visitor) => hasRole(visitor, "Client"))
+                  .map((visitor) => [String(visitor._id), visitor]),
+              ).values(),
+            )
               .map((item, index) => {
                 const latestVisit =
                   Array.isArray(item?.externalVisits) &&
                   item.externalVisits.length > 0
                     ? [...item.externalVisits]
                         .filter(
-                          (visit) =>
-                            visit?.visitorType === "Full-Day Pass" ||
-                            visit?.visitorType === "Half-Day Pass",
+                          (visit) => {
+                            const visitRoles = Array.isArray(visit?.visitorRoles)
+                              ? visit.visitorRoles
+                              : [];
+                            return (
+                              visit?.visitorFlag === "Client" ||
+                              visitRoles.includes("Client") ||
+                              [
+                                "Meeting",
+                                "Full-Day Pass",
+                                "Half-Day Pass",
+                              ].includes(visit?.visitorType)
+                            );
+                          },
                         )
                         .sort(
                           (a, b) =>
-                            new Date(b?.dateOfVisit || 0).getTime() -
-                            new Date(a?.dateOfVisit || 0).getTime(),
+                            new Date(
+                              b?.checkIn ||
+                                b?.dateOfVisit ||
+                                b?.createdAt ||
+                                0,
+                            ).getTime() -
+                            new Date(
+                              a?.checkIn ||
+                                a?.dateOfVisit ||
+                                a?.createdAt ||
+                                0,
+                            ).getTime(),
                         )[0] || null
                     : null;
 
@@ -1010,6 +1109,7 @@ const ExternalClients = ({
                   name: `${item.firstName} ${item.lastName}`,
                   address: item.address,
                   phoneNumber: item.phoneNumber,
+                  visitCount: item.visitCounts?.client ?? 0,
                   dateOfVisit: latestVisit?.dateOfVisit || item.dateOfVisit,
                   email: item.email,
                   // purposeOfVisit:
@@ -1604,8 +1704,16 @@ const ExternalClients = ({
                       <>
                         <div className="font-bold">Payment Details</div>
                         <DetalisFormatted
+                          title="Desk Amount"
+                          detail={`INR ${inrFormat((selectedVisitor?.rawPaymentAmount) || 0)}`}
+                        />
+                        <DetalisFormatted
+                          title="Discount"
+                          detail={`INR ${selectedVisitor?.discountAmount || 0}`}
+                        />
+                        <DetalisFormatted
                           title="Taxable Amount"
-                          detail={`INR ${selectedVisitor?.rawPaymentAmount || 0}`}
+                          detail={`INR ${inrFormat(Math.max(Number(selectedVisitor?.rawPaymentAmount || 0) - Number(selectedVisitor?.discountAmount || 0), 0))}`}
                         />
                         <DetalisFormatted
                           title="GST Amount"
@@ -1616,24 +1724,20 @@ const ExternalClients = ({
                           detail={`INR ${selectedVisitor?.finalAmount || 0}`}
                         />
                         <DetalisFormatted
-                          title="Discount"
-                          detail={`INR ${selectedVisitor?.discountAmount || 0}`}
-                        />
-                        <DetalisFormatted
-                          title="Mode"
-                          detail={selectedVisitor?.paymentMode}
-                        />
-                        <DetalisFormatted
                           title="Status"
                           detail={selectedVisitor?.paymentStatus}
                         />
                         <DetalisFormatted
-                          title="Verification"
-                          detail={selectedVisitor?.paymentVerification}
+                          title="Payment Proof"
+                          detail={renderFileLink(selectedVisitor?.paymentProof)}
                         />
                         <DetalisFormatted
-                          title="Uploaded File"
-                          detail={renderFileLink(selectedVisitor?.paymentProof)}
+                          title="Payment Mode"
+                          detail={selectedVisitor?.paymentMode}
+                        />
+                        <DetalisFormatted
+                          title="Payment Verification"
+                          detail={selectedVisitor?.paymentVerification}
                         />
                       </>
                     )}

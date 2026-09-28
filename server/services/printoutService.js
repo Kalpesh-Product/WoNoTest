@@ -7,6 +7,7 @@ const {
 
 const populatePrintout = [
   { path: "takenBy", select: "firstName lastName" },
+  { path: "deletedBy", select: "firstName lastName employeeName name email" },
   { path: "location", select: "buildingName" },
   { path: "unit", select: "unitName unitNo" },
   { path: "client", select: "clientName companyName name" },
@@ -162,6 +163,8 @@ const fetchPrintoutReportService = async ({
   limit,
   search,
   isReport = false,
+  includeDeleted = false,
+  excludedDeletedBy = [],
 }) => {
   const {
     shouldPaginate,
@@ -171,6 +174,14 @@ const fetchPrintoutReportService = async ({
   } = getPagination({ page, limit });
 
   let printoutFilters = {
+    ...(includeDeleted
+      ? {
+          deletedByPrivilegedDepartment: { $ne: true },
+          ...(excludedDeletedBy.length
+            ? { deletedBy: { $nin: excludedDeletedBy } }
+            : {}),
+        }
+      : { isDeleted: { $ne: true } }),
     ...filters,
     ...(dateFilter || {}),
   };
