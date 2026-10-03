@@ -94,7 +94,7 @@ const getPayslipEmailDetails = ({ draft, employeeName, companyName }) => {
   };
   const formattedPeriod = `${formatDate(periodStart)} - ${formatDate(periodEnd)}`;
   const clientUrl = String(
-    "http://localhost:3009" || process.env.CORS_FRONTEND_URL,
+    "http://localhost:3008" || process.env.CORS_FRONTEND_URL,
   ).replace(/\/$/, "");
   const payslipPageUrl = `${clientUrl}/app/profile/HR/payslips`;
   const safeEmployeeName = escapeHtml(employeeName || "Employee");
