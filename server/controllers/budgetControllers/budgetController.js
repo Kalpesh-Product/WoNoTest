@@ -18,6 +18,45 @@ const emitter = require("../../utils/eventEmitter");
 const { parseAmount } = require("../../utils/parseAmount");
 const { fetchBudgetVoucherService } = require("../../services/reports/finance");
 
+const TECH_DEPARTMENT_ID = "6798ba9de469e809084e2494";
+const PERMANENT_DELETE_DEPARTMENTS = new Set([
+  "top management",
+  "tech department",
+]);
+
+const belongsToPermanentDeleteDepartment = (departments = []) =>
+  departments.some(
+    (department) =>
+      String(department?._id || department) === TECH_DEPARTMENT_ID ||
+      PERMANENT_DELETE_DEPARTMENTS.has(
+        department?.name?.trim().toLowerCase(),
+      ),
+  );
+
+const canManageBudgetDeletes = (roles = []) =>
+  roles.some((role) => {
+    const roleTitle = String(role?.roleTitle || role).trim().toLowerCase();
+    return (
+      !roleTitle.includes("employee") &&
+      ["manager", "admin", "top management"].some((title) =>
+        roleTitle.includes(title),
+      )
+    );
+  });
+
+const setBudgetAuditContext = (req, action, budget, deletionType) => {
+  req.logContext = {
+    performedBy: req.user,
+    company: req.company,
+    action,
+    payload: {
+      budgetId: String(budget._id),
+      expenseName: budget.expanseName,
+      deletionType,
+    },
+  };
+};
+
 const normalizeMonth = (value) => {
   if (!value) return null;
 
@@ -542,8 +581,15 @@ const updateBudget = async (req, res, next) => {
 
 const fetchBudget = async (req, res, next) => {
   try {
-    const { departmentId, view } = req.query;
+    const { departmentId, view, includeDeleted } = req.query;
     const { company } = req;
+    const user = await User.findById(req.user)
+      .populate("departments", "name")
+      .lean()
+      .exec();
+    const canViewDeleted =
+      includeDeleted === "true" &&
+      belongsToPermanentDeleteDepartment(user?.departments);
 
 
     const currentMonthStart = new Date();
@@ -573,6 +619,7 @@ const fetchBudget = async (req, res, next) => {
       departmentId,
       dashboardView: view === "dashboard",
       profitLossView: view === "profit-loss",
+      includeDeleted: canViewDeleted,
     });
 
     return res.status(200).json(result);
@@ -584,11 +631,126 @@ const fetchBudget = async (req, res, next) => {
   }
 };
 
+const deleteBudget = async (req, res, next) => {
+  try {
+    const { budgetId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(budgetId)) {
+      return res.status(400).json({ message: "Invalid budget ID provided" });
+    }
+
+    const [budget, user] = await Promise.all([
+      Budget.findOne({ _id: budgetId, company: req.company }).exec(),
+      User.findById(req.user)
+        .populate("departments", "name")
+        .populate("role", "roleTitle")
+        .lean()
+        .exec(),
+    ]);
+
+    if (!budget) {
+      return res.status(404).json({ message: "Budget not found" });
+    }
+
+    if (!canManageBudgetDeletes(user?.role)) {
+      return res.status(403).json({
+        message: "Only department managers can delete budgets",
+      });
+    }
+
+    if (budget.status !== "Pending") {
+      return res.status(403).json({
+        message: "Only pending budgets can be deleted",
+      });
+    }
+
+    if (belongsToPermanentDeleteDepartment(user?.departments)) {
+      await budget.deleteOne();
+      setBudgetAuditContext(
+        req,
+        "Permanently Delete Budget",
+        budget,
+        "permanent",
+      );
+      return res.status(200).json({
+        message: "Budget permanently deleted successfully",
+        deletionType: "permanent",
+      });
+    }
+
+    if (budget.isDeleted) {
+      return res.status(403).json({
+        message:
+          "Only Top Management or Tech Department users can permanently delete this budget",
+      });
+    }
+
+    budget.isDeleted = true;
+    budget.deletedAt = new Date();
+    budget.deletedBy = req.user;
+    await budget.save();
+
+    setBudgetAuditContext(req, "Delete Budget", budget, "soft");
+
+    return res.status(200).json({
+      message: "Budget deleted successfully",
+      deletionType: "soft",
+    });
+  } catch (error) {
+    return next(error);
+  }
+};
+
+const restoreBudget = async (req, res, next) => {
+  try {
+    const { budgetId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(budgetId)) {
+      return res.status(400).json({ message: "Invalid budget ID provided" });
+    }
+
+    const user = await User.findById(req.user)
+      .populate("departments", "name")
+      .populate("role", "roleTitle")
+      .lean()
+      .exec();
+
+    if (
+      !canManageBudgetDeletes(user?.role) ||
+      !belongsToPermanentDeleteDepartment(user?.departments)
+    ) {
+      return res.status(403).json({
+        message: "Only Top Management or Tech Department users can restore this budget",
+      });
+    }
+
+    const budget = await Budget.findOneAndUpdate(
+      { _id: budgetId, company: req.company, isDeleted: true },
+      { $set: { isDeleted: false }, $unset: { deletedAt: 1, deletedBy: 1 } },
+      { new: true },
+    ).lean();
+
+    if (!budget) {
+      return res.status(404).json({ message: "Deleted budget not found" });
+    }
+
+    setBudgetAuditContext(req, "Restore Budget", budget, "restore");
+
+    return res.status(200).json({ message: "Budget restored successfully" });
+  } catch (error) {
+    return next(error);
+  }
+};
+
 const fetchPendingApprovals = async (req, res, next) => {
   try {
     const { company } = req;
 
-    const budgets = await Budget.find({ company, status: "Pending" })
+    const budgets = await Budget.find({
+      company,
+      status: "Pending",
+      isDeleted: { $ne: true },
+    })
       .populate([
         { path: "department", select: "name" },
         { path: "unit", populate: { path: "building", model: "Building" } },
@@ -988,6 +1150,67 @@ const rejectBudget = async (req, res, next) => {
     });
 
     res.status(200).json({ message: "Budget Rejected" });
+  } catch (error) {
+    next(
+      error instanceof CustomError
+        ? error
+        : new CustomError(error.message, logPath, logAction, logSourceKey, 500),
+    );
+  }
+};
+
+const unapproveBudget = async (req, res, next) => {
+  const logPath = "budget/BudgetLog";
+  const logAction = "Unapprove Budget";
+  const logSourceKey = "budget";
+
+  try {
+    const { budgetId } = req.params;
+    const { user, ip, company } = req;
+
+    const budget = await Budget.findById(budgetId);
+
+    if (!budget) {
+      throw new CustomError(
+        "Budget not found",
+        logPath,
+        logAction,
+        logSourceKey,
+        404,
+      );
+    }
+
+    if (budget.status !== "Approved") {
+      throw new CustomError(
+        "Only approved budgets can be unapproved",
+        logPath,
+        logAction,
+        logSourceKey,
+        400,
+      );
+    }
+
+    budget.status = "Pending";
+    budget.isPaid = "Unpaid";
+    budget.finance = budget.finance || {};
+    budget.finance.approvedAt = undefined;
+
+    await budget.save({ validateModifiedOnly: true });
+
+    await createLog({
+      path: logPath,
+      action: logAction,
+      remarks: "Budget returned to pending approvals",
+      status: "Success",
+      user,
+      ip,
+      company,
+      sourceKey: logSourceKey,
+      sourceId: budget._id,
+      changes: { status: "Pending", isPaid: "Unpaid" },
+    });
+
+    res.status(200).json({ message: "Budget returned to pending approvals" });
   } catch (error) {
     next(
       error instanceof CustomError
@@ -1436,6 +1659,8 @@ module.exports = {
   approveBudget,
   rejectBudget,
   updateBudget,
+  deleteBudget,
+  restoreBudget,
   fetchBudget,
   fetchLandlordPayments,
   bulkInsertBudgets,
@@ -1443,4 +1668,5 @@ module.exports = {
   fetchPendingApprovals,
   fetchApprovedbudgets,
   approveFinanceBudget,
+  unapproveBudget,
 };

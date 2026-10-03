@@ -29,6 +29,7 @@ const AgTableComponent = React.memo(
     handleClick,
     buttonTitle,
     headerActions,
+    exportBeforeHeaderActions = false,
     searchRowActions,
     searchBottomContent,
     tableHeight = 400,
@@ -39,6 +40,7 @@ const AgTableComponent = React.memo(
     disabled,
     handleBatchAction,
     isRowSelectable,
+    showDisabledCheckboxes = false,
     batchButton,
     hideTitle,
     hideHeaderDivider,
@@ -315,11 +317,12 @@ const AgTableComponent = React.memo(
           field: "",
           headerCheckboxSelection: checkAll, // ✅ Only allow header checkbox when checkAll is true
           checkboxSelection: true,
+          showDisabledCheckboxes,
           width: 50,
         },
         ...stateSafeColumns,
       ];
-    }, [stateSafeColumns, enableCheckbox, checkAll]);
+    }, [stateSafeColumns, enableCheckbox, checkAll, showDisabledCheckboxes]);
 
     const effectivePageSize = paginationPageSize || pageSizeOptions?.[0] || 1;
 
@@ -361,8 +364,9 @@ const AgTableComponent = React.memo(
               ) : (
                 ""
               )}
+              {hideFilter && exportBeforeHeaderActions ? renderExportButton() : null}
               {headerActions ? headerActions : ""}
-              {hideFilter ? renderExportButton() : ""}
+              {hideFilter && !exportBeforeHeaderActions ? renderExportButton() : null}
 
               {/* {buttonTitle ? (
                 <PrimaryButton
@@ -406,19 +410,22 @@ const AgTableComponent = React.memo(
           }  items-center py-2`}
         >
           {search ? (
-            <TextField
-              label="Search"
-              variant="outlined"
-              size="small"
-              value={searchQuery}
-              onChange={handleSearch}
-              placeholder="Search"
-              InputProps={{
-                startAdornment: (
-                  <IoIosSearch size={20} style={{ marginRight: 8 }} />
-                ),
-              }}
-            />
+            <div className="flex items-center gap-3">
+              <TextField
+                label="Search"
+                variant="outlined"
+                size="small"
+                value={searchQuery}
+                onChange={handleSearch}
+                placeholder="Search"
+                InputProps={{
+                  startAdornment: (
+                    <IoIosSearch size={20} style={{ marginRight: 8 }} />
+                  ),
+                }}
+              />
+              {searchRowActions ? searchRowActions : ""}
+            </div>
           ) : (
             <></>
           )}
@@ -428,7 +435,6 @@ const AgTableComponent = React.memo(
             ) : (
               <div className="flex flex-col items-end gap-2">
                 <div className="flex items-center gap-2">
-                  {searchRowActions ? searchRowActions : ""}
                   {renderExportButton()}
                 </div>
                 <div
@@ -528,6 +534,7 @@ const AgTableComponent = React.memo(
             rowSelection={
               enableCheckbox ? (checkAll ? "multiple" : "single") : rowSelection
             }
+            suppressRowClickSelection={enableCheckbox}
             onSelectionChanged={handleSelectionChanged}
             getRowStyle={getRowStyle}
             className="font-pregular"

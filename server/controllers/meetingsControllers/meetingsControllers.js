@@ -1,3 +1,4 @@
+const { bookExternalMeetingVisit } = require("../../services/bookExternalMeetingVisit");
 const { fetchMeetingReportService } = require("../../services/reports/meeting");
 const Meeting = require("../../models/meetings/Meetings");
 const User = require("../../models/hr/UserData");
@@ -28,6 +29,7 @@ const { handleDocumentUpload } = require("../../config/s3Config");
 const { resetMeetingCreditsIfNeeded } = require("../../utils/resetCredits");
 const ExternalVisits = require("../../models/visitor/ExternalVisits");
 const buildDateFilter = require("../../utils/dateFilter");
+const setAuditLogContext = require("../../utils/auditLogContext");
 
 const getEffectiveEndTime = (meeting) => {
   const originalEndTime = new Date(meeting?.endTime);
@@ -642,7 +644,9 @@ const addMeetings = async (req, res, next) => {
       externalParticipants: externalParticipants || [],
     });
 
-    const savedMeeting = await meeting.save();
+    const savedMeeting = meetingType === "External"
+      ? await bookExternalMeetingVisit(meeting, roomAvailable)
+      : await meeting.save();
     meetingWasSaved = true;
     // await Promise.all([
     //   meeting.save(),
@@ -1441,6 +1445,11 @@ const deleteMyMeeting = async (req, res, next) => {
     }
 
     await meeting.deleteOne();
+    setAuditLogContext(req, "Permanently Delete Meeting", {
+      meetingId: String(meeting._id),
+      meetingSubject: meeting.subject,
+      deletionType: "permanent",
+    });
 
     return res.status(200).json({
       message: "Meeting permanently deleted successfully",
@@ -1627,6 +1636,12 @@ const deleteHousekeepingTask = async (req, res, next) => {
       sourceKey: logSourceKey,
       sourceId: meetingId,
       changes: { deletedTask: housekeepingTask },
+    });
+
+    setAuditLogContext(req, "Delete Housekeeping Task", {
+      meetingId: String(updatedMeeting._id),
+      housekeepingTask,
+      deletionType: "permanent",
     });
 
     return res.status(200).json({
@@ -2481,16 +2496,17 @@ const updateMeeting = async (req, res, next) => {
       );
     }
 
+    const hasMeetingVisit = await ExternalVisits.exists({ company, meeting: updatedMeeting._id });
     await ExternalVisits.updateMany(
       {
         company,
-        $or: [
+        ...(hasMeetingVisit ? { meeting: updatedMeeting._id } : { $or: [
           { meeting: updatedMeeting._id },
           {
             visitorId: updatedVisitor._id,
             legacyVisitorEntryId: updatedVisitor._id,
           },
-        ],
+        ] }),
       },
       visitorPaymentDetails,
     );

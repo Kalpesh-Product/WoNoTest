@@ -1,3 +1,4 @@
+const { getMeetingPaymentDetails } = require("../../utils/meetingPaymentDetails");
 const AlternateRevenue = require("../../models/sales/AlternateRevenue");
 const CoworkingRevenue = require("../../models/sales/CoworkingRevenue");
 const MeetingRevenue = require("../../models/sales/MeetingRevenue");
@@ -443,7 +444,7 @@ const fetchMeetingRevenueReportService = async ({
       .populate({
         path: "meeting",
         select:
-          "meetingType subject agenda startTime endTime status houeskeepingStatus bookedBy receptionist client externalClient bookedRoom paymentVerification paymentStatus paymentProof",
+          "meetingType subject agenda startTime endTime extendTime status houeskeepingStatus bookedBy receptionist client externalClient bookedRoom paymentVerification paymentStatus paymentMode paymentProof",
         populate: [
           {
             path: "bookedBy",
@@ -726,6 +727,9 @@ const fetchMeetingRevenueReportService = async ({
       //       : "Pending",
        financeStatus: getFinanceStatus(item),
       remarks: item.remarks || "",
+      ...(item.source !== "day-pass" && item.meeting
+        ? getMeetingPaymentDetails(item)
+        : {}),
     });
   });
 
@@ -794,10 +798,10 @@ const fetchVirtualOfficeRevenueReportService = async ({
 
     const client = item.client;
     const noOfDesks =
+      Number(client.totalDesks) ||
       Number(client.cabinDesks || 0) + Number(client.openDesks || 0);
-    const baseRate = [client.cabinDeskRate, client.openDeskRate]
-      .map(Number)
-      .find((rate) => Number.isFinite(rate) && rate > 0) || 0;
+    const baseRate =
+      Number(client.openDeskRate ?? client.cabinDeskRate ?? 0) || 0;
     const startDate = dayjs(client.termStartDate);
     const endDate = dayjs(client.termEnd);
     const annualIncrement = Number(client.annualIncrement) || 0;
@@ -847,6 +851,7 @@ const fetchVirtualOfficeRevenueReportService = async ({
       channel: useStoredRevenue
         ? item.channel || ""
         : client.bookingType ?? item.channel,
+      billingFrequency: client.billingFrequency ?? item.billingFrequency,
       noOfDesks:
         useStoredRevenue
           ? Number.isFinite(storedNoOfDesks)
